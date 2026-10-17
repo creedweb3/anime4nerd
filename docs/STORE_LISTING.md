@@ -46,10 +46,17 @@ Screenshot credits: the before/after image uses "A snapshot from the 2012 demo r
 
 The popup shows a fictional title ("Starlight Academy") on purpose: no real show names or frames.
 
-**Promo tile 440×280:** icon on dark with the words "2× Anime4K, in your browser".
+**Promo tile 440×280:** `docs/store/anime4nerd-promo-440x280.png`.
 
 ## Store fields
 
 - Privacy policy URL: https://anime4nerd.pages.dev/privacy
 - Homepage URL: https://anime4nerd.pages.dev/
 - Support URL: https://github.com/creedweb3/anime4nerd/issues
+
+## Privacy practices tab
+
+- Single purpose: Upscales web video in real time with the Anime4K shaders, on videos the user switches on.
+- Remote code: No, I am not using remote code. All JavaScript and shaders ship in the package.
+- Data usage: check none of the data types. Nothing is collected or transmitted.
+- Certify all three: not sold to third parties; not used for unrelated purposes; not used for creditworthiness or lending.
