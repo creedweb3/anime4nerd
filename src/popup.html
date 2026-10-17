@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Anime4Nerd</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header class="bar">
+    <span class="chip">anime4k</span>
+    <span class="chip" id="hint">off</span>
+    <span class="chip grow" id="gpuchip">gpu —</span>
+    <span class="chip" id="clock"></span>
+  </header>
+
+  <section class="panel">
+    <div class="panel-head"><span>playing now</span><span id="count"></span></div>
+    <div class="sources" id="sources"></div>
+    <p class="empty" id="empty">No video found yet. Start playback, then reopen this popup.</p>
+  </section>
+
+  <section class="panel" id="perf">
+    <div class="panel-head"><span>performance</span><span class="verdict dim" id="verdict">● off</span></div>
+    <div class="kv">
+      <div><span>GPU</span><b id="k-load">—</b></div>
+      <div><span>Per frame</span><b id="k-ms">—</b></div>
+      <div><span>Output</span><b id="k-fps">—</b></div>
+      <div><span>Avg · peak</span><b id="k-avg">—</b></div>
+      <div><span>Frame limit</span><b id="k-limit">—</b></div>
+      <div><span>Late frames</span><b id="k-late">—</b></div>
+    </div>
+    <div class="bars" id="bars"></div>
+    <div class="meta" id="legend">no measurements yet</div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><span>preset</span><span id="presetName"></span></div>
+    <div class="grid" id="presets"></div>
+    <div class="pills" id="effects">
+      <button type="button" class="pill" data-field="darkenLines" role="menuitemcheckbox">darken lines</button>
+      <button type="button" class="pill" data-field="thinLines" role="menuitemcheckbox">thin lines</button>
+    </div>
+  </section>
+  <script src="popup.js"></script>
+</body>
+</html>

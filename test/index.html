@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Anime4K local test</title>
+  <style>
+    body { background: #111; color: #ddd; font: 13px system-ui; margin: 16px; }
+    .wrap { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+    canvas, video { background: #000; image-rendering: auto; }
+    label { display: inline-block; margin-right: 10px; }
+    pre { white-space: pre-wrap; color: #f88; }
+  </style>
+</head>
+<body>
+  <h3>Anime4K (bloc97 GLSL in WebGL2) — synthetic test</h3>
+  <p>
+    <label>Preset <select id="preset"><option>A</option><option>B</option><option>C</option><option>AA</option><option>BB</option><option>CA</option></select></label>
+    <label><input type="checkbox" id="darken" /> Darken</label>
+    <label><input type="checkbox" id="thin" /> Thin</label>
+    <button id="run">Run</button>
+    <span id="info"></span>
+  </p>
+  <div class="wrap">
+    <div>source (320×180)<br /><video id="v" width="320" height="180" muted playsinline loop></video></div>
+    <div>output (640×360)<br /><canvas id="c"></canvas></div>
+  </div>
+  <pre id="err"></pre>
+  <script type="module" src="./test.js"></script>
+</body>
+</html>
