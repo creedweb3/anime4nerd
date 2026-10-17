@@ -22,7 +22,7 @@ How it works
 The original Anime4K GLSL shaders by bloc97 are loaded unchanged and run through WebGL2. Each video frame goes through the chosen chain of convolution passes and the result is drawn on a canvas over the player. Output is always exactly 2× the source resolution (1080p → 2160p).
 
 Privacy
-No data collection, no network requests, no accounts. It only finds videos on the page and does nothing until you switch one on. Everything stays on your machine. Full policy: PRIVACY.md in the package.
+No data collection, no network requests, no accounts. It only finds videos on the page and does nothing until you switch one on. Everything stays on your machine. Full policy: https://anime4nerd.pages.dev/privacy
 
 Requirements
 Chrome / Brave / Edge 116+, a GPU with WebGL2. The video must be served with CORS (most players do this). DRM video (Widevine) cannot be read by any extension.
@@ -47,3 +47,9 @@ Screenshot credits: the before/after image uses "A snapshot from the 2012 demo r
 The popup shows a fictional title ("Starlight Academy") on purpose: no real show names or frames.
 
 **Promo tile 440×280:** icon on dark with the words "2× Anime4K, in your browser".
+
+## Store fields
+
+- Privacy policy URL: https://anime4nerd.pages.dev/privacy
+- Homepage URL: https://anime4nerd.pages.dev/
+- Support URL: https://github.com/creedweb3/anime4nerd/issues
