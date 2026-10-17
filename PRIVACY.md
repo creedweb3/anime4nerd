@@ -42,4 +42,4 @@ If this policy changes, the date above will be updated and the change described 
 
 ## Contact
 
-Open an issue on the project's repository.
+Open an issue at https://github.com/creedweb3/anime4nerd/issues.
