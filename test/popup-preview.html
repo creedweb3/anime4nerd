@@ -1,0 +1,80 @@
+<!doctype html>
+<!-- Static preview of the popup with a fake chrome.* so the layout can be checked outside the extension. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>popup preview</title>
+  <link rel="stylesheet" href="./popup.css" />
+  <style>html, body { background: #222; } body { margin: 24px auto; outline: 1px dashed #555; }</style>
+</head>
+<body>
+  <header class="bar">
+    <span class="chip">anime4k</span>
+    <span class="chip" id="hint">off</span>
+    <span class="chip grow" id="gpuchip">gpu —</span>
+    <span class="chip" id="clock"></span>
+  </header>
+
+  <section class="panel">
+    <div class="panel-head"><span>playing now</span><span id="count"></span></div>
+    <div class="sources" id="sources"></div>
+    <p class="empty" id="empty">No video found yet. Start playback, then reopen this popup.</p>
+  </section>
+
+  <section class="panel" id="perf">
+    <div class="panel-head"><span>performance</span><span class="verdict dim" id="verdict">● off</span></div>
+    <div class="kv">
+      <div><span>GPU</span><b id="k-load">—</b></div>
+      <div><span>Per frame</span><b id="k-ms">—</b></div>
+      <div><span>Output</span><b id="k-fps">—</b></div>
+      <div><span>Avg · peak</span><b id="k-avg">—</b></div>
+      <div><span>Frame limit</span><b id="k-limit">—</b></div>
+      <div><span>Late frames</span><b id="k-late">—</b></div>
+    </div>
+    <div class="bars" id="bars"></div>
+    <div class="meta" id="legend">no measurements yet</div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><span>preset</span><span id="presetName"></span></div>
+    <div class="grid" id="presets"></div>
+    <div class="pills" id="effects">
+      <button type="button" class="pill" data-field="darkenLines" role="menuitemcheckbox">darken lines</button>
+      <button type="button" class="pill" data-field="thinLines" role="menuitemcheckbox">thin lines</button>
+    </div>
+  </section>
+  <script>
+    const samples = [];
+    let t = 0;
+    const fakeVideo = () => {
+      t += 1;
+      for (let i = 0; i < 12; i++) samples.push(22 + Math.sin((t * 12 + i) / 6) * 4 + Math.random() * 3 + ((t * 12 + i) % 29 === 0 ? 24 : 0));
+      while (samples.length > 48) samples.shift();
+      return {
+        id: 'player.example#1', key: 'player.example::blob:', frameHost: 'player.example', mediaHost: 'blob:', width: 1920, height: 1080,
+        playing: true, sourceFps: 23.976, enabled: true, status: 'Active', message: '', media: null,
+        stats: { gpuMs: samples[samples.length - 1], samples: samples.slice(), cpuMs: 2.3, fps: 24, passes: 39, textureBytes: 704 * 1048576, outputWidth: 3840, outputHeight: 2160, timerSupported: true, sourceFps: 23.976 },
+      };
+    };
+    window.chrome = {
+      storage: {
+        sync: { get: async () => ({ anime4k: { preset: 'A', darkenLines: false, thinLines: true } }), set: async () => {} },
+        local: { get: async () => ({}), set: async () => {} },
+        onChanged: { addListener() {} },
+      },
+      runtime: { onMessage: { addListener() {} }, sendMessage: async () => {} },
+      tabs: {
+        query: async () => [{ id: 1, url: 'https://www.animesite.test/watch/x' }],
+        sendMessage: async (id, msg) => {
+          if (msg.type === 'a4k-list') return [fakeVideo()]; if (false) return [{ id: 'x#2', key: 'x::blob:', frameHost: 'reanime.to', mediaHost: 'blob:', width: 1920, height: 1080, playing: true, sourceFps: 23.976, enabled: false, status: 'Off', message: '', media: { title: 'Episode 7', artist: null, album: null }, stats: null }];
+          if (msg.type === 'a4k-page-meta') return { title: 'Attack on Titan', season: 1, episode: 1, episodeName: 'To You, in 2000 Years: The Fall of Shiganshina', subtitle: null, source: 'document.title' };
+          return true;
+        },
+      },
+      webNavigation: { getAllFrames: async () => [{ frameId: 0, url: 'https://www.animesite.test/watch/x' }] },
+      permissions: { contains: async () => true, request: async () => true },
+    };
+  </script>
+  <script src="./popup.js"></script>
+</body>
+</html>

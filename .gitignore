@@ -1,0 +1,15 @@
+node_modules/
+dist/
+test/*.js
+test/popup.css
+*.zip
+*.zip.sha256
+.claude/
+*.pem
+*.crx
+site/public/
+
+# working material, not published
+design/
+docs/private/
+*.stackdump

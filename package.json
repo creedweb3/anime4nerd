@@ -1,0 +1,26 @@
+{
+  "name": "anime4nerd",
+  "version": "1.0.0",
+  "description": "Anime4Nerd: real-time 2x Anime4K upscaling for web video (browser extension).",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc -p tsconfig.json",
+    "pack": "node build.mjs && node pack.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "devDependencies": {
+    "@types/chrome": "^0.3.5",
+    "@webgpu/types": "^0.1.74",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
+  },
+  "private": true
+}

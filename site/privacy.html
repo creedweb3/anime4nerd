@@ -1,0 +1,60 @@
+<title>Anime4Nerd Privacy</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Privacy policy for the Anime4Nerd browser extension. No data is collected, stored or transmitted.">
+<link rel="icon" href="assets/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+
+<header class="bar">
+  <div class="wrap">
+    <a class="brand" href="./#top"><img src="assets/icon.png" alt="" width="28" height="28">Anime4Nerd</a>
+    <nav class="nav" aria-label="Sections">
+      <a href="./#compare">before/after</a>
+      <a href="./#how">how it works</a>
+      <a href="./#presets">presets</a>
+      <a href="./#install">install</a>
+      <a href="privacy">privacy</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section id="privacy" class="doc" style="border-bottom:0">
+    <span class="label">privacy policy · last updated 2026-10-17</span>
+    <h1 style="margin-top:10px;font-size:var(--step-3)">Privacy policy.</h1>
+    <div class="prose">
+      <p><strong>Anime4Nerd does not collect, store, or transmit any personal data. Everything runs inside your browser.</strong></p>
+      <h3>What the extension does</h3>
+      <p>Anime4Nerd upscales video on web pages using your computer's GPU. To do that it reads the frames of videos you switch on and draws the result over the video.</p>
+      <h3>Site access</h3>
+      <p>At install your browser asks you to allow the extension on all websites. Video players are often embedded from other domains, so the extension cannot know in advance where a video comes from. On each page it only looks for video elements. It does nothing to a video until you switch that video on in the popup. You can restrict it to specific sites at any time in your browser's extension settings.</p>
+      <h3>Data handled locally</h3>
+      <ul>
+        <li><strong>Video frames</strong> are read into GPU memory to be upscaled and discarded after each frame is drawn. They are never saved or sent anywhere.</li>
+        <li><strong>Page metadata</strong> (page title, headings, Open Graph tags, schema.org data, Media Session metadata) is read only when you open the popup, to label the video. It is not stored.</li>
+        <li><strong>Settings</strong> (preset, line effects, and which sites you switched on) are stored with your browser's extension storage and may sync between your own browsers if browser sync is on.</li>
+        <li><strong>Performance numbers</strong> are measured locally, shown in the popup, and not recorded.</li>
+      </ul>
+      <h3>Data leaving your device</h3>
+      <p>None. The extension makes no network requests of its own. It has no analytics, telemetry, crash reporting, remote configuration, or accounts.</p>
+      <h3>Permissions</h3>
+      <ul>
+        <li><code>storage</code>: saves your preset and the per-site switch.</li>
+        <li><code>scripting</code>: adds the upscaler to tabs that were already open when you installed it.</li>
+        <li><code>webNavigation</code>: lists the frames of the current tab, because players are often in iframes.</li>
+        <li>Access to all sites: finds videos and reads their frames on whatever site the player is hosted on.</li>
+      </ul>
+      <h3>Third parties</h3>
+      <p>The Anime4K shaders are open-source code by bloc97 and run locally. No third-party service is contacted.</p>
+      <h3>Changes and contact</h3>
+      <p>If this policy changes, the date above is updated. Questions: open an issue on the project's repository.</p>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">
+  <span>Anime4Nerd · v1.0.0 · MIT</span>
+  <span><a href="privacy">privacy</a> · <a href="./#credits">credits</a></span>
+</footer>

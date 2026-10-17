@@ -1,0 +1,14 @@
+Attribution for the store screenshot artwork
+=============================================
+
+Title:    "A snapshot from the 2012 demo release from the Morevna Project"
+Author:   Morevna Project (https://morevnaproject.org/)
+Source:   https://commons.wikimedia.org/wiki/File:A_snapshot_from_the_2012_demo_release_from_the_Morevna_Project.png
+License:  Creative Commons Attribution 3.0 Unported (CC BY 3.0)
+          https://creativecommons.org/licenses/by/3.0/
+Changes:  none in this file (original). Used as input for the still-image test; outputs are scaled 2x with browser bilinear filtering (morevna-before.png) and with
+          Anime4K A+A + Darken Lines (morevna-after-AA-darken.png); cropped and
+          combined into docs/store/anime4nerd-2-compare.png with a wipe divider.
+
+The modified images may be reused under the same CC BY 3.0 terms with this attribution.
+No endorsement by the Morevna Project is implied.

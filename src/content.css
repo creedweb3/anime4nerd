@@ -1,0 +1,10 @@
+.a4k-canvas {
+  position: absolute;
+  pointer-events: none;
+  border-radius: inherit;
+  display: block;
+}
+
+.a4k-canvas[hidden] {
+  display: none;
+}
