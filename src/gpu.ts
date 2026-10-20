@@ -14,6 +14,7 @@ import {
   HookPass, buildFragmentSource, evalRpn, parseHookPasses,
 } from './mpv-hooks';
 import type { Preset, Settings } from './settings';
+import { decodedSize, uploadSize } from './video-size';
 
 export interface RenderStats {
   gpuMs: number | null; // GPU time of the last completed frame; null if timer queries are unsupported
@@ -32,6 +33,14 @@ export interface Anime4kRenderer {
   destroy(): void;
   stats(): RenderStats;
 }
+
+/** Thrown by render() when the decoded frame size no longer matches the textures; rebuild, don't fail. */
+export class SourceSizeChanged extends Error {
+  constructor() { super('Source frame size changed.'); this.name = 'SourceSizeChanged'; }
+}
+
+/** How often render() re-checks the frame size and GL error state (each check stalls the GPU briefly). */
+const HEALTH_CHECK_MS = 1000;
 
 /** Standard Anime4K mpv preset chains: always exactly one x2 step. */
 function chainFor(s: Settings): string[] {
@@ -129,8 +138,7 @@ export async function createAnime4kRenderer(
   settings: Settings,
   onError: (msg: string) => void,
 ): Promise<Anime4kRenderer> {
-  const w = video.videoWidth;
-  const h = video.videoHeight;
+  const { w, h } = uploadSize(video);
   if (!w || !h) throw new Error('Waiting for video dimensions.');
 
   const gl = canvas.getContext('webgl2', {
@@ -281,6 +289,7 @@ export async function createAnime4kRenderer(
   const recent: { t: number; ms: number }[] = []; // completed GPU timings
   let lastCpuMs = 0;
   const frameTimes: number[] = [];
+  let lastHealthCheck = -Infinity;
   const textureBytes = allTex.reduce((n, t) => n + t.w * t.h * (t === videoTex ? 4 : 8), 0);
 
   function pollQueries() {
@@ -341,9 +350,28 @@ export async function createAnime4kRenderer(
       if (query) gl!.beginQuery(timerExt.TIME_ELAPSED_EXT, query);
     }
     // Upload current frame. Throws SecurityError for CORS-tainted video.
+    // WebGL reports a bad upload only through getError, so a size mismatch would otherwise
+    // leave a stale or black canvas while the status says Active. Check on the first frame
+    // and then periodically; getError stalls the pipeline, so not every frame.
+    const check = t0 - lastHealthCheck >= HEALTH_CHECK_MS;
+    if (check) {
+      lastHealthCheck = t0;
+      while (gl!.getError() !== gl!.NO_ERROR) { /* drain older errors so only the upload is judged */ }
+    }
     gl!.activeTexture(gl!.TEXTURE0);
     gl!.bindTexture(gl!.TEXTURE_2D, videoTex.tex);
     gl!.texSubImage2D(gl!.TEXTURE_2D, 0, 0, 0, w, h, gl!.RGBA, gl!.UNSIGNED_BYTE, video);
+    if (check) {
+      const size = decodedSize(video); // null = unreadable right now; don't treat as a change
+      const err = gl!.getError();
+      let problem: Error | null = null;
+      if (size && (size.w !== w || size.h !== h)) problem = new SourceSizeChanged();
+      else if (err !== gl!.NO_ERROR) problem = new Error(`The GPU rejected this video frame (WebGL error 0x${err.toString(16)}).`);
+      if (problem) {
+        if (query) { gl!.endQuery(timerExt!.TIME_ELAPSED_EXT); gl!.deleteQuery(query); }
+        throw problem;
+      }
+    }
 
     for (const c of compiled) {
       gl!.bindFramebuffer(gl!.FRAMEBUFFER, c.fbo);

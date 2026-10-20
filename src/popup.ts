@@ -27,6 +27,9 @@ const lastBudget = new Map<string, number>(); // video id -> last known frame li
 const lastSamples = new Map<string, number[]>(); // video id -> last graph, kept while paused
 const pendingToggle = new Map<string, boolean>(); // key -> desired state until storage echoes it
 let pointerBusy = false;
+// Cleared on window, not the card: a press that drags off the card must not leave it set,
+// or patchCard would stop updating checkboxes for the rest of the popup's life.
+for (const ev of ['pointerup', 'pointercancel'] as const) window.addEventListener(ev, () => { pointerBusy = false; });
 let focusId: string | null = null; // which video the performance panel follows
 
 // --- presets / effects --------------------------------------------------------
@@ -46,7 +49,7 @@ for (const p of PRESETS) {
 for (const b of document.querySelectorAll<HTMLButtonElement>('[data-field]')) {
   b.addEventListener('click', () => {
     const f = b.dataset.field as 'darkenLines' | 'thinLines';
-    void saveSettings({ [f]: !settings[f] });
+    void saveSettings((cur) => ({ [f]: !cur[f] }));
   });
 }
 function paintSettings(s: Settings) {
@@ -144,8 +147,6 @@ function buildCard(v: VideoInfo): Card {
   sw.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); pointerBusy = true; flip(!card.cb.checked); });
   sw.addEventListener('click', (e) => e.preventDefault());
   el.addEventListener('pointerdown', (e) => { if (e.button === 0) { pointerBusy = true; flip(!card.cb.checked); } });
-  el.addEventListener('pointerup', () => { pointerBusy = false; });
-  el.addEventListener('pointercancel', () => { pointerBusy = false; });
   card.cb.addEventListener('keydown', (e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); flip(!card.cb.checked); } });
   el.addEventListener('mouseenter', () => { focusId = v.id; });
   return card;

@@ -10,6 +10,7 @@ import {
 } from './settings';
 import type { Anime4kRenderer } from './gpu';
 import { collectPageMeta, mediaSessionMeta } from './media-meta';
+import { uploadSize } from './video-size';
 
 type GpuModule = typeof import('./gpu');
 let gpuModule: Promise<GpuModule> | null = null;
@@ -19,6 +20,9 @@ function loadGpu(): Promise<GpuModule> {
 }
 
 const MIN_VIDEO_PX = 200; // ignore thumbnails / preview videos
+// Each renderer holds a WebGL context, compiled shaders and large float textures; browsers
+// cap live contexts (~16) and evict the oldest, so a page full of videos must not get one each.
+const MAX_ACTIVE_RENDERERS = 2;
 
 declare global { interface Window { __a4kLoaded?: boolean } }
 let nextId = 1;
@@ -76,6 +80,21 @@ class VideoUpscaler {
 
   private resizeObs: ResizeObserver;
 
+  private readonly docSync: () => void;
+
+  // Set by destroy(); a dead upscaler must never start a renderer again.
+  private dead = false;
+
+  // Over the per-frame renderer cap: enabled, but not drawing.
+  private throttled = false;
+
+  // Times of recent rebuilds caused by the source changing size (see frame()).
+  private sizeRebuilds: number[] = [];
+
+  private static readonly MAX_SIZE_REBUILDS = 3;
+
+  private static readonly SIZE_REBUILD_WINDOW_MS = 30000;
+
   constructor(video: HTMLVideoElement, settings: Settings, enabled: boolean, onUpdate: () => void) {
     this.video = video;
     this.settings = settings;
@@ -93,6 +112,7 @@ class VideoUpscaler {
     for (const [n, f] of this.listeners) video.addEventListener(n, f);
     this.resizeObs = new ResizeObserver(() => this.layout());
     this.resizeObs.observe(video);
+    this.docSync = sync;
     document.addEventListener('visibilitychange', sync);
     document.addEventListener('fullscreenchange', sync);
     this.sync();
@@ -151,6 +171,9 @@ class VideoUpscaler {
   }
 
   destroy() {
+    this.dead = true;
+    document.removeEventListener('visibilitychange', this.docSync);
+    document.removeEventListener('fullscreenchange', this.docSync);
     this.stopProbe();
     if (this.idleTimer !== null) window.clearTimeout(this.idleTimer);
     this.teardown();
@@ -168,14 +191,35 @@ class VideoUpscaler {
 
   private suspended(): boolean {
     const v = this.video;
+    // Inside a shadow root, document.* is retargeted to the host, so ask the video's own root.
+    const root = v.getRootNode() as Document | ShadowRoot;
     return document.hidden
-      || document.pictureInPictureElement === v
-      || document.fullscreenElement === v; // native fullscreen on the video itself: canvas can't overlay it
+      || root.pictureInPictureElement === v
+      || root.fullscreenElement === v; // native fullscreen on the video itself: canvas can't overlay it
+  }
+
+  /** Renderers beyond MAX_ACTIVE_RENDERERS per frame are parked; see applyRendererCap(). */
+  setThrottled(on: boolean) {
+    if (on === this.throttled) return;
+    this.throttled = on;
+    if (on) this.teardown();
+    this.sync();
+  }
+
+  /** Higher runs first: playing videos, then larger ones. */
+  priority(): number {
+    const r = this.video.getBoundingClientRect();
+    return (this.video.paused ? 0 : 1e9) + r.width * r.height;
   }
 
   private sync() {
+    if (this.dead) return;
     if (!this.enabled) { this.stopLoop(); if (this.canvas) this.canvas.hidden = true; this.setStatus('Off'); this.probeFps(); return; }
     this.stopProbe();
+    if (this.throttled) {
+      this.setStatus('Waiting', `Anime4K runs on at most ${MAX_ACTIVE_RENDERERS} videos per page at once. Play this video to give it priority.`);
+      return;
+    }
     if (this.failed) return;
     const v = this.video;
     if (this.suspended()) {
@@ -197,8 +241,9 @@ class VideoUpscaler {
 
   private async start() {
     const v = this.video;
-    if (v.videoHeight > 1600 || v.videoWidth > 2880) {
-      this.fail(`Source is ${v.videoHeight}p; up to 1440p is supported (2× output would need too much GPU memory).`);
+    const src = uploadSize(v);
+    if (src.h > 1600 || src.w > 2880) {
+      this.fail(`Source is ${src.h}p; up to 1440p is supported (2× output would need too much GPU memory).`);
       return;
     }
     this.starting = true;
@@ -235,6 +280,18 @@ class VideoUpscaler {
     }
   }
 
+  /** Rebuild after the decoded frame size changed; give up if a stream keeps flapping. */
+  private rebuildForNewSize() {
+    const now = performance.now();
+    this.sizeRebuilds = [...this.sizeRebuilds.filter((t) => now - t < VideoUpscaler.SIZE_REBUILD_WINDOW_MS), now];
+    if (this.sizeRebuilds.length > VideoUpscaler.MAX_SIZE_REBUILDS) {
+      this.fail('The video keeps changing size, so Anime4K stopped. Turn it off and on to retry.');
+      return;
+    }
+    this.teardown();
+    this.sync();
+  }
+
   private fail(msg: string) {
     this.teardown();
     this.failed = true;
@@ -257,10 +314,12 @@ class VideoUpscaler {
       this.setStatus('Active');
     } catch (e) {
       if (gen === this.generation) {
+        // gpu.js is a separate bundle, so match the error by name rather than instanceof.
+        if (e instanceof Error && e.name === 'SourceSizeChanged') { this.rebuildForNewSize(); return; }
         const cors = e instanceof DOMException && e.name === 'SecurityError';
         this.fail(cors
           ? 'This video source does not allow browser upscaling (cross-origin without CORS). Normal playback is available.'
-          : 'Anime4K could not render this video. Try another preset or turn it off and on.');
+          : `Anime4K could not render this video${e instanceof Error ? `: ${e.message}` : '.'} Try another preset or turn it off and on.`);
       }
     } finally {
       if (gen === this.generation) {
@@ -331,30 +390,60 @@ class VideoUpscaler {
     this.layout();
   }
 
+  /** Re-check placement; called on every scan because players move or restyle the video without resizing it. */
+  relayout() { this.layout(); }
+
   private layout() {
     const c = this.canvas;
     const v = this.video;
     const parent = v.parentElement;
     if (!c || !parent) return;
+    // Players move the <video> between containers (theater/fullscreen layouts): follow it.
+    if (c.previousElementSibling !== v) { this.mountCanvas(c); return; }
     const vr = v.getBoundingClientRect();
     const pr = parent.getBoundingClientRect();
-    // Painted area inside the element box, honouring object-fit (contain default).
-    const fit = getComputedStyle(v).objectFit || 'contain';
-    let { width: bw, height: bh } = vr;
-    let ox = 0; let oy = 0;
-    if (v.videoWidth && v.videoHeight && fit !== 'fill') {
-      const va = v.videoWidth / v.videoHeight;
-      const ba = bw / bh;
-      const contain = fit === 'cover' ? va < ba : va > ba;
-      if (contain) { const nh = bw / va; oy = (bh - nh) / 2; bh = nh; } else { const nw = bh * va; ox = (bw - nw) / 2; bw = nw; }
-    }
-    c.style.left = `${vr.left - pr.left + ox}px`;
-    c.style.top = `${vr.top - pr.top + oy}px`;
-    c.style.width = `${bw}px`;
-    c.style.height = `${bh}px`;
-    const z = getComputedStyle(v).zIndex;
+    const cs = getComputedStyle(v);
+    const px = (s: string) => parseFloat(s) || 0;
+    // object-fit applies to the content box, inside the video's own border and padding.
+    const boxL = px(cs.borderLeftWidth) + px(cs.paddingLeft);
+    const boxT = px(cs.borderTopWidth) + px(cs.paddingTop);
+    const bw = vr.width - boxL - px(cs.borderRightWidth) - px(cs.paddingRight);
+    const bh = vr.height - boxT - px(cs.borderBottomWidth) - px(cs.paddingBottom);
+    const { w: pw, h: ph } = paintedSize(cs.objectFit, bw, bh, v.videoWidth, v.videoHeight);
+    const [posX, posY] = cs.objectPosition.split(' ');
+    const ox = objectOffset(posX, bw - pw);
+    const oy = objectOffset(posY, bh - ph);
+    // An absolutely positioned child is placed from the parent's padding box and scrolls with it.
+    c.style.left = `${vr.left - pr.left - parent.clientLeft + parent.scrollLeft + boxL + ox}px`;
+    c.style.top = `${vr.top - pr.top - parent.clientTop + parent.scrollTop + boxT + oy}px`;
+    c.style.width = `${pw}px`;
+    c.style.height = `${ph}px`;
+    // object-fit: cover (or none) paints past the content box; clip the canvas to it like the video.
+    // inset() order: top right bottom left.
+    const clip = [-oy, ox + pw - bw, oy + ph - bh, -ox].map((n) => Math.max(0, n));
+    c.style.clipPath = clip.some((n) => n > 0) ? `inset(${clip.map((n) => `${n}px`).join(' ')})` : '';
+    const z = cs.zIndex;
     c.style.zIndex = z && z !== 'auto' ? String(Number(z) + 1) : '1';
   }
+}
+
+/** CSS size of the picture inside a bw x bh content box for the given object-fit. */
+function paintedSize(fit: string, bw: number, bh: number, vw: number, vh: number): { w: number; h: number } {
+  if (!vw || !vh || fit === 'fill') return { w: bw, h: bh };
+  const contain = Math.min(bw / vw, bh / vh);
+  const scale = fit === 'cover' ? Math.max(bw / vw, bh / vh)
+    : fit === 'none' ? 1
+      : fit === 'scale-down' ? Math.min(1, contain)
+        : contain; // contain, and the default
+  return { w: vw * scale, h: vh * scale };
+}
+
+/** Offset for one object-position component; `free` is box size minus picture size (may be negative). */
+function objectOffset(component: string | undefined, free: number): number {
+  if (!component) return free / 2;
+  if (component.endsWith('%')) return (free * (parseFloat(component) || 0)) / 100;
+  if (component.endsWith('px')) return parseFloat(component) || 0;
+  return free / 2; // calc() and other forms: assume centered
 }
 
 // --- discovery ---------------------------------------------------------------
@@ -399,6 +488,8 @@ function scan() {
   }
   // The media URL can change after creation (HLS attaches later); re-evaluate enabled state.
   for (const u of upscalers.values()) u.setEnabled(sources[u.key] === true);
+  applyRendererCap();
+  for (const u of upscalers.values()) u.relayout();
   if (changed) notify();
 }
 function queueScan() {
@@ -406,6 +497,11 @@ function queueScan() {
   scanQueued = true;
   const wait = Math.max(0, 300 - (performance.now() - lastScan));
   setTimeout(scan, wait);
+}
+
+function applyRendererCap() {
+  const ranked = [...upscalers.values()].filter((u) => u.enabled).sort((a, b) => b.priority() - a.priority());
+  ranked.forEach((u, i) => u.setThrottled(i >= MAX_ACTIVE_RENDERERS));
 }
 
 function list(): VideoInfo[] {
@@ -435,7 +531,12 @@ if (!window.__a4kLoaded) {
   (async () => {
   [settings, sources] = await Promise.all([loadSettings(), loadSources()]);
   onSettingsChanged((s) => { settings = s; for (const u of upscalers.values()) u.configure(s); notify(); });
-  onSourcesChanged((s) => { sources = s; for (const u of upscalers.values()) u.setEnabled(sources[u.key] === true); notify(); });
+  onSourcesChanged((s) => {
+    sources = s;
+    for (const u of upscalers.values()) u.setEnabled(sources[u.key] === true);
+    applyRendererCap();
+    notify();
+  });
   new MutationObserver(queueScan).observe(document.documentElement, { childList: true, subtree: true });
   scan();
   // Videos that become visible later (lazy players) are picked up by periodic rescans.
