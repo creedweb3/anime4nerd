@@ -33,10 +33,22 @@ export async function loadSettings(): Promise<Settings> {
   return normalize(r[SETTINGS_KEY]);
 }
 
-export async function saveSettings(patch: Partial<Settings>): Promise<Settings> {
-  const next = normalize({ ...(await loadSettings()), ...patch });
-  await chrome.storage.sync.set({ [SETTINGS_KEY]: next });
-  return next;
+let settingsChain: Promise<unknown> = Promise.resolve();
+
+/**
+ * Apply a patch (or a function of the current settings, for toggles) on top of the
+ * stored settings. Writes are queued so two quick clicks can't both read the same
+ * old value and drop each other's change.
+ */
+export function saveSettings(patch: Partial<Settings> | ((cur: Settings) => Partial<Settings>)): Promise<Settings> {
+  const run = settingsChain.then(async () => {
+    const cur = await loadSettings();
+    const next = normalize({ ...cur, ...(typeof patch === 'function' ? patch(cur) : patch) });
+    await chrome.storage.sync.set({ [SETTINGS_KEY]: next });
+    return next;
+  });
+  settingsChain = run.catch(() => {});
+  return run;
 }
 
 export function onSettingsChanged(cb: (s: Settings) => void): void {
