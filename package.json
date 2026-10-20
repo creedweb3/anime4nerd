@@ -1,6 +1,6 @@
 {
   "name": "anime4nerd",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Anime4Nerd: real-time 2x Anime4K upscaling for web video (browser extension).",
   "main": "index.js",
   "directories": {

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Anime4Nerd",
   "short_name": "Anime4Nerd",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Real-time 2x Anime4K upscaling for any web video. Runs the original bloc97 shaders in WebGL2, on your GPU.",
   "author": "Anime4Nerd authors",
   "minimum_chrome_version": "116",

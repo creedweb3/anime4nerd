@@ -1,7 +1,7 @@
 # Security
 
 This document describes what Anime4Nerd can and cannot do, how it is protected,
-what was reviewed, and how to use it safely. Last reviewed: 2026-10-17 (v1.0.0).
+what was reviewed, and how to use it safely. Last reviewed: 2026-10-20 (v1.0.1).
 
 ## Threat model in one paragraph
 
@@ -49,6 +49,15 @@ web-accessible resources, CSP, prototype pollution in JSON-LD parsing, and the
 service-worker injection path. Findings were all low/medium severity, none
 allowed data exfiltration, and all were fixed in v1.0.0. The per-site permission
 flow was later replaced by install-time site access at the user's request.
+
+A second pass (2026-10-20, v1.0.1) found no critical or high security issues. It
+fixed a lifecycle bug where a removed video could restart a GPU renderer, capped
+pages at two active renderers so a page full of videos cannot exhaust WebGL
+contexts, and limited how often a stream that keeps changing size can force a
+rebuild. Remaining low-severity notes: the overlay canvas and the parent's
+`position: relative` are visible to the page (so a page can tell the extension is
+active there), and frames without a host (`about:blank`, `srcdoc`) share one
+on/off setting per media host.
 
 ## For people who install it
 
