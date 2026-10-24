@@ -26,6 +26,10 @@
   seconds instead of rebuilding forever.
 
 ### Added
+- "What's new" notice: after an update the toolbar icon shows a NEW badge,
+  and the next popup open shows a one-line banner linking to the release
+  notes. Opening the popup clears both. No network requests; the site opens
+  only if the link is clicked.
 - `test/geometry.mjs`: loads the built extension into Edge or Chrome and checks
   anamorphic, rotated, odd-sized and square sources, overlay placement and the
   renderer cap.

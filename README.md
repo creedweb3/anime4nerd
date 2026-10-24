@@ -20,6 +20,11 @@ Output goes to `dist/`.
 
 ## Install (Chrome / Edge / Brave)
 
+From the Chrome Web Store:
+https://chromewebstore.google.com/detail/anime4nerd/kblnmcdmlgeidaclnhjmcffefmkehkpm
+
+From source:
+
 1. Open `chrome://extensions` (or `brave://extensions`).
 2. Turn on **Developer mode**.
 3. **Load unpacked** → pick the `dist/` folder. (Or `npm run pack` and share
