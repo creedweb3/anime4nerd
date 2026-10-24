@@ -15,6 +15,7 @@
       <a href="#how">how it works</a>
       <a href="#presets">presets</a>
       <a href="#install">install</a>
+      <a href="#changes">what's new</a>
       <a href="privacy">privacy</a>
     </nav>
   </div>
@@ -115,6 +116,27 @@
     </div>
   </section>
 
+  <section id="changes" class="doc">
+    <span class="label">version history</span>
+    <h2 style="margin-top:10px">What's new.</h2>
+    <div class="prose">
+      <h3>1.0.1 · October 2026</h3>
+      <ul>
+        <li><strong>Works on DVD-era anime.</strong> Older shows mastered from DVD often use non-square pixels, and on those the upscaled picture stayed frozen or blank. They now upscale like everything else.</li>
+        <li><strong>Rotated and odd-sized videos</strong> are handled correctly.</li>
+        <li><strong>Clear errors instead of a stuck picture.</strong> If the GPU rejects a frame, Anime4Nerd now switches back to the normal video and tells you why.</li>
+        <li><strong>Better overlay placement</strong> on players that crop the video, pin it to a corner, sit in a scrolling box, or move the video between layouts.</li>
+        <li><strong>Picture-in-picture and fullscreen</strong> now pause the upscaler on players built with shadow DOM too.</li>
+        <li><strong>Lighter on busy pages.</strong> At most two videos per page are upscaled at once; playing and larger videos go first, the rest wait.</li>
+        <li>Fixed quick setting toggles overwriting each other, and popup switches that could stop updating after a drag.</li>
+      </ul>
+      <h3>1.0.0 · October 2026</h3>
+      <ul>
+        <li>First release: real-time 2× Anime4K upscaling for any web video, six presets, optional line darkening and thinning, per-site on/off.</li>
+      </ul>
+    </div>
+  </section>
+
   <section id="privacy" class="doc">
     <span class="label">privacy</span>
     <h2 style="margin-top:10px">Privacy.</h2>
@@ -141,7 +163,7 @@
 
 <footer class="wrap">
   <span>Anime4Nerd · v1.0.1 · MIT</span>
-  <span><a href="privacy">privacy</a> · <a href="#credits">credits</a> · <a href="https://github.com/creedweb3/anime4nerd" rel="noopener">github</a></span>
+  <span><a href="#changes">changes</a> · <a href="privacy">privacy</a> · <a href="#credits">credits</a> · <a href="https://github.com/creedweb3/anime4nerd" rel="noopener">github</a></span>
 </footer>
 
 <script>
