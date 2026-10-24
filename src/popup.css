@@ -44,6 +44,27 @@ body {
 .chip.grow { flex: 1; }
 .chip.on { color: var(--on); border-color: var(--line2); }
 
+/* what's new banner (after an update) -------------------------------------- */
+.update-note {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 7px 10px;
+  border: 1px solid var(--line2);
+  background: var(--panel);
+  color: var(--dim);
+  font-size: 11px;
+  text-decoration: none;
+}
+.update-note[hidden] { display: none; }
+.update-label { color: var(--faint); font-size: 9px; text-transform: uppercase; letter-spacing: 0.16em; margin-right: 6px; }
+.update-dot { color: var(--ok); }
+.update-note b { color: var(--on); font-weight: 600; }
+.update-note:hover, .update-note:focus-visible { border-color: var(--dim); outline: none; }
+.update-note:hover .update-link, .update-note:focus-visible .update-link { color: var(--on); }
+
 /* panels ------------------------------------------------------------------- */
 .panel {
   border: 1px solid var(--line);

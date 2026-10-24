@@ -2,6 +2,7 @@ import {
   Message, PRESETS, Settings, VideoInfo, loadSettings, onSettingsChanged, onSourcesChanged, saveSettings, setSource,
 } from './settings';
 import { EMPTY_META, MediaMeta } from './media-meta';
+import { WHATS_NEW_URL, clearWhatsNew, pendingWhatsNew } from './whats-new';
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
 const hintEl = $('#hint');
@@ -296,11 +297,23 @@ chrome.runtime.onMessage.addListener((msg: Message) => {
   if (msg?.type === 'a4k-changed') void refresh();
 });
 
+/** Show the post-update banner once: opening the popup counts as seeing it. */
+async function showWhatsNew() {
+  const version = await pendingWhatsNew().catch(() => null);
+  if (!version) return;
+  const note = $<HTMLAnchorElement>('#whatsnew');
+  note.href = WHATS_NEW_URL;
+  setText($('#whatsnew-ver'), version);
+  note.hidden = false;
+  await clearWhatsNew().catch(() => {});
+}
+
 (async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   tabId = tab?.id;
   try { tabHost = new URL(tab?.url ?? '').host; } catch { /* no url permission */ }
   tick();
+  void showWhatsNew();
   paintSettings(await loadSettings());
   onSettingsChanged((s) => { paintSettings(s); void refresh(); });
   onSourcesChanged(() => { void refresh(); });

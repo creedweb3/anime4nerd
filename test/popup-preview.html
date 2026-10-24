@@ -15,6 +15,10 @@
     <span class="chip" id="clock"></span>
   </header>
 
+  <a class="update-note" id="whatsnew" href="https://anime4nerd.pages.dev/#changes" target="_blank" rel="noopener" hidden>
+    <span><span class="update-label">updated</span><span class="update-dot">●</span> v<b id="whatsnew-ver"></b></span><span class="update-link">what's new →</span>
+  </a>
+
   <section class="panel">
     <div class="panel-head"><span>playing now</span><span id="count"></span></div>
     <div class="sources" id="sources"></div>
@@ -59,10 +63,12 @@
     window.chrome = {
       storage: {
         sync: { get: async () => ({ anime4k: { preset: 'A', darkenLines: false, thinLines: true } }), set: async () => {} },
-        local: { get: async () => ({}), set: async () => {} },
+        // ?update=0 previews the popup without the post-update banner.
+        local: { get: async () => (new URLSearchParams(location.search).get('update') === '0' ? {} : { 'anime4k-whats-new': '1.0.1' }), set: async () => {}, remove: async () => {} },
         onChanged: { addListener() {} },
       },
       runtime: { onMessage: { addListener() {} }, sendMessage: async () => {} },
+      action: { setBadgeText: async () => {} },
       tabs: {
         query: async () => [{ id: 1, url: 'https://www.animesite.test/watch/x' }],
         sendMessage: async (id, msg) => {
