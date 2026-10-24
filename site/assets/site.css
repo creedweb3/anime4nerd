@@ -69,6 +69,8 @@ section:last-of-type { border-bottom: 0; }
 /* before / after slider */
 .compare { margin-top: 28px; position: relative; width: 100%; max-width: 100%; aspect-ratio: 16 / 9; border: 1px solid var(--line-strong); overflow: hidden; user-select: none; touch-action: pan-y; background: #000; }
 .compare img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
+/* Each label lives inside its picture's layer, so it slides out of view with that picture. */
+.compare .layer { position: absolute; inset: 0; }
 .compare .after { clip-path: inset(0 0 0 var(--pos, 50%)); }
 .compare .divider { position: absolute; top: 0; bottom: 0; left: var(--pos, 50%); width: 2px; margin-left: -1px; background: var(--accent); box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 60%, transparent); pointer-events: none; }
 .compare .handle { position: absolute; top: 50%; left: var(--pos, 50%); width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-weight: 700; box-shadow: 0 0 0 6px rgba(0,0,0,.55); pointer-events: none; font-family: var(--mono); }
@@ -76,6 +78,19 @@ section:last-of-type { border-bottom: 0; }
 .compare .tag.l { left: 12px; background: rgba(10,11,12,.82); color: var(--dim); }
 .compare .tag.r { right: 12px; background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .compare input[type=range] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: ew-resize; margin: 0; }
+/* meter mirrors the frame: browser share left, anime4nerd share right, tick at the line */
+.cmp-meter { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; margin-top: 12px; font-family: var(--mono); font-size: 0.72rem; letter-spacing: .12em; text-transform: uppercase; }
+.cmp-meter .b { color: var(--dim); }
+.cmp-meter .a { color: var(--accent); }
+.cmp-meter .bar { position: relative; height: 6px; background: var(--line); }
+.cmp-meter .bar i { position: absolute; top: 0; bottom: 0; right: 0; width: calc(100% - var(--pos, 50%)); background: var(--accent); }
+.cmp-meter .bar b { position: absolute; top: -4px; bottom: -4px; left: var(--pos, 50%); width: 2px; margin-left: -1px; background: var(--fg); }
+.cmp-controls { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px 16px; align-items: center; margin-top: 14px; }
+.seg { display: inline-flex; border: 1px solid var(--line-strong); }
+.seg button { font: 500 0.75rem var(--mono); letter-spacing: .08em; text-transform: uppercase; background: transparent; color: var(--dim); border: 0; padding: 8px 14px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.seg button:not([aria-pressed="true"]):hover { color: var(--fg); }
+.cmp-hint { color: var(--faint); font-family: var(--mono); font-size: 0.75rem; }
 .credit { margin-top: 10px; font-family: var(--mono); font-size: 0.75rem; color: var(--faint); }
 
 /* pipeline */

@@ -28,7 +28,7 @@
       <h1>Sharper anime,<br>right in your <span class="accent">browser</span>.</h1>
       <p class="lede">Anime4Nerd runs the original Anime4K networks on any web video, live, on your own GPU. Switch a video on and every frame is restored and upscaled 2×.</p>
       <div class="cta">
-        <a class="btn primary" href="#install">Install Anime4Nerd</a>
+        <a class="btn primary" href="https://chromewebstore.google.com/detail/anime4nerd/kblnmcdmlgeidaclnhjmcffefmkehkpm" rel="noopener">Install Anime4Nerd</a>
         <a class="btn" href="#compare">See the difference</a>
       </div>
       <div class="facts">
@@ -47,13 +47,30 @@
     <h2 style="margin-top:10px">Drag to compare.</h2>
     <p class="prose" style="color:var(--dim)">A 225p anime frame scaled to 2×. Left: the browser's normal scaling. Right: Anime4K A+A with darken lines, produced by the extension's own pipeline.</p>
     <div class="compare" id="cmp" style="--pos:50%">
-      <img src="assets/frame-before.png" alt="Frame scaled by the browser: soft, smeared outlines." width="800" height="450">
-      <img class="after" src="assets/frame-after.png" alt="Same frame through Anime4Nerd: crisp dark outlines." width="800" height="450">
+      <div class="layer">
+        <img src="assets/frame-before.png" alt="Frame scaled by the browser: soft, smeared outlines." width="800" height="450">
+        <span class="tag l">browser scaling</span>
+      </div>
+      <div class="layer after">
+        <img src="assets/frame-after.png" alt="Same frame through Anime4Nerd: crisp dark outlines." width="800" height="450">
+        <span class="tag r">anime4nerd · a+a</span>
+      </div>
       <span class="divider"></span>
       <span class="handle" aria-hidden="true">⇆</span>
-      <span class="tag l">browser scaling</span>
-      <span class="tag r">anime4nerd · a+a</span>
-      <input type="range" id="cmp-range" min="0" max="100" value="50" aria-label="Comparison position: left shows browser scaling, right shows Anime4Nerd">
+      <input type="range" id="cmp-range" min="0" max="100" value="50" aria-label="Comparison position: left of the line shows browser scaling, right of the line shows Anime4Nerd">
+    </div>
+    <div class="cmp-meter" id="cmp-meter" style="--pos:50%" aria-hidden="true">
+      <span class="b" id="cmp-b">50% browser</span>
+      <span class="bar"><i></i><b></b></span>
+      <span class="a" id="cmp-a">50% anime4nerd</span>
+    </div>
+    <div class="cmp-controls">
+      <div class="seg" role="group" aria-label="Show" id="cmp-seg">
+        <button type="button" data-to="100" aria-pressed="false">browser</button>
+        <button type="button" data-to="50" aria-pressed="true">split</button>
+        <button type="button" data-to="0" aria-pressed="false">anime4nerd</button>
+      </div>
+      <span class="cmp-hint">or drag the line</span>
     </div>
     <p class="credit">“A snapshot from the 2012 demo release from the Morevna Project” by <a href="https://morevnaproject.org/" rel="noopener">Morevna Project</a>, <a href="https://creativecommons.org/licenses/by/3.0/" rel="noopener">CC BY 3.0</a>. Cropped and upscaled; no endorsement implied.</p>
   </section>
@@ -97,10 +114,11 @@
     <div class="grid2">
       <div>
         <h3>From the Chrome Web Store</h3>
-        <p style="color:var(--dim)">The store listing is in review. Once it is live, install it with one click in Chrome, Brave or Edge.</p>
+        <p style="color:var(--dim)">One click in Chrome, Brave or Edge. Updates install automatically.</p>
+        <p><a class="btn primary" href="https://chromewebstore.google.com/detail/anime4nerd/kblnmcdmlgeidaclnhjmcffefmkehkpm" rel="noopener">Add to Chrome</a></p>
         <h3 style="margin-top:28px">From the package</h3>
         <ol class="steps">
-          <li>Unzip <code>Anime4Nerd prod.zip</code>.</li>
+          <li>Download <a href="https://github.com/creedweb3/anime4nerd/releases/latest/download/anime4nerd.zip" rel="noopener"><code>anime4nerd.zip</code></a> (<a href="https://github.com/creedweb3/anime4nerd/releases/latest/download/anime4nerd.zip.sha256" rel="noopener">sha256</a>) and unzip it.</li>
           <li>Open <code>chrome://extensions</code> (or <code>brave://extensions</code>) and turn on Developer mode.</li>
           <li>Choose <b>Load unpacked</b> and pick the unzipped folder.</li>
           <li>Play a video, open the extension, and switch the video on.</li>
@@ -128,6 +146,7 @@
         <li><strong>Better overlay placement</strong> on players that crop the video, pin it to a corner, sit in a scrolling box, or move the video between layouts.</li>
         <li><strong>Picture-in-picture and fullscreen</strong> now pause the upscaler on players built with shadow DOM too.</li>
         <li><strong>Lighter on busy pages.</strong> At most two videos per page are upscaled at once; playing and larger videos go first, the rest wait.</li>
+        <li><strong>Update notice.</strong> After an update, a small NEW badge and a one-line note in the popup link here, so you can see what changed.</li>
         <li>Fixed quick setting toggles overwriting each other, and popup switches that could stop updating after a drag.</li>
       </ul>
       <h3>1.0.0 · October 2026</h3>
@@ -167,13 +186,42 @@
 </footer>
 
 <script>
-  // Before/after slider: a transparent range input sets --pos on the container.
+  // Before/after slider: a transparent range input sets --pos on the frame and the meter;
+  // the switch glides the line to browser (100), split (50) or anime4nerd (0).
   (function () {
     var box = document.getElementById('cmp');
     var range = document.getElementById('cmp-range');
-    if (!box || !range) return;
-    var set = function () { box.style.setProperty('--pos', range.value + '%'); };
-    range.addEventListener('input', set);
-    set();
+    var meter = document.getElementById('cmp-meter');
+    var btns = document.querySelectorAll('#cmp-seg button');
+    if (!box || !range || !meter) return;
+    var still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var anim = 0, land = 0;
+    var set = function (v) {
+      box.style.setProperty('--pos', v + '%');
+      meter.style.setProperty('--pos', v + '%');
+      document.getElementById('cmp-b').textContent = Math.round(v) + '% browser';
+      document.getElementById('cmp-a').textContent = Math.round(100 - v) + '% anime4nerd';
+      var mode = v >= 99.5 ? '100' : v <= 0.5 ? '0' : '50'; // anything between the ends is "split"
+      for (var i = 0; i < btns.length; i++) btns[i].setAttribute('aria-pressed', String(btns[i].getAttribute('data-to') === mode));
+    };
+    var stop = function () { cancelAnimationFrame(anim); clearTimeout(land); };
+    var glide = function (to) {
+      stop();
+      var from = Number(range.value);
+      var finish = function () { stop(); range.value = to; set(to); };
+      if (still) { finish(); return; }
+      land = setTimeout(finish, 420); // lands even if animation frames are throttled
+      var t0 = performance.now();
+      var step = function (now) {
+        var p = Math.min(1, (now - t0) / 380);
+        var v = from + (to - from) * (1 - Math.pow(1 - p, 3));
+        range.value = v; set(v);
+        if (p < 1) anim = requestAnimationFrame(step);
+      };
+      anim = requestAnimationFrame(step);
+    };
+    range.addEventListener('input', function () { stop(); set(Number(range.value)); });
+    for (var i = 0; i < btns.length; i++) btns[i].addEventListener('click', function () { glide(Number(this.getAttribute('data-to'))); });
+    set(Number(range.value));
   })();
 </script>
