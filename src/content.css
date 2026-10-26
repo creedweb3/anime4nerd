@@ -8,3 +8,17 @@
 .a4k-canvas[hidden] {
   display: none;
 }
+
+/* A <video> fullscreen request redirected to its parent (src/fullscreen-redirect.ts): make the
+   video fill the screen as it would have on its own. */
+[data-a4k-fs]:fullscreen {
+  background: #000;
+}
+
+[data-a4k-fs]:fullscreen > video {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  object-fit: contain !important;
+}

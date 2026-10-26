@@ -38,6 +38,7 @@ tampered with. Each is addressed below.
 | DOM scan cost on busy pages | Video discovery is throttled to one scan per 300 ms. |
 | GPU memory exhaustion | Sources above 1440p are refused with a message; above 2x the upscale factor halves until the output fits the GPU texture limit, 8K pixels, and a 2 GB budget for every intermediate texture; only one idle renderer is kept warm; context loss is caught and reported. |
 | A page restyling the fullscreen menu to steal clicks (clickjacking) | The menu lives in a closed shadow root with its position and visibility pinned by inline `!important` styles, and a click only counts if it is a real user event on a menu that is not scaled, oversized or faded. |
+| Code in the page's own JavaScript world | `fullscreen-redirect.js` (page world, ~30 lines) only wraps `requestFullscreen` so a video marked `data-a4k-on` fullscreens its parent instead. It has no extension APIs, reads no page data and sends nothing; a page can only affect its own fullscreen behaviour through it. |
 | A page stopping the extension with a forged takeover event | The `a4k-takeover` DOM event (used to retire a copy orphaned by an extension reload) is obeyed only by a copy whose extension context is already gone. |
 | Fingerprinting via extension files | `gpu.js` uses `use_dynamic_url`, so its URL changes per session. |
 | Supply chain | Zero runtime npm dependencies in the shipped package. Build uses esbuild + TypeScript only. Shaders are copied verbatim from a pinned bloc97 commit (see `THIRD_PARTY_NOTICES.md`). |

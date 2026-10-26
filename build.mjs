@@ -20,6 +20,8 @@ const common = {
 const configs = [
   // Isolated-world content script. Must be a classic script (iife).
   { ...common, entryPoints: ['src/content.ts'], format: 'iife' },
+  // Page-world (MAIN) script that redirects bare-video fullscreen to the player container.
+  { ...common, entryPoints: ['src/fullscreen-redirect.ts'], format: 'iife' },
   // Lazy GPU bundle, loaded via import(chrome.runtime.getURL('gpu.js')).
   { ...common, entryPoints: ['src/gpu.ts'], format: 'esm' },
   { ...common, entryPoints: ['src/popup.ts'], format: 'iife' },

@@ -177,6 +177,7 @@ class VideoUpscaler {
 
   destroy() {
     this.dead = true;
+    this.video.removeAttribute('data-a4k-on');
     document.removeEventListener('visibilitychange', this.docSync);
     document.removeEventListener('fullscreenchange', this.docSync);
     this.stopProbe();
@@ -219,6 +220,8 @@ class VideoUpscaler {
 
   private sync() {
     if (this.dead) return;
+    // Tells src/fullscreen-redirect.ts (page world) to fullscreen this video's container instead.
+    this.video.toggleAttribute('data-a4k-on', this.enabled);
     if (!this.enabled) { this.stopLoop(); if (this.canvas) this.canvas.hidden = true; this.setStatus('Off'); this.probeFps(); return; }
     this.stopProbe();
     if (this.throttled) {
@@ -530,8 +533,14 @@ function list(): VideoInfo[] {
   return [...upscalers.values()].map((u) => u.info());
 }
 function notify() {
-  if (!contextAlive()) { shutdown(); return; }
-  chrome.runtime.sendMessage({ type: 'a4k-changed' } satisfies Message).catch(() => {});
+  // sendMessage throws synchronously once the context is gone, even when runtime.id still reads.
+  try {
+    if (!contextAlive()) throw new Error('context gone');
+    chrome.runtime.sendMessage({ type: 'a4k-changed' } satisfies Message).catch(() => {});
+  } catch {
+    shutdown();
+    return;
+  }
   syncMenu();
 }
 
@@ -572,14 +581,40 @@ function composedContains(outer: Element, node: Node): boolean {
   return false;
 }
 
-/** The highest-priority video inside the fullscreen element (a player container, not the bare video). */
-function fullscreenTarget(): { u: VideoUpscaler; container: Element } | null {
-  for (const u of [...upscalers.values()].sort((a, b) => b.priority() - a.priority())) {
+/** Share of the viewport a video must cover to count as "the" video when the whole frame is fullscreen. */
+const FILLS_VIEWPORT = 0.8;
+
+/** True when this frame's viewport is the whole screen: the outer page fullscreened our iframe, or F11. */
+function frameFillsScreen(): boolean {
+  return innerWidth >= screen.width - 2 && innerHeight >= screen.height - 2;
+}
+
+/**
+ * Where the menu goes: the fullscreen element, or its open shadow root when the video lives inside
+ * it (children added from outside a shadow root without a slot are never drawn).
+ */
+function mountPoint(fs: Element, video: HTMLVideoElement): Element | ShadowRoot {
+  for (let r = video.getRootNode(); r instanceof ShadowRoot; r = r.host.getRootNode()) {
+    if (r === fs.shadowRoot) return r;
+  }
+  return fs;
+}
+
+/** The video the fullscreen menu belongs to and where to mount it, or null when nothing is fullscreen. */
+function fullscreenTarget(): { u: VideoUpscaler; container: Element | ShadowRoot } | null {
+  const ranked = [...upscalers.values()].sort((a, b) => b.priority() - a.priority());
+  for (const u of ranked) {
     const root = u.video.getRootNode() as Document | ShadowRoot;
     const fs = root.fullscreenElement ?? document.fullscreenElement;
-    if (fs && fs !== u.video && composedContains(fs, u.video)) return { u, container: fs };
+    // A player container is fullscreen (not the bare video, which nothing can draw over).
+    if (fs && fs !== u.video && composedContains(fs, u.video)) return { u, container: mountPoint(fs, u.video) };
   }
-  return null;
+  if (document.fullscreenElement || !frameFillsScreen() || !document.body) return null;
+  const big = ranked.find((u) => {
+    const r = u.video.getBoundingClientRect();
+    return r.width >= innerWidth * FILLS_VIEWPORT || r.height >= innerHeight * FILLS_VIEWPORT;
+  });
+  return big ? { u: big, container: document.body } : null;
 }
 
 const menu = new FullscreenMenu(() => fullscreenTarget()?.u.info() ?? null, () => settings);
@@ -619,6 +654,8 @@ if (!window.__a4kLoaded) {
     notify();
   });
   document.addEventListener('fullscreenchange', syncMenu);
+  // An iframe whose outer page goes fullscreen, and F11, only show up as a resize.
+  window.addEventListener('resize', syncMenu);
   document.addEventListener('mousemove', () => menu.wake(), { passive: true });
   observer = new MutationObserver(queueScan);
   observer.observe(document.documentElement, { childList: true, subtree: true });

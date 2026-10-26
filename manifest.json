@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Anime4Nerd",
   "short_name": "Anime4Nerd",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Real-time 2x–8x Anime4K upscaling for any web video. Runs the original bloc97 shaders in WebGL2, on your GPU.",
   "author": "Anime4Nerd authors",
   "minimum_chrome_version": "116",
@@ -32,6 +32,14 @@
       "run_at": "document_idle",
       "all_frames": true,
       "match_about_blank": true
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["fullscreen-redirect.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true,
+      "world": "MAIN"
     }
   ],
   "background": {

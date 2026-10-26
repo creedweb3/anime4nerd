@@ -90,7 +90,7 @@ export class FullscreenMenu {
     this.power.addEventListener('click', (e) => {
       if (!this.genuine(e)) return;
       const t = this.target();
-      if (t) void setSource(t.key, !t.enabled);
+      if (t) setSource(t.key, !t.enabled).catch(() => {});
     });
     head.append(title, this.power);
     this.meta.className = 'meta';
@@ -124,7 +124,7 @@ export class FullscreenMenu {
       b.setAttribute('role', 'radio');
       b.dataset[field] = value;
       b.textContent = text;
-      b.addEventListener('click', (e) => { if (this.genuine(e)) void saveSettings(patch(value)); });
+      b.addEventListener('click', (e) => { if (this.genuine(e)) saveSettings(patch(value)).catch(() => {}); });
       row.append(b);
     }
     box.append(label, row);
@@ -159,14 +159,14 @@ export class FullscreenMenu {
       b.setAttribute('role', 'switch');
       b.dataset.field = field;
       b.textContent = text;
-      b.addEventListener('click', (e) => { if (this.genuine(e)) void saveSettings((cur) => ({ [field]: !cur[field] })); });
+      b.addEventListener('click', (e) => { if (this.genuine(e)) saveSettings((cur) => ({ [field]: !cur[field] })).catch(() => {}); });
       row.append(b);
     }
     return row;
   }
 
-  /** Show the menu inside `container` (the fullscreen element), or remove it when null. */
-  mount(container: Element | null) {
+  /** Show the menu inside `container` (the fullscreen element or its shadow root), or remove it when null. */
+  mount(container: Element | ShadowRoot | null) {
     if (!container) { this.host.remove(); this.setOpen(false); return; }
     if (this.host.parentNode !== container) { container.append(this.host); this.wake(); }
     this.refresh();
