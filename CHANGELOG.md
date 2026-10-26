@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.1.1 (2026-10-26)
+
+### Fixed
+- The fullscreen menu now appears on more players:
+  - Sites that fullscreen the bare `<video>`: for a video being upscaled, the
+    player container goes fullscreen instead, so upscaling and the menu keep
+    working. (The browser's own `<video controls>` button still fullscreens the
+    bare video.)
+  - Embedded players whose outer page fullscreens the whole iframe, and F11.
+  - Players whose fullscreen element keeps the video in a shadow root.
+- No more "Extension context invalidated" errors from a copy of the content
+  script left behind by an extension reload, including from menu clicks.
+
 ## 1.1.0 (2026-10-26)
 
 ### Added
