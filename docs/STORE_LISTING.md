@@ -39,12 +39,16 @@ Screenshot credits: the before/after image uses "A snapshot from the 2012 demo r
 - Host permission `<all_urls>`: video players are embedded from many different domains (the page and the player's host differ), so the extension must be able to find a `<video>` in any frame. It reads frames only from videos the user switches on and sends nothing anywhere.
 - Single purpose: upscale video on pages the user enables.
 
-**Screenshots (ready, 1280×800, in `docs/store/`, upload in this order):**
-1. `anime4nerd-1-hero.png`: headline + the popup.
+**Screenshots (ready, 1280×800, in `docs/store/`, upload in this order; the store allows 5):**
+1. `anime4nerd-1-hero.png`: headline + the popup, with the upscale row (regenerated for 1.1.0).
 2. `anime4nerd-2-compare.png`: before/after wipe (A+A + darken lines) on a Morevna Project frame (CC BY 3.0, credited on the image).
-3. `anime4nerd-3-presets.png`: the six presets explained.
-4. `anime4nerd-4-performance.png`: the GPU meter explained.
+3. `anime4nerd-6-fullscreen.png`: the fullscreen ☰ menu and upscale factors (new in 1.1.0).
+4. `anime4nerd-3-presets.png`: the six presets explained.
 5. `anime4nerd-5-privacy.png`: privacy summary.
+
+`anime4nerd-4-performance.png` (the GPU meter explained) is retired from the upload: the hero and
+fullscreen shots both show the meter. The 1.1.0 images are rendered from `docs/store/shots.html`
+with headless Edge (command in the file).
 
 The popup shows a fictional title ("Starlight Academy") on purpose: no real show names or frames.
 

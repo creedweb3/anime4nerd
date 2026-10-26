@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Anime4Nerd store screenshots</title>
+<!-- Source for the 1280x800 Chrome Web Store screenshots. ?s=hero or ?s=fullscreen picks the slide.
+     Render: msedge --headless --window-size=1280,800 --screenshot=out.png "file:///.../shots.html?s=hero" -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="../../site/assets/site.css">
+<style>
+  html, body { width: 1280px; height: 800px; overflow: hidden; }
+  body { position: relative; background:
+    radial-gradient(900px 500px at 85% 35%, rgba(159, 211, 168, .05), transparent 70%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, .018) 0 1px, transparent 1px 32px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, .018) 0 1px, transparent 1px 32px), #0b0b0b; }
+  .slide { display: none; position: absolute; inset: 0; }
+  .slide.on { display: block; }
+  .brand { position: absolute; left: 64px; top: 44px; display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 15px; }
+  .brand img { width: 26px; height: 26px; }
+  .brand span { color: var(--dim); font-weight: 400; }
+  .kicker { color: var(--ok); font-size: 13px; letter-spacing: .2em; text-transform: uppercase; }
+  h1.big { font-size: 44px; line-height: 1.2; letter-spacing: -.02em; margin: 14px 0 22px; }
+  h1.big em { font-style: normal; color: var(--ok); }
+  .lede { color: var(--dim); font-size: 17px; line-height: 1.65; margin: 0 0 26px; }
+  .ticks { list-style: none; margin: 0; padding: 0; display: grid; gap: 9px; font-size: 15px; font-weight: 600; }
+  .ticks li::before { content: "▸"; color: var(--ok); margin-right: 12px; }
+  .foot { position: absolute; left: 64px; bottom: 34px; color: var(--faint); font-size: 12px; }
+  .left { position: absolute; left: 64px; top: 150px; width: 600px; }
+
+  /* hero: the popup replica from the website, scaled up */
+  .pp { position: absolute; right: 100px; top: 48px; zoom: 1.1; }
+  .pp .pills-label { color: var(--faint); font-size: 11px; align-self: center; margin-right: auto; }
+  #ups { gap: 4px; }
+  #ups .pill { padding: 4px 7px; }
+
+  /* fullscreen: a player frame with the real menu styles (src/fullscreen-menu.ts) */
+  .player { position: absolute; right: 48px; top: 130px; width: 720px; height: 405px; border: 1px solid var(--line2); background: #000 url(../../site/assets/frame-after.png) center / cover; box-shadow: 0 40px 80px -40px #000; }
+  .player::after { content: ""; position: absolute; inset: 0; background: linear-gradient(transparent 70%, rgba(0, 0, 0, .55)); }
+  .player .ctl { position: absolute; left: 16px; right: 16px; bottom: 14px; z-index: 1; display: flex; align-items: center; gap: 12px; color: #ddd; font-size: 12px; }
+  .player .ctl .track { flex: 1; height: 3px; background: rgba(255, 255, 255, .25); }
+  .player .ctl .track i { display: block; width: 62%; height: 100%; background: #fff; }
+  .fsm { position: absolute; top: 12px; right: 12px; z-index: 2; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; zoom: 1;
+    font: 12px/1.5 var(--mono); color: #e4e4e4; }
+  .fsm .toggle { width: 34px; height: 34px; border: 1px solid #e4e4e4; background: rgba(11, 11, 11, .85); font-size: 16px; display: grid; place-items: center; }
+  .fsm .fpanel { width: 260px; padding: 10px; border: 1px solid #3a3a3a; background: rgba(11, 11, 11, .94); display: grid; gap: 8px; }
+  .fsm .head { display: flex; justify-content: space-between; align-items: center; }
+  .fsm .meta { color: #8d8d8d; font-size: 11px; }
+  .fsm .perf { font-size: 11px; color: #9fd3a8; }
+  .fsm .graph { position: relative; display: flex; align-items: flex-end; gap: 1px; height: 24px; }
+  .fsm .graph i { flex: 1; background: #d0d0d0; }
+  .fsm .graph s { position: absolute; left: 0; right: 0; border-top: 1px dashed #585858; }
+  .fsm .flabel { color: #585858; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+  .fsm .frow { display: flex; flex-wrap: wrap; gap: 4px; }
+  .fsm .opt { border: 1px solid #3a3a3a; color: #8d8d8d; padding: 3px 8px; font-size: 11px; }
+  .fsm .opt.sel { background: #fff; border-color: #fff; color: #000; }
+  .fsm .opt.power { background: #9fd3a8; border-color: #9fd3a8; color: #000; }
+  .fsm .effect::before { content: "+ "; }
+  .fsm .effect.sel::before { content: "✓ "; }
+  .cap { position: absolute; right: 48px; top: 552px; width: 720px; color: var(--faint); font-size: 12px; text-align: right; }
+  .left.fs { top: 190px; width: 470px; }
+  .left.fs .lede { font-size: 16px; }
+</style>
+</head>
+<body>
+
+<section class="slide" id="hero">
+  <div class="brand"><img src="../../icons/128.png" alt="">Anime4Nerd <span>· browser extension</span></div>
+  <div class="left">
+    <div class="kicker">anime4k · live · on your gpu</div>
+    <h1 class="big">Sharper anime,<br>right in your <em>browser</em>.</h1>
+    <p class="lede">Real-time 2×–8× upscaling for any web video. Flip one switch and the original Anime4K networks restore and upscale every frame as it plays.</p>
+    <ul class="ticks">
+      <li>1080p → 2160p and beyond, cleaner lines</li>
+      <li>Works on embedded players and iframes</li>
+      <li>Six presets, line effects, up to 8×</li>
+      <li>Nothing leaves your machine</li>
+    </ul>
+  </div>
+  <div class="pp">
+    <div class="bar"><span class="chip">anime4k</span><span class="chip on">on · a</span><span class="chip grow on">gpu 14.0 ms</span><span class="chip">21:40</span></div>
+    <section class="panel">
+      <div class="panel-head"><span>playing now</span><span>1</span></div>
+      <div class="source on">
+        <div class="line"><span class="title">Starlight Academy</span><label class="switch"><input type="checkbox" checked></label></div>
+        <div><span class="tag">S1 E3</span><span>The Night Before the Festival</span></div>
+        <div class="meta">stream.example · 1080p → 3840×2160 (2×)</div>
+        <div class="hr"></div>
+        <div class="state">● Upscaling</div>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><span>performance</span><span class="verdict ok">● keeping up</span></div>
+      <div class="kv">
+        <div><span>GPU</span><b class="ok">34%</b></div>
+        <div><span>Per frame</span><b>14.0 ms</b></div>
+        <div><span>Output</span><b>24 fps</b></div>
+        <div><span>Avg · peak</span><b>15 · 22</b></div>
+        <div><span>Frame limit</span><b>42 ms</b></div>
+        <div><span>Late frames</span><b>0 / 2 s</b></div>
+      </div>
+      <div class="bars" data-bars="14"><s style="bottom:80%"></s></div>
+      <div class="meta">last 2 s · dashed = limit · red = late</div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><span>preset</span><span>mode a</span></div>
+      <div class="grid">
+        <button class="tile" aria-checked="true"><b>Mode A</b><small>sharp</small></button>
+        <button class="tile"><b>Mode B</b><small>soft</small></button>
+        <button class="tile"><b>Mode C</b><small>denoise</small></button>
+        <button class="tile"><b>A+A</b><small>sharper, heavy</small></button>
+        <button class="tile"><b>B+B</b><small>softer, heavy</small></button>
+        <button class="tile"><b>C+A</b><small>denoise+sharp</small></button>
+      </div>
+      <div class="pills">
+        <button class="pill" aria-checked="false">darken lines</button>
+        <button class="pill" aria-checked="true">thin lines</button>
+      </div>
+      <div class="pills" id="ups">
+        <span class="pills-label">upscale</span>
+        <button class="pill" role="radio" aria-checked="true">auto</button>
+        <button class="pill" role="radio" aria-checked="false">2×</button>
+        <button class="pill" role="radio" aria-checked="false">4×</button>
+        <button class="pill" role="radio" aria-checked="false">8×</button>
+        <button class="pill" role="radio" aria-checked="false">16×</button>
+        <button class="pill" role="radio" aria-checked="false">32×</button>
+      </div>
+    </section>
+  </div>
+  <div class="foot">Runs bloc97's open-source Anime4K shaders · WebGL2 · Chrome, Brave, Edge</div>
+</section>
+
+<section class="slide" id="fullscreen">
+  <div class="brand"><img src="../../icons/128.png" alt="">Anime4Nerd</div>
+  <div class="left fs">
+    <div class="kicker">new in 1.1</div>
+    <h1 class="big">Change it without<br>leaving <em>fullscreen</em>.</h1>
+    <p class="lede">Move the mouse and a ☰ button appears in the player's corner. Switch it on or off, pick a preset or line effect, and set how far to upscale.</p>
+    <ul class="ticks">
+      <li>Upscale: auto, 2×, 4×, 8× and up</li>
+      <li>Exact output size, and a note if your GPU caps it</li>
+      <li>Live GPU graph while you choose</li>
+      <li>Fades away; clicks never reach the player</li>
+    </ul>
+  </div>
+  <div class="player">
+    <div class="fsm">
+      <div class="toggle">✕</div>
+      <div class="fpanel">
+        <div class="head"><b>anime4nerd</b><span class="opt power">on</span></div>
+        <div class="meta">720p → 5120×2880 (4×)</div>
+        <div class="perf">gpu 16.4 ms / 42 ms · keeping up</div>
+        <div class="graph" data-bars="16.4"><s style="top:0"></s></div>
+        <div><div class="flabel">preset</div><div class="frow"><span class="opt sel">Mode A</span><span class="opt">Mode B</span><span class="opt">Mode C</span><span class="opt">A+A</span><span class="opt">B+B</span><span class="opt">C+A</span></div></div>
+        <div class="frow"><span class="opt effect">darken lines</span><span class="opt effect sel">thin lines</span></div>
+        <div><div class="flabel">upscale</div><div class="frow"><span class="opt">auto</span><span class="opt">2×</span><span class="opt sel">4×</span><span class="opt">8×</span><span class="opt">16×</span><span class="opt">32×</span></div></div>
+      </div>
+    </div>
+    <div class="ctl"><span>▶</span><span>18:04 / 24:13</span><span class="track"><i></i></span><span>⛶</span></div>
+  </div>
+  <div class="cap">Measured on 720p, Mode A: 8.2 ms per frame at 2×, 16.4 ms at 4×. A 24 fps video allows 42 ms.</div>
+  <div class="foot">Frame: Morevna Project, CC BY 3.0</div>
+</section>
+
+<script>
+  // Pick the slide, then fill the frame-time bars deterministically around each panel's cost.
+  var s = new URLSearchParams(location.search).get('s') || 'hero';
+  document.getElementById(s).classList.add('on');
+  var LIMIT = 41.7, seed = 7;
+  var rnd = function () { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  document.querySelectorAll('[data-bars]').forEach(function (box) {
+    var cost = Number(box.dataset.bars), n = box.classList.contains('graph') ? 48 : 40;
+    for (var i = 0; i < n; i++) {
+      var b = document.createElement('i');
+      b.style.height = Math.min(100, cost * (0.88 + rnd() * 0.3) / LIMIT * 100) + '%';
+      box.insertBefore(b, box.querySelector('s'));
+    }
+  });
+</script>
+</body>
+</html>
