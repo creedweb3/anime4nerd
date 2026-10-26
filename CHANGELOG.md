@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.1.0 (2026-10-26)
+
+### Added
+- Upscale factor: **auto** (default), 2×, 4×, 8×, 16×, 32×. Factors above 2×
+  chain extra `Anime4K_Upscale_CNN_x2_M` passes, one per doubling. Auto uses 4×
+  only when the video is shown at more than 2× its source size, such as 720p in
+  fullscreen on a 1440p or 4K screen. A manual choice runs at the largest factor
+  that fits the GPU texture limit, 8K output and a 2 GB texture budget; the
+  popup then says e.g. `(8×) · 32× capped: GPU limit`.
+- The video card shows the exact output size, e.g. `720p → 5120×2880 (4×)`.
+- Fullscreen menu: a ☰ button in the top-right corner of a fullscreen player
+  opens on/off, presets, line effects, upscale factor, output size and a GPU
+  frame-time graph. It fades out when the mouse is idle and does not pass clicks
+  through to the player.
+
+### Fixed
+- After the extension was reloaded or updated, the old content script kept
+  running beside the new one: "Extension context invalidated" errors, two
+  overlays on one video, and settings changes that seemed to have no effect. The
+  old copy now removes its overlay and menu and stops.
+
+### Security
+- Review and page-side attack tests of the new features; see `SECURITY.md`.
+  Hardened against pages restyling the fullscreen menu to capture clicks and
+  against pages forging the takeover event.
+
 ## 1.0.1 (2026-10-20)
 
 ### Fixed
