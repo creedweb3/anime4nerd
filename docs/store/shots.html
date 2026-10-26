@@ -59,6 +59,14 @@
   .cap { position: absolute; right: 48px; top: 552px; width: 720px; color: var(--faint); font-size: 12px; text-align: right; }
   .left.fs { top: 190px; width: 470px; }
   .left.fs .lede { font-size: 16px; }
+
+  /* 440x280 small promo tile (?s=promo; render with --window-size=440,280) */
+  html.promo, html.promo body { width: 440px; height: 280px; }
+  #promo .logo { position: absolute; left: 32px; top: 32px; display: flex; align-items: center; gap: 16px; font-size: 22px; font-weight: 700; }
+  #promo .logo img { width: 64px; height: 64px; border: 1px solid var(--line2); border-radius: 12px; padding: 8px; background: #0d0d0d; }
+  #promo h1 { position: absolute; left: 32px; top: 124px; margin: 0; font-size: 31px; line-height: 1.25; letter-spacing: -.01em; }
+  #promo h1 em { font-style: normal; color: var(--ok); }
+  #promo .sub { position: absolute; left: 32px; bottom: 30px; color: var(--faint); font-size: 11px; letter-spacing: .18em; text-transform: uppercase; }
 </style>
 </head>
 <body>
@@ -139,7 +147,7 @@
       <li>Upscale: auto, 2×, 4×, 8× and up</li>
       <li>Exact output size, and a note if your GPU caps it</li>
       <li>Live GPU graph while you choose</li>
-      <li>Fades away; clicks never reach the player</li>
+      <li>Works in embedded players and F11 too</li>
     </ul>
   </div>
   <div class="player">
@@ -161,10 +169,17 @@
   <div class="foot">Frame: Morevna Project, CC BY 3.0</div>
 </section>
 
+<section class="slide" id="promo">
+  <div class="logo"><img src="../../icons/128.png" alt="">Anime4Nerd</div>
+  <h1>2×–8× <em>Anime4K</em>,<br>in your browser.</h1>
+  <div class="sub">original shaders · on your gpu</div>
+</section>
+
 <script>
   // Pick the slide, then fill the frame-time bars deterministically around each panel's cost.
   var s = new URLSearchParams(location.search).get('s') || 'hero';
   document.getElementById(s).classList.add('on');
+  if (s === 'promo') document.documentElement.classList.add('promo');
   var LIMIT = 41.7, seed = 7;
   var rnd = function () { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
   document.querySelectorAll('[data-bars]').forEach(function (box) {
