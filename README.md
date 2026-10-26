@@ -1,6 +1,6 @@
 # Anime4Nerd (browser extension)
 
-Real-time 2x Anime4K upscaling of any `<video>` on a page, as a
+Real-time 2x–8x Anime4K upscaling of any `<video>` on a page, as a
 Chrome/Edge/Brave extension you control.
 
 It runs **bloc97's original Anime4K shaders** (`src/shaders/`, copied verbatim
@@ -35,8 +35,13 @@ From source:
 To limit it to certain sites, use the extension's "Site access" settings.
 
 The switch is remembered per **site + stream host**, so once you turn on the
-player on a site it stays on for the next episode. Presets and line effects are
-global.
+player on a site it stays on for the next episode. Presets, line effects and
+the upscale factor are global.
+
+In fullscreen the toolbar popup can't open, so a small ☰ button appears in the
+player's top-right corner. It opens a menu with the on/off switch, presets,
+line effects, upscale factor and a GPU frame-time graph, and fades out when the
+mouse is idle.
 
 ## Presets (the standard Anime4K mpv mappings)
 
@@ -50,7 +55,20 @@ global.
 | C+A | Mode C → Restore_CNN_M |
 
 Line effects append `Anime4K_Darken_HQ` and/or `Anime4K_Thin_HQ`.
-Output is always exactly 2x the source resolution.
+
+## Upscale factor
+
+The Anime4K networks are trained for exactly 2x, so larger factors chain extra
+`Upscale_CNN_x2_M` passes, one per doubling:
+
+- **auto** (default): 2x, or 4x when the video is shown at more than 2x its
+  source size in device pixels (e.g. 720p fullscreen on a 1440p+ screen).
+- **2x, 4x, 8x, 16x, 32x**: manual. The renderer uses the largest factor at or
+  below the choice whose output fits the GPU's texture limit, stays at or under
+  8K (7680×4320 pixels) and keeps all intermediate textures under 2 GB. The popup
+  then shows e.g. `(8×) · 32× capped: GPU limit`. In practice 8x is reachable
+  for 480p and smaller sources; above 4x the extra detail is mostly downscaled
+  away by the browser.
 
 ## How it works
 
@@ -60,6 +78,12 @@ Output is always exactly 2x the source resolution.
   drives one render per video frame with `requestVideoFrameCallback`.
   It suspends in picture-in-picture, native video fullscreen and hidden tabs,
   rebuilds on resize, and falls back to the plain video on any GPU error.
+- `src/fullscreen-menu.ts` is the on-video menu shown while a player
+  container is fullscreen, in a closed shadow root inside the fullscreen
+  element. Its clicks only count when they are real user clicks on an
+  unmodified, visible menu.
+- After an extension reload the old content script is orphaned; it removes its
+  canvases and menu and stops as soon as its extension context is gone.
 - `src/gpu.ts` is loaded lazily (`import(chrome.runtime.getURL('gpu.js'))`),
   builds the pass list for the chosen preset, compiles all programs in
   parallel (`KHR_parallel_shader_compile`), and per frame uploads the video
@@ -125,7 +149,12 @@ npx serve test
 ```
 
 Open the page, pick a preset, press Run. It feeds a synthetic animated
-line-art pattern through the renderer.
+line-art pattern through the renderer. Query parameters: `w`/`h` set the source
+size, `scale` the requested upscale factor (e.g. `?w=854&h=480&scale=8`).
+
+`test/fullscreen-menu.html` runs the real content script on a fake player with
+mocked `chrome.*` APIs. Copy `dist/content.js`, `dist/gpu.js` and
+`dist/content.css` next to it first.
 
 ## Credits
 

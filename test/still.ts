@@ -11,7 +11,7 @@ async function run(preset: Settings['preset'], endpoint: string, darkenLines = f
   v.srcObject = src.captureStream(30); await v.play();
   await new Promise((r) => setTimeout(r, 400));
   const out = document.createElement('canvas');
-  const r = await createAnime4kRenderer(v, out, { preset, darkenLines, thinLines: false }, () => {});
+  const r = await createAnime4kRenderer(v, out, { preset, darkenLines, thinLines: false, upscale: 'auto' }, () => {});
   r.render(); r.render();
   const after = document.createElement('canvas'); after.width = out.width; after.height = out.height;
   after.getContext('2d')!.drawImage(out, 0, 0);

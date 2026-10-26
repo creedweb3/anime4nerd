@@ -1,7 +1,7 @@
 # Security
 
 This document describes what Anime4Nerd can and cannot do, how it is protected,
-what was reviewed, and how to use it safely. Last reviewed: 2026-10-20 (v1.0.1).
+what was reviewed, and how to use it safely. Last reviewed: 2026-10-26 (v1.1.0).
 
 ## Threat model in one paragraph
 
@@ -21,7 +21,7 @@ tampered with. Each is addressed below.
   `<video>` elements; upscaling starts from your click in the popup. You can
   restrict the extension to chosen sites under extension settings → Site access.
 - Never stores video frames, page text or URLs. Only the preset, two line-effect
-  booleans and a per-site on/off map are stored.
+  booleans, the upscale factor and a per-site on/off map are stored.
 - Never executes code from a page. Shaders are bundled constants; page strings are
   only ever shown as text.
 
@@ -36,7 +36,9 @@ tampered with. Each is addressed below.
 | Deeply nested JSON-LD | Parser depth capped at 8 levels / 200 nodes; the handler is wrapped so a failure returns `null` instead of hanging the popup. |
 | Oversized strings over the message channel | Titles, episode names and error messages are truncated before being sent to the popup. |
 | DOM scan cost on busy pages | Video discovery is throttled to one scan per 300 ms. |
-| GPU memory exhaustion | Sources above 1440p are refused with a message; only one idle renderer is kept warm; context loss is caught and reported. |
+| GPU memory exhaustion | Sources above 1440p are refused with a message; above 2x the upscale factor halves until the output fits the GPU texture limit, 8K pixels, and a 2 GB budget for every intermediate texture; only one idle renderer is kept warm; context loss is caught and reported. |
+| A page restyling the fullscreen menu to steal clicks (clickjacking) | The menu lives in a closed shadow root with its position and visibility pinned by inline `!important` styles, and a click only counts if it is a real user event on a menu that is not scaled, oversized or faded. |
+| A page stopping the extension with a forged takeover event | The `a4k-takeover` DOM event (used to retire a copy orphaned by an extension reload) is obeyed only by a copy whose extension context is already gone. |
 | Fingerprinting via extension files | `gpu.js` uses `use_dynamic_url`, so its URL changes per session. |
 | Supply chain | Zero runtime npm dependencies in the shipped package. Build uses esbuild + TypeScript only. Shaders are copied verbatim from a pinned bloc97 commit (see `THIRD_PARTY_NOTICES.md`). |
 
@@ -58,6 +60,15 @@ rebuild. Remaining low-severity notes: the overlay canvas and the parent's
 `position: relative` are visible to the page (so a page can tell the extension is
 active there), and frames without a host (`about:blank`, `srcdoc`) share one
 on/off setting per media host.
+
+A third pass (2026-10-26, v1.1.0) covered the new upscale factors, the fullscreen
+on-video menu and orphaned-script handling, plus page-side attack tests (forged
+events, reaching into the menu, synthetic clicks, removing or restyling the menu).
+It found no critical or high issues. Fixed: GPU memory was capped only by output
+size rather than by every intermediate texture; the menu could be restyled by
+the page to capture clicks; a page could forge the takeover event; and a retired
+copy kept answering popup messages. The menu host is visible to the page, as the
+canvas already was.
 
 ## For people who install it
 

@@ -1,5 +1,5 @@
 import {
-  Message, PRESETS, Settings, VideoInfo, loadSettings, onSettingsChanged, onSourcesChanged, saveSettings, setSource,
+  Message, PRESETS, Settings, VideoInfo, capNote, loadSettings, onSettingsChanged, onSourcesChanged, saveSettings, setSource,
 } from './settings';
 import { EMPTY_META, MediaMeta } from './media-meta';
 import { WHATS_NEW_URL, clearWhatsNew, pendingWhatsNew } from './whats-new';
@@ -53,6 +53,9 @@ for (const b of document.querySelectorAll<HTMLButtonElement>('[data-field]')) {
     void saveSettings((cur) => ({ [f]: !cur[f] }));
   });
 }
+for (const b of document.querySelectorAll<HTMLButtonElement>('[data-upscale]')) {
+  b.addEventListener('click', () => { void saveSettings({ upscale: b.dataset.upscale as Settings['upscale'] }); });
+}
 function paintSettings(s: Settings) {
   settings = s;
   presetNameEl.textContent = PRESETS.find((p) => p.value === s.preset)?.label ?? s.preset;
@@ -61,6 +64,9 @@ function paintSettings(s: Settings) {
   }
   for (const b of document.querySelectorAll<HTMLButtonElement>('[data-field]')) {
     b.setAttribute('aria-checked', String(s[b.dataset.field as 'darkenLines' | 'thinLines']));
+  }
+  for (const b of document.querySelectorAll<HTMLButtonElement>('[data-upscale]')) {
+    b.setAttribute('aria-checked', String(b.dataset.upscale === s.upscale));
   }
 }
 
@@ -163,7 +169,12 @@ function patchCard(c: Card, v: VideoInfo) {
   c.tag.hidden = !tag;
   setText(c.epName, episodeName);
   c.episode.hidden = !tag && !episodeName;
-  const res = v.height ? ` · ${pLabel(v.height)} → ${pLabel(v.height * 2)}` : '';
+  // Real output size while rendering (2x, or 4x on large displays); 2x is the default before that.
+  const outH = v.stats?.outputHeight ?? v.height * 2;
+  const out = v.stats ? `${v.stats.outputWidth}×${v.stats.outputHeight}` : pLabel(outH);
+  const scale = v.height ? Math.round(outH / v.height) : 0;
+  const capped = v.stats && settings ? capNote(settings.upscale, scale) : '';
+  const res = v.height ? ` · ${pLabel(v.height)} → ${out} (${scale}×)${capped}` : '';
   setText(c.meta, `${tabHost || v.frameHost}${res}`);
   c.meta.title = v.frameHost !== tabHost ? `player frame: ${v.frameHost} · stream: ${v.mediaHost}` : `stream: ${v.mediaHost}`;
   const st = cardState(v);

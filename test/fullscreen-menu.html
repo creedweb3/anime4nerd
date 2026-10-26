@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>fullscreen menu test</title>
+  <link rel="stylesheet" href="./content.css" />
+  <style>
+    body { background: #222; color: #ddd; font: 13px system-ui; margin: 20px; }
+    #player { position: relative; width: 640px; height: 360px; background: #000; }
+    #player video { width: 100%; height: 100%; display: block; }
+  </style>
+</head>
+<body>
+  <!-- Local harness: runs the real content script on a fake player with mocked chrome.* APIs.
+       Build, then copy dist/content.js, dist/gpu.js and dist/content.css next to this file. -->
+  <button id="fs">Fullscreen the player</button>
+  <div id="player"><video id="v" muted playsinline></video></div>
+  <script>
+    const store = { sync: { anime4k: { preset: 'A', darkenLines: false, thinLines: false, upscale: 'auto' } }, local: {} };
+    const listeners = [];
+    const area = (name) => ({
+      get: async (k) => ({ [k]: store[name][k] }),
+      set: async (obj) => {
+        for (const [k, v] of Object.entries(obj)) {
+          const old = store[name][k]; store[name][k] = v;
+          for (const l of listeners) l({ [k]: { oldValue: old, newValue: v } }, name);
+        }
+      },
+    });
+    window.chrome = {
+      storage: { sync: area('sync'), local: area('local'), onChanged: { addListener: (f) => listeners.push(f) } },
+      runtime: { id: 'test', getURL: (p) => new URL(p, location.href).href, onMessage: { addListener() {} }, sendMessage: async () => {} },
+    };
+    // Turn the source on before the content script starts.
+    store.local['anime4k-sources'] = { [`${location.host}::mediastream:`]: true };
+    const src = document.createElement('canvas'); src.width = 320; src.height = 180;
+    const g = src.getContext('2d'); let t = 0;
+    (function paint() { t++; g.fillStyle = '#dfe8f3'; g.fillRect(0, 0, 320, 180); g.strokeStyle = '#222'; g.lineWidth = 1.2;
+      g.beginPath(); g.arc(160 + Math.sin(t / 30) * 30, 90, 50, 0, 7); g.stroke(); requestAnimationFrame(paint); })();
+    const v = document.getElementById('v'); v.srcObject = src.captureStream(30); v.play();
+    document.getElementById('fs').onclick = () => document.getElementById('player').requestFullscreen();
+  </script>
+  <script src="./content.js"></script>
+</body>
+</html>

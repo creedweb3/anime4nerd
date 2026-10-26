@@ -54,6 +54,7 @@ async function run() {
     preset: (document.getElementById('preset') as HTMLSelectElement).value as Settings['preset'],
     darkenLines: (document.getElementById('darken') as HTMLInputElement).checked,
     thinLines: (document.getElementById('thin') as HTMLInputElement).checked,
+    upscale: 'auto',
   };
   if (v.readyState < 2) await new Promise((r) => { v.onloadeddata = r; });
   // A fresh canvas each run so the WebGL context is clean.
@@ -61,7 +62,7 @@ async function run() {
   fresh.style.width = '640px'; fresh.style.height = '360px'; fresh.style.aspectRatio = `${SW}/${SH}`;
   const t0 = performance.now();
   try {
-    renderer = await createAnime4kRenderer(v, fresh, settings, (m) => { err.textContent = m; });
+    renderer = await createAnime4kRenderer(v, fresh, settings, (m) => { err.textContent = m; }, Number(params.get('scale')) || 2);
     info.textContent = `init ${(performance.now() - t0).toFixed(0)} ms`;
     let frames = 0; let acc = 0;
     const loop = () => {
@@ -83,7 +84,7 @@ document.getElementById('run')!.addEventListener('click', run);
 // --- A vs A+A comparison sheet -------------------------------------------------
 async function renderOnce(preset: Settings['preset']): Promise<HTMLCanvasElement> {
   const c = document.createElement('canvas');
-  const r = await createAnime4kRenderer(v, c, { preset, darkenLines: false, thinLines: false }, () => {});
+  const r = await createAnime4kRenderer(v, c, { preset, darkenLines: false, thinLines: false, upscale: 'auto' }, () => {});
   r.render();
   const copy = document.createElement('canvas'); copy.width = c.width; copy.height = c.height;
   copy.getContext('2d')!.drawImage(c, 0, 0);

@@ -3,23 +3,25 @@
 **Name:** Anime4Nerd
 
 **Summary (132 chars max):**
-Real-time 2x Anime4K upscaling for any web video. Original bloc97 shaders, runs on your GPU, nothing leaves your browser.
+Real-time 2x–8x Anime4K upscaling for any web video. Original bloc97 shaders, runs on your GPU, nothing leaves your browser.
 
 **Category:** Entertainment (or Productivity)
 
 **Description:**
 
-Anime4Nerd runs the open-source Anime4K shaders on any web video, live, in your browser. Switch a video on and it is restored and upscaled 2× on your GPU while it plays: cleaner lines, less blur, less noise.
+Anime4Nerd runs the open-source Anime4K shaders on any web video, live, in your browser. Switch a video on and it is restored and upscaled 2× (or more) on your GPU while it plays: cleaner lines, less blur, less noise.
 
 What you get
 • Six presets: Mode A / B / C and their stronger A+A / B+B / C+A variants
 • Optional line effects: darken lines, thin lines
+• Upscale factor: auto (4× when a small video is shown large), or 2× up to 32×, capped to what your GPU can hold
+• Fullscreen menu: change preset, line effects and upscale factor without leaving fullscreen
 • Works on embedded players too (videos inside iframes are found automatically)
 • Live performance panel: GPU % per frame, ms, output fps, late frames, 2-second graph
 • Per-site switch that is remembered, so the next episode is already upscaled
 
 How it works
-The original Anime4K GLSL shaders by bloc97 are loaded unchanged and run through WebGL2. Each video frame goes through the chosen chain of convolution passes and the result is drawn on a canvas over the player. Output is always exactly 2× the source resolution (1080p → 2160p).
+The original Anime4K GLSL shaders by bloc97 are loaded unchanged and run through WebGL2. Each video frame goes through the chosen chain of convolution passes and the result is drawn on a canvas over the player. The networks upscale exactly 2× per pass (1080p → 2160p); higher factors chain extra 2× passes.
 
 Privacy
 No data collection, no network requests, no accounts. It only finds videos on the page and does nothing until you switch one on. Everything stays on your machine. Full policy: https://anime4nerd.pages.dev/privacy

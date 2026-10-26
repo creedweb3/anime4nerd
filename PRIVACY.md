@@ -16,7 +16,7 @@ At install your browser asks you to allow the extension on all websites. That is
 
 - **Video frames** are read into GPU memory to be upscaled and are discarded immediately after each frame is drawn. They are never saved or sent anywhere.
 - **Page metadata** (page title, headings, Open Graph tags, schema.org data, Media Session metadata) is read only when you open the popup, to label the video (for example "Attack on Titan · E1"). It stays in the popup and is not stored.
-- **Settings** (chosen preset, line effects, which sites you switched on) are stored with `chrome.storage`. They may sync between your own browsers if you have browser sync turned on. Nothing else is stored.
+- **Settings** (chosen preset, line effects, upscale factor, which sites you switched on) are stored with `chrome.storage`. They may sync between your own browsers if you have browser sync turned on. Nothing else is stored.
 - **Performance numbers** (GPU time per frame, frame rate) are measured locally and shown in the popup. They are not recorded.
 
 ## Data leaving your device
