@@ -12,9 +12,20 @@
 </head>
 <body>
   <!-- Local harness: runs the real content script on a fake player with mocked chrome.* APIs.
-       Build, then copy dist/content.js, dist/gpu.js and dist/content.css next to this file. -->
+       Build, then copy dist/content.js, dist/gpu.js, dist/fullscreen-redirect.js and
+       dist/content.css next to this file. ?shadow=1 puts the player inside an open shadow root;
+       fullscreen-frame.html loads this page in an iframe. -->
+  <script src="./fullscreen-redirect.js"></script>
   <button id="fs">Fullscreen the player</button>
   <div id="player"><video id="v" muted playsinline></video></div>
+  <script>
+    if (new URLSearchParams(location.search).get('shadow')) {
+      const host = document.createElement('div');
+      host.id = 'shost';
+      document.getElementById('player').before(host);
+      host.attachShadow({ mode: 'open' }).append(document.getElementById('player'));
+    }
+  </script>
   <script>
     const store = { sync: { anime4k: { preset: 'A', darkenLines: false, thinLines: false, upscale: 'auto' } }, local: {} };
     const listeners = [];
@@ -37,8 +48,9 @@
     const g = src.getContext('2d'); let t = 0;
     (function paint() { t++; g.fillStyle = '#dfe8f3'; g.fillRect(0, 0, 320, 180); g.strokeStyle = '#222'; g.lineWidth = 1.2;
       g.beginPath(); g.arc(160 + Math.sin(t / 30) * 30, 90, 50, 0, 7); g.stroke(); requestAnimationFrame(paint); })();
-    const v = document.getElementById('v'); v.srcObject = src.captureStream(30); v.play();
-    document.getElementById('fs').onclick = () => document.getElementById('player').requestFullscreen();
+    const root = document.getElementById('shost')?.shadowRoot ?? document;
+    const v = root.getElementById('v'); v.srcObject = src.captureStream(30); v.play();
+    document.getElementById('fs').onclick = () => root.getElementById('player').requestFullscreen();
   </script>
   <script src="./content.js"></script>
 </body>

@@ -80,8 +80,15 @@ The Anime4K networks are trained for exactly 2x, so larger factors chain extra
   rebuilds on resize, and falls back to the plain video on any GPU error.
 - `src/fullscreen-menu.ts` is the on-video menu shown while a player
   container is fullscreen, in a closed shadow root inside the fullscreen
-  element. Its clicks only count when they are real user clicks on an
-  unmodified, visible menu.
+  element (or inside its open shadow root when the video lives there). It also
+  shows when the whole frame fills the screen: an embedded player whose outer
+  page fullscreened the iframe, or F11. Its clicks only count when they are real
+  user clicks on an unmodified, visible menu.
+- `src/fullscreen-redirect.ts` runs in the page's own JavaScript world
+  (`"world": "MAIN"`) and uses no extension APIs. When the page fullscreens a
+  `<video>` that is being upscaled (marked `data-a4k-on` by the content script),
+  it fullscreens the video's parent instead, because nothing can be drawn over a
+  bare fullscreen video. `content.css` makes the video fill the screen there.
 - After an extension reload the old content script is orphaned; it removes its
   canvases and menu and stops as soon as its extension context is gone.
 - `src/gpu.ts` is loaded lazily (`import(chrome.runtime.getURL('gpu.js'))`),
@@ -140,6 +147,9 @@ A 24 fps video gives a 41.7 ms budget, so A uses ~36% of the GPU, A+A ~57%.
 - First start compiles ~40 large shaders: 5–10 s on first use, then cached by
   the browser.
 - WebGL2 only (no WebGPU). Firefox/Safari untested.
+- The fullscreen button of the browser's own `<video controls>` does not go
+  through the page's fullscreen API, so it still fullscreens the bare video:
+  plain playback, no menu.
 
 ## Local shader test
 
@@ -153,8 +163,12 @@ line-art pattern through the renderer. Query parameters: `w`/`h` set the source
 size, `scale` the requested upscale factor (e.g. `?w=854&h=480&scale=8`).
 
 `test/fullscreen-menu.html` runs the real content script on a fake player with
-mocked `chrome.*` APIs. Copy `dist/content.js`, `dist/gpu.js` and
-`dist/content.css` next to it first.
+mocked `chrome.*` APIs. Copy `dist/content.js`, `dist/gpu.js`,
+`dist/fullscreen-redirect.js` and `dist/content.css` next to it first. Open
+`/fullscreen-menu?shadow=1` for a player inside a shadow root, and
+`fullscreen-frame.html` for an outer page that fullscreens the player's iframe.
+Real fullscreen needs a user gesture, e.g. a click or CDP `Runtime.evaluate`
+with `userGesture: true`.
 
 ## Credits
 

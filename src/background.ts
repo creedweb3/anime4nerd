@@ -15,6 +15,7 @@ async function injectTab(tabId: number): Promise<void> {
     const target = { tabId, frameIds: [f.frameId] };
     await chrome.scripting.insertCSS({ target, files: ['content.css'] }).catch(() => {});
     await chrome.scripting.executeScript({ target, files: ['content.js'] }).catch(() => {});
+    await chrome.scripting.executeScript({ target, files: ['fullscreen-redirect.js'], world: 'MAIN' }).catch(() => {});
   }
 }
 
