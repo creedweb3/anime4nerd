@@ -15,7 +15,7 @@ What you get
 • Six presets: Mode A / B / C and their stronger A+A / B+B / C+A variants
 • Optional line effects: darken lines, thin lines
 • Upscale factor: auto (4× when a small video is shown large), or 2× up to 32×, capped to what your GPU can hold
-• Fullscreen menu: change preset, line effects and upscale factor without leaving fullscreen
+• Fullscreen menu: change preset, line effects and upscale factor without leaving fullscreen, including embedded players and F11
 • Works on embedded players too (videos inside iframes are found automatically)
 • Live performance panel: GPU % per frame, ms, output fps, late frames, 2-second graph
 • Per-site switch that is remembered, so the next episode is already upscaled
@@ -52,7 +52,7 @@ with headless Edge (command in the file).
 
 The popup shows a fictional title ("Starlight Academy") on purpose: no real show names or frames.
 
-**Promo tile 440×280:** `docs/store/anime4nerd-promo-440x280.png`.
+**Promo tile 440×280:** `docs/store/anime4nerd-promo-440x280.png` (regenerated for 1.1 from `shots.html?s=promo`, "2×–8×").
 
 ## Store fields
 
