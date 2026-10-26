@@ -175,6 +175,43 @@
 @keyframes allsites6 { 0%, 55% { opacity: 1; } 58%, 92% { opacity: 0; } 97%, 100% { opacity: 1; } }
 @keyframes sites6 { 0%, 56% { opacity: 0; transform: translateY(-4px); } 62%, 92% { opacity: 1; transform: none; } 97%, 100% { opacity: 0; } }
 
+/* ---------- g · in fullscreen: open the ☰ menu, pick 4×, output and GPU time double ---------- */
+.scene .in.s8 { --T: 9s; }
+.scene .fsv { position: absolute; inset: 0; background: #000; }
+.scene .fsv img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: .82; }
+.scene .hb { position: absolute; right: 12px; top: 12px; width: 22px; height: 22px; display: grid; place-items: center; border: 1px solid var(--line2); background: rgba(11, 11, 11, .85); color: var(--fg); font-size: 11px; line-height: 1; }
+.scene .hb i { grid-area: 1 / 1; font-style: normal; }
+.scene .fm { position: absolute; right: 12px; top: 40px; width: 182px; padding: 7px; border: 1px solid var(--line2); background: rgba(11, 11, 11, .94); display: grid; gap: 5px; transform-origin: 100% 0; font-size: 8px; color: var(--dim); box-shadow: 0 24px 40px -18px #000; }
+.scene .fm .hd { display: flex; justify-content: space-between; align-items: center; color: var(--fg); font-size: 9px; font-weight: 700; }
+.scene .fm .hd i { font-style: normal; background: var(--ok); color: #000; padding: 0 5px; font-weight: 600; }
+.scene .fm .sw2 { display: grid; }
+.scene .fm .sw2 > span { grid-area: 1 / 1; white-space: nowrap; }
+.scene .fm .sw2.ok { color: var(--ok); }
+.scene .fm .bars8 { position: relative; display: flex; align-items: flex-end; gap: 1px; height: 18px; }
+.scene .fm .bars8 i { flex: 1; background: var(--bar); transform-origin: bottom; }
+.scene .fm .bars8 s { position: absolute; left: 0; right: 0; top: 0; border-top: 1px dashed var(--faint); }
+.scene .fm .lb { color: var(--faint); font-size: 7px; text-transform: uppercase; letter-spacing: .1em; }
+.scene .fm .ups8 { display: flex; gap: 2px; }
+.scene .fm .ups8 i { font-style: normal; border: 1px solid var(--line2); padding: 1px 4px; color: var(--dim); }
+.scene .s8 .cur { animation-name: c8; }
+.scene .s8 .fm { animation-name: fm8; }
+.scene .s8 .h1 { animation-name: hbA8; }
+.scene .s8 .h2 { animation-name: hbB8; }
+.scene .s8 .b8 { animation-name: off8; }
+.scene .s8 .a8 { animation-name: on8; }
+.scene .s8 .u2 { animation-name: selOff8; }
+.scene .s8 .u4 { animation-name: selOn8; }
+.scene .s8 .bars8 i { animation-name: bars8; }
+@keyframes c8 { 0% { opacity: 0; transform: translate(150px, 200px); } 8% { opacity: 1; } 18%, 21% { transform: var(--a1); } 22.5% { transform: var(--a1) scale(.82); } 24%, 30% { transform: var(--a1); } 40%, 42% { transform: var(--a2); } 43.5% { transform: var(--a2) scale(.82); } 45%, 74% { opacity: 1; transform: var(--a2); } 84%, 100% { opacity: 0; transform: translate(200px, 215px); } }
+@keyframes fm8 { 0%, 22% { opacity: 0; transform: translateY(-6px) scaleY(.94); } 27%, 86% { opacity: 1; transform: none; } 92%, 100% { opacity: 0; transform: none; } }
+@keyframes hbA8 { 0%, 22% { opacity: 1; } 23%, 88% { opacity: 0; } 90%, 100% { opacity: 1; } }
+@keyframes hbB8 { 0%, 22% { opacity: 0; } 23%, 88% { opacity: 1; } 90%, 100% { opacity: 0; } }
+@keyframes off8 { 0%, 43% { opacity: 1; } 45%, 92% { opacity: 0; } 97%, 100% { opacity: 1; } }
+@keyframes on8 { 0%, 43% { opacity: 0; } 45%, 92% { opacity: 1; } 97%, 100% { opacity: 0; } }
+@keyframes selOff8 { 0%, 43% { background: var(--on); color: #000; border-color: var(--on); } 44%, 92% { background: transparent; color: var(--dim); border-color: var(--line2); } 97%, 100% { background: var(--on); color: #000; border-color: var(--on); } }
+@keyframes selOn8 { 0%, 43% { background: transparent; color: var(--dim); border-color: var(--line2); } 44%, 92% { background: var(--on); color: #000; border-color: var(--on); } 97%, 100% { background: transparent; color: var(--dim); border-color: var(--line2); } }
+@keyframes bars8 { 0%, 45% { transform: scaleY(.5); } 56%, 92% { transform: scaleY(1); } 97%, 100% { transform: scaleY(.5); } }
+
 @media (prefers-reduced-motion: reduce) {
   /* hold each scene on its "after" frame */
   .scene .in * { animation-play-state: paused !important; animation-delay: calc(var(--T) * -.6) !important; }
