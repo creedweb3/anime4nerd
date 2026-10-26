@@ -1,6 +1,6 @@
 <title>Anime4Nerd</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<meta name="description" content="Anime4Nerd is a browser extension that runs the original Anime4K shaders on any web video, live, on your GPU. 2x upscaling, six presets, nothing leaves your machine.">
+<meta name="description" content="Anime4Nerd is a browser extension that runs the original Anime4K shaders on any web video, live, on your GPU. 2x to 8x upscaling, six presets, nothing leaves your machine.">
 <link rel="icon" href="assets/icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,6 +15,7 @@
       <a class="chip" href="#compare">before / after</a>
       <a class="chip" href="#how">how it works</a>
       <a class="chip" href="#presets">presets</a>
+      <a class="chip" href="#fullscreen">fullscreen</a>
       <a class="chip" href="#install">install</a>
       <a class="chip" href="#changes">what's new</a>
       <a class="chip" href="privacy">privacy</a>
@@ -28,12 +29,12 @@
     <div>
       <div class="phead"><span>browser extension · chrome · brave · edge</span></div>
       <h1><span>Sharper</span><span class="o">anime.</span></h1>
-      <p class="lede">Right in your browser. The original Anime4K neural upscaler, running live on your own GPU. Switch it on for any web video and every frame is restored and doubled in resolution.</p>
+      <p class="lede">Right in your browser. The original Anime4K neural upscaler, running live on your own GPU. Switch it on for any web video and every frame is restored and doubled in resolution, or more.</p>
       <div class="cta">
         <a class="btn primary" href="https://chromewebstore.google.com/detail/anime4nerd/kblnmcdmlgeidaclnhjmcffefmkehkpm" rel="noopener">add to chrome · free</a>
         <a class="btn" href="#compare">see before / after</a>
       </div>
-      <div class="tick"><span class="chip">anime4k</span><span class="chip">webgl2</span><span class="chip">2× output</span><span class="chip">no account</span><span class="chip">mit</span></div>
+      <div class="tick"><span class="chip">anime4k</span><span class="chip">webgl2</span><span class="chip">2×–8× output</span><span class="chip">no account</span><span class="chip">mit</span></div>
     </div>
 
     <div class="sheet" id="sheet">
@@ -51,7 +52,7 @@
                 <label class="switch" title="Upscale this video"><input type="checkbox" id="sw" checked aria-label="Upscale this video"></label>
               </div>
               <div><span class="tag">S1 E3</span><span>The Night Before the Festival</span></div>
-              <div class="meta">stream.example · <span id="res">1080p → 2160p</span></div>
+              <div class="meta">stream.example · <span id="res">1080p → 3840×2160 (2×)</span></div>
               <div class="hr"></div>
               <div class="state" id="state">● Upscaling</div>
             </div>
@@ -83,6 +84,15 @@
               <button type="button" class="pill" data-field="darken" aria-checked="false">darken lines</button>
               <button type="button" class="pill" data-field="thin" aria-checked="true">thin lines</button>
             </div>
+            <div class="pills" id="ups" role="radiogroup" aria-label="Upscale">
+              <span class="pills-label">upscale</span>
+              <button type="button" class="pill" role="radio" data-ups="auto" aria-checked="true">auto</button>
+              <button type="button" class="pill" role="radio" data-ups="2x" aria-checked="false">2×</button>
+              <button type="button" class="pill" role="radio" data-ups="4x" aria-checked="false">4×</button>
+              <button type="button" class="pill" role="radio" data-ups="8x" aria-checked="false">8×</button>
+              <button type="button" class="pill" role="radio" data-ups="16x" aria-checked="false">16×</button>
+              <button type="button" class="pill" role="radio" data-ups="32x" aria-checked="false">32×</button>
+            </div>
           </section>
         </div>
 
@@ -91,13 +101,14 @@
           <span class="co" data-for="perf">Live GPU time<small id="n-perf">15.1 ms of a 41.7 ms budget</small></span>
           <span class="co" data-for="pp-presets">Six presets<small id="n-pre">mode a · sharp</small></span>
           <span class="co" data-for="pills">Line options<small id="n-pill">thin lines on</small></span>
+          <span class="co" data-for="ups">Upscale factor<small id="n-ups">auto · 2×</small></span>
         </div>
       </div>
     </div>
   </section>
 
   <div class="readout">
-    <div><span>output</span><b>2× res</b></div>
+    <div><span>output</span><b>2–8× res</b></div>
     <div><span>1080p frame · rtx 2060</span><b>~15 ms</b></div>
     <div><span>presets</span><b>6</b></div>
     <div><span>sent over the network</span><b class="ok">0 bytes</b></div>
@@ -200,9 +211,51 @@
       </div>
   </section>
 
+  <section id="fullscreen" class="sec">
+      <div class="rail">
+        <div class="phead"><span>ep 04 · fullscreen &amp; upscale</span></div>
+        <h2>Bigger, in fullscreen.</h2>
+        <p class="intro">The toolbar popup can't open over a fullscreen video, so a small menu opens inside the player instead. It also sets how far to upscale.</p>
+        <figure class="scene" aria-hidden="true"><div class="phead"><span><b>open the ☰ menu, pick 4×</b></span><span>fullscreen</span></div>
+        <div class="stage"><div class="in s8">
+        <div class="fsv"><img src="assets/frame-after.png" alt=""></div>
+        <span data-aim="1" class="hb"><i class="h1">☰</i><i class="h2">✕</i></span>
+        <div class="fm">
+        <div class="hd"><span>anime4nerd</span><i>on</i></div>
+        <div class="sw2"><span class="b8">720p → 2560×1440 (2×)</span><span class="a8">720p → 5120×2880 (4×)</span></div>
+        <div class="sw2 ok"><span class="b8">gpu 8.2 ms / 42 ms · keeping up</span><span class="a8">gpu 16.4 ms / 42 ms · keeping up</span></div>
+        <div class="bars8"><i style="height:40%"></i><i style="height:46%"></i><i style="height:38%"></i><i style="height:44%"></i><i style="height:50%"></i><i style="height:41%"></i><i style="height:39%"></i><i style="height:47%"></i><i style="height:42%"></i><i style="height:45%"></i><i style="height:40%"></i><i style="height:48%"></i><i style="height:43%"></i><i style="height:39%"></i><i style="height:46%"></i><i style="height:41%"></i><i style="height:44%"></i><i style="height:40%"></i><i style="height:47%"></i><i style="height:42%"></i><s></s></div>
+        <span class="lb">upscale</span>
+        <div class="ups8"><i>auto</i><i class="u2">2×</i><i data-aim="2" class="u4">4×</i><i>8×</i><i>16×</i><i>32×</i></div>
+        </div>
+        <svg class="cur" viewBox="0 0 22 22" aria-hidden="true"><path d="M3 2 L3 18 L7.5 13.8 L10.5 20 L13.2 18.8 L10.3 12.8 L16.5 12.6 Z" fill="#eceded" stroke="#08090a" stroke-width="1.4" stroke-linejoin="round"/></svg>
+        </div></div>
+        </figure>
+      </div>
+      <div class="body">
+        <div class="panel">
+        <div class="phead"><span>the ☰ menu</span></div>
+        <h3>Change it without leaving fullscreen</h3>
+        <p>Move the mouse and a ☰ button appears in the top-right corner of the player. It opens the on/off switch, presets, line effects, the upscale factor and a live GPU graph, and fades away when the mouse rests. Clicks on the menu never reach the player, so the video keeps playing.</p>
+        </div>
+        <div class="table-wrap">
+        <table>
+        <thead><tr><th>Upscale</th><th>What happens</th><th>GPU cost</th></tr></thead>
+        <tbody>
+        <tr><td>auto</td><td>2×, or 4× when a small video fills a big screen (720p fullscreen on 1440p or 4K)</td><td>as 2× or 4×</td></tr>
+        <tr><td>2×</td><td>One upscale pass, as in every earlier version</td><td>baseline</td></tr>
+        <tr><td>4×</td><td>A second, lighter upscale pass on top</td><td>about 2×</td></tr>
+        <tr><td>8× – 32×</td><td>More passes, capped to what your GPU can hold: 8K output and 2 GB of textures. The popup says when it capped.</td><td>high</td></tr>
+        </tbody>
+        </table>
+        </div>
+        <p class="note">Measured on 720p Mode A: 8.2 ms per frame at 2×, 16.4 ms at 4×. Above 4× the browser shrinks most of the extra detail back to your screen size.</p>
+      </div>
+  </section>
+
   <section id="install" class="sec">
       <div class="rail">
-        <div class="phead"><span>ep 04 · install</span></div>
+        <div class="phead"><span>ep 05 · install</span></div>
         <h2>Get Anime4Nerd.</h2>
         <p class="intro">Add it, pin it from the puzzle menu once, and it is one click away on any video.</p>
         <figure class="scene" aria-hidden="true"><div class="phead"><span><b>pin it, then open it</b></span><span>toolbar</span></div>
@@ -233,20 +286,20 @@
         <li><span>Choose <b>Load unpacked</b> and pick the unzipped folder.</span></li>
         <li><span>Play a video, open the extension, and switch the video on.</span></li>
         </ol>
-        <div class="foot"><span class="chip">release 1.0.1</span><span class="chip">mit</span><a class="chip" href="https://github.com/creedweb3/anime4nerd" rel="noopener">source on github →</a></div>
+        <div class="foot"><span class="chip">release 1.1.0</span><span class="chip">mit</span><a class="chip" href="https://github.com/creedweb3/anime4nerd" rel="noopener">source on github →</a></div>
         </div>
       </div>
   </section>
 
   <section id="questions" class="sec">
       <div class="rail">
-        <div class="phead"><span>ep 05 · questions</span></div>
+        <div class="phead"><span>ep 06 · questions</span></div>
         <h2>Questions.</h2>
         <p class="intro">Short answers to what people ask most.</p>
         <figure class="scene" aria-hidden="true"><div class="phead"><span><b>only some sites</b></span><span>site access</span></div>
         <div class="stage"><div class="in s6">
         <div class="ext">
-        <div class="hd"><img src="assets/icon.png" alt=""><b>Anime4Nerd</b><small>details · 1.0.1</small></div>
+        <div class="hd"><img src="assets/icon.png" alt=""><b>Anime4Nerd</b><small>details · 1.1.0</small></div>
         <div class="rw"><span>Site access</span><span data-aim="1" class="dd"><span class="v1">On all sites</span><span class="v2">On specific sites</span><span class="opts"><i>When you click it</i><i data-aim="2" class="spec">On specific sites</i><i class="all">On all sites</i></span></span></div>
         <div class="list"><span class="lbl">runs on</span><span class="all-sites">all sites</span><div class="sites"><i class="add">stream.example</i><i>+ add a site</i></div></div>
         </div>
@@ -259,7 +312,7 @@
         <details name="faq" open><summary>Does it work on live action or regular shows?</summary><p>It runs on any video, but it is made for anime. The Anime4K networks are trained on hand-drawn animation: clean line art and flat colour. On live action, films and 3D-animated shows the result can look over-sharpened or painted, so the browser's normal scaling usually looks better there.</p></details>
         <details name="faq"><summary>Does it work on every site?</summary><p>It works on any site where the video is served with cross-origin access, which most players do. DRM-protected video (Widevine) cannot be read by any extension, so it plays normally.</p></details>
         <details name="faq"><summary>What do I need?</summary><p>Chrome, Brave or Edge 116 or newer and a GPU with WebGL2. A mid-range GPU handles Mode A at 24 fps comfortably.</p></details>
-        <details name="faq"><summary>Why is the output always 2×?</summary><p>The Anime4K upscale networks are trained for exactly 2×. 1080p becomes 2160p, 720p becomes 1440p.</p></details>
+        <details name="faq"><summary>Can it upscale more than 2×?</summary><p>Yes. The Anime4K networks are trained for exactly 2×, so 4× and up chain extra 2× passes. Auto picks 4× when a small video fills a big screen, like 720p fullscreen on a 1440p or 4K display. You can also choose up to 32×; Anime4Nerd uses the largest factor your GPU can hold (8K output at most) and says when it capped. Above 4× the browser shrinks most of the extra detail back to your screen size.</p></details>
         <details name="faq"><summary>Can I limit it to some sites?</summary><p>Yes. In <code>chrome://extensions</code>, open Anime4Nerd's details and set Site access to "On specific sites".</p></details>
         <div class="foot"><span>Something else?</span><a class="chip" href="https://github.com/creedweb3/anime4nerd/issues" rel="noopener">ask on github →</a></div>
         </div>
@@ -268,13 +321,13 @@
 
   <section id="changes" class="sec doc long">
       <div class="rail">
-        <div class="phead"><span>ep 06 · version history</span></div>
+        <div class="phead"><span>ep 07 · version history</span></div>
         <h2>What's new.</h2>
         <p class="intro">After an update the toolbar icon shows a NEW badge, and the popup links here.</p>
         <figure class="scene" aria-hidden="true"><div class="phead"><span><b>after an update</b></span><span>new badge</span></div>
         <div class="stage"><div class="in s2">
         <div class="tb"><span class="dots"><i></i><i></i><i></i></span><span class="url">your-favourite-stream.example/watch?ep=2</span><span class="x">⋯</span><span data-aim="1" class="x me"><img src="assets/icon.png" alt=""><span class="badge">NEW</span></span></div>
-        <div class="mp"><div data-aim="2" class="note"><span><b>●</b> updated to 1.0.1</span><span>what's new →</span></div><div class="src"><b>Starlight Academy <span class="sw"></span></b><em>● Upscaling</em></div><div class="kv"><span>36%</span><span>15.1 ms</span><span>24 fps</span></div><div class="tl"><i class="sel">A</i><i>B</i><i>C</i><i>A+A</i><i>B+B</i><i>C+A</i></div></div>
+        <div class="mp"><div data-aim="2" class="note"><span><b>●</b> updated to 1.1.0</span><span>what's new →</span></div><div class="src"><b>Starlight Academy <span class="sw"></span></b><em>● Upscaling</em></div><div class="kv"><span>36%</span><span>15.1 ms</span><span>24 fps</span></div><div class="tl"><i class="sel">A</i><i>B</i><i>C</i><i>A+A</i><i>B+B</i><i>C+A</i></div></div>
         <svg class="cur" viewBox="0 0 22 22" aria-hidden="true"><path d="M3 2 L3 18 L7.5 13.8 L10.5 20 L13.2 18.8 L10.3 12.8 L16.5 12.6 Z" fill="#eceded" stroke="#08090a" stroke-width="1.4" stroke-linejoin="round"/></svg>
         </div></div>
         </figure>
@@ -282,7 +335,17 @@
       <div class="body">
         <div class="timeline">
           <article class="rel latest">
-            <div class="rel-head"><h3>1.0.1</h3><span class="new">latest</span><span class="date">October 2026</span></div>
+            <div class="rel-head"><h3>1.1.0</h3><span class="new">latest</span><span class="date">October 2026</span></div>
+            <ul>
+            <li><strong>Upscale beyond 2×.</strong> Pick auto, 2×, 4×, 8×, 16× or 32×. Auto uses 4× when a small video fills a big screen, like 720p in fullscreen on a 1440p or 4K display. Higher choices run at the largest factor your GPU can hold, and the popup says when it capped.</li>
+            <li><strong>A menu inside fullscreen.</strong> Move the mouse and a ☰ button appears in the corner of the player: switch it on or off, change preset, line effects and upscale factor, and watch the GPU graph without leaving fullscreen.</li>
+            <li><strong>Exact output size</strong> on each video card, like <code>720p → 5120×2880 (4×)</code>.</li>
+            <li><strong>Clean restarts after an update.</strong> The old copy of the extension no longer keeps drawing on open pages or throws "Extension context invalidated" errors.</li>
+            <li><strong>Security pass</strong> on the new parts, including tests that play the role of a hostile page.</li>
+            </ul>
+          </article>
+          <article class="rel">
+            <div class="rel-head"><h3>1.0.1</h3><span class="date">October 2026</span></div>
             <ul>
             <li><strong>Works on DVD-era anime.</strong> Older shows mastered from DVD often use non-square pixels, and on those the upscaled picture stayed frozen or blank. They now upscale like everything else.</li>
             <li><strong>Rotated and odd-sized videos</strong> are handled correctly.</li>
@@ -306,7 +369,7 @@
 
   <section id="privacy" class="sec doc">
       <div class="rail">
-        <div class="phead"><span>ep 07 · privacy</span></div>
+        <div class="phead"><span>ep 08 · privacy</span></div>
         <h2>Privacy.</h2>
       </div>
       <div class="body">
@@ -337,7 +400,7 @@
 </main>
 
 <footer class="wrap">
-  <span>anime4nerd · v1.0.1 · mit</span>
+  <span>anime4nerd · v1.1.0 · mit</span>
   <span><a href="#changes">changes</a> · <a href="privacy">privacy</a> · <a href="#credits">credits</a> · <a href="https://github.com/creedweb3/anime4nerd" rel="noopener">github</a></span>
 </footer>
 
@@ -350,32 +413,41 @@
     var still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     var LIMIT = 41.7;
     var PRESETS = { A: ['Mode A', 'sharp', 15.1], B: ['Mode B', 'soft', 15.0], C: ['Mode C', 'denoise', 13.2], AA: ['A+A', 'sharper, heavy', 23.7], BB: ['B+B', 'softer, heavy', 24.0], CA: ['C+A', 'denoise+sharp', 15.8] };
-    var st = { on: true, preset: 'A', darken: false, thin: true };
-    var grid = $('pp-presets'), tiles = grid.querySelectorAll('.tile'), pills = pp.querySelectorAll('.pill');
+    var st = { on: true, preset: 'A', darken: false, thin: true, ups: 'auto' };
+    var grid = $('pp-presets'), tiles = grid.querySelectorAll('.tile'), pills = pp.querySelectorAll('#pills .pill'), ups = pp.querySelectorAll('#ups .pill');
+    // A 1080p source in a normal-size player: auto stays at 2x, and 8x and up cap at 4x (8K output),
+    // just as the extension does. 4x roughly doubles the frame cost (measured 2.0x on 720p).
+    var want = function () { return st.ups === 'auto' ? 2 : parseInt(st.ups, 10); };
+    var scale = function () { return Math.min(want(), 4); };
     // thin lines is on by default and already counted in the preset figures
-    var cost = function () { return PRESETS[st.preset][2] + (st.darken ? .4 : 0) + (st.thin ? 0 : -.9); };
+    var cost = function () { return (PRESETS[st.preset][2] + (st.darken ? .4 : 0) + (st.thin ? 0 : -.9)) * (scale() === 4 ? 2 : 1); };
+    var lateNow = function () { return samples.filter(function (v) { return v > LIMIT; }).length; };
     var render = function () {
       var p = PRESETS[st.preset], ms = cost();
       $('source').classList.toggle('on', st.on);
       $('source').setAttribute('aria-pressed', String(st.on));
       $('sw').checked = st.on;
       $('state').textContent = st.on ? '● Upscaling' : '● Off · click to upscale';
-      $('res').textContent = st.on ? '1080p → 2160p' : '1080p';
+      var s = scale();
+      $('res').textContent = st.on ? '1080p → ' + 1920 * s + '×' + 1080 * s + ' (' + s + '×)' + (want() > s ? ' · ' + want() + '× capped: GPU limit' : '') : '1080p';
       $('hint').textContent = st.on ? 'on · ' + st.preset.toLowerCase() : 'off';
       $('hint').classList.toggle('on', st.on);
       $('gpuchip').textContent = st.on ? 'gpu ' + ms.toFixed(1) + ' ms' : 'gpu —';
       $('gpuchip').classList.toggle('on', st.on);
-      $('verdict').textContent = st.on ? '● keeping up' : '● off';
-      $('verdict').className = 'verdict' + (st.on ? ' ok' : '');
+      // Same verdict rules as the popup: over the limit drops frames, above 80% is near it.
+      var lv = ms > LIMIT ? 'bad' : ms > LIMIT * .8 ? 'warn' : 'ok';
+      $('verdict').textContent = st.on ? (lv === 'bad' ? '● dropping frames' : lv === 'warn' ? '● near limit' : '● keeping up') : '● off';
+      $('verdict').className = 'verdict' + (st.on ? ' ' + lv : '');
       $('k-load').textContent = st.on ? Math.round(ms / LIMIT * 100) + '%' : '—';
-      $('k-load').className = st.on ? 'ok' : '';
+      $('k-load').className = st.on ? lv : '';
       $('k-ms').textContent = st.on ? ms.toFixed(1) + ' ms' : '—';
       $('k-fps').textContent = st.on ? '24 fps' : '—';
       $('k-avg').textContent = st.on ? Math.round(ms) + ' · ' + Math.round(ms * 1.45) : '—';
-      $('k-late').textContent = st.on ? '0 / 2 s' : '—';
+      $('k-late').textContent = st.on ? lateNow() + ' / 2 s' : '—';
       $('presetName').textContent = p[0].toLowerCase();
       tiles.forEach(function (b) { b.setAttribute('aria-checked', String(b.dataset.id === st.preset)); });
       pills.forEach(function (b) { b.setAttribute('aria-checked', String(st[b.dataset.field])); });
+      ups.forEach(function (b) { b.setAttribute('aria-checked', String(b.dataset.ups === st.ups)); });
       notes.classList.toggle('off', !st.on);
       // Off: the popup clears every reading, the frame limit and the bars included.
       $('k-limit').textContent = st.on ? '42 ms' : '—';
@@ -403,6 +475,7 @@
       $('n-pre').textContent = PRESETS[st.preset][0].toLowerCase() + ' · ' + PRESETS[st.preset][1];
       var opts = [st.darken ? 'darken' : '', st.thin ? 'thin' : ''].filter(Boolean);
       $('n-pill').textContent = opts.length ? opts.join(' + ') + ' lines on' : 'no line options';
+      $('n-ups').textContent = want() > scale() ? want() + '× asked · ' + scale() + '× fits' : (st.ups === 'auto' ? 'auto · ' : '') + scale() + '× · ' + 1920 * scale() + '×' + 1080 * scale();
       cos.forEach(function (co) { co.classList.toggle('hit', co.dataset.for === part); });
       clearTimeout(unhit);
       unhit = setTimeout(function () { cos.forEach(function (co) { co.classList.remove('hit'); }); }, 450);
@@ -419,6 +492,9 @@
     pills.forEach(function (b) {
       b.addEventListener('click', function () { st[b.dataset.field] = !st[b.dataset.field]; render(); used('pills'); });
     });
+    ups.forEach(function (b) {
+      b.addEventListener('click', function () { st.ups = b.dataset.ups; st.on = true; render(); used('ups'); place(); });
+    });
 
     // Live bars: one sample every 125 ms around the current cost, red above the limit.
     var bars = $('bars'), samples = [];
@@ -431,7 +507,10 @@
         kids[j].className = v ? (v > LIMIT ? 'over' : '') : 'empty';
       }
     };
-    var feed = function () { samples.shift(); samples.push(st.on ? cost() * (0.88 + Math.random() * 0.3) : 0); paint(); };
+    var feed = function () {
+      samples.shift(); samples.push(st.on ? cost() * (0.88 + Math.random() * 0.3) : 0); paint();
+      if (st.on) $('k-late').textContent = lateNow() + ' / 2 s';
+    };
     // Off clears the history at once, as the real popup does.
     clearBars = function () { for (var j = 0; j < samples.length; j++) samples[j] = 0; paint(); };
     var tickClock = function () { var d = new Date(); $('clock').textContent = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };

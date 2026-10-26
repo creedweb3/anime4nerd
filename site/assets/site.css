@@ -114,6 +114,8 @@ section { padding-block: clamp(56px, 7vw, 96px); border-top: 1px solid var(--lin
 .pp .switch:hover input { border-color: var(--on); }
 .pp .verdict { text-transform: none; letter-spacing: 0; font-size: 11px; color: var(--dim); }
 .pp .verdict.ok { color: var(--ok); }
+.pp .verdict.warn, .pp .kv b.warn { color: #e3c58a; }
+.pp .verdict.bad, .pp .kv b.bad { color: var(--bad); }
 .pp .kv { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .pp .kv div { border: 1px solid var(--line); padding: 3px 8px; min-height: 40px; }
 .pp .kv span { display: block; color: var(--faint); font-size: 9px; text-transform: uppercase; letter-spacing: .1em; }
@@ -138,6 +140,11 @@ section { padding-block: clamp(56px, 7vw, 96px); border-top: 1px solid var(--lin
 .pp .pill:hover { color: var(--on); }
 .pp .pill[aria-checked="true"] { background: var(--on); color: #000; border-color: var(--on); }
 .pp .pill[aria-checked="true"]::before { content: "✓ "; }
+/* the upscale row is a choice of one, so no +/✓ marks */
+.pp .pill[role="radio"]::before, .pp .pill[role="radio"][aria-checked="true"]::before { content: none; }
+.pp .pills-label { color: var(--faint); font-size: 11px; align-self: center; margin-right: auto; }
+#ups { gap: 4px; }
+#ups .pill { padding: 4px 7px; }
 
 /* labels: a bracket spans each part of the popup; the part you click turns its label green */
 .notes { position: absolute; inset: 0; pointer-events: none; }
