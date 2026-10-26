@@ -1,0 +1,181 @@
+/* Small looping scenes of real extension moments, in the popup's language. Each scene is a
+   fixed 380x240 drawing scaled to its card (--s, set by the page script), so every cursor path
+   lands on its target. Scenes run only while on screen (.run). */
+:root { --T: 7s; }
+.scene { border: 1px solid var(--line); background: var(--panel); margin: 0; }
+.scene > .phead { padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.scene > .phead b { color: var(--on); font-weight: 600; }
+.scene:not(.run) .in * { animation-play-state: paused; }
+
+/* the drawing area: gridded like the hero's model sheet */
+.scene .stage { position: relative; aspect-ratio: 380 / 240; overflow: hidden;
+  background: repeating-linear-gradient(0deg, rgba(255, 255, 255, .022) 0 1px, transparent 1px 24px), repeating-linear-gradient(90deg, rgba(255, 255, 255, .022) 0 1px, transparent 1px 24px), #0d0d0d; }
+.scene .in { position: absolute; left: 0; top: 0; width: 380px; height: 240px; zoom: var(--s, 1); font-size: 10px; }
+.scene .in * { animation-duration: var(--T); animation-iteration-count: infinite; animation-timing-function: var(--ease); animation-fill-mode: both; }
+
+/* shared parts: the toolbar, the cursor, a mini popup */
+.scene .tb { position: absolute; left: 14px; top: 14px; width: 352px; height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; border: 1px solid var(--line2); border-radius: 10px; background: var(--panel); }
+.scene .tb .dots { display: flex; gap: 5px; }
+.scene .tb .dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--line2); }
+.scene .tb .url { flex: 1; min-width: 0; color: var(--faint); padding: 5px 10px; border-radius: 7px; background: #0d0d0d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scene .tb .x { width: 26px; height: 26px; flex: none; display: grid; place-items: center; color: var(--faint); border: 1px solid transparent; border-radius: 6px; position: relative; }
+.scene .tb .me { border-color: rgba(var(--g), .7); background: #0d0d0d; }
+.scene .tb .me img { width: 18px; height: 18px; display: block; border-radius: 4px; }
+.scene .cur { position: absolute; left: 0; top: 0; width: 18px; height: 18px; z-index: 9; pointer-events: none; transform-origin: 2.5px 1.6px; }
+.scene .mp { position: absolute; right: 14px; top: 62px; width: 196px; padding: 4px 5px; background: var(--bg); border: 1px solid var(--line2); transform-origin: 90% 0; box-shadow: 0 24px 40px -18px #000; }
+.scene .mp .r { display: flex; gap: 3px; margin-bottom: 4px; }
+.scene .mp .r i { font-style: normal; border: 1px solid var(--line); background: var(--panel); color: var(--dim); padding: 1px 5px; font-size: 8px; white-space: nowrap; }
+.scene .mp .r i.f { flex: 1; color: var(--on); border-color: var(--line2); }
+.scene .mp .src { border: 1px solid rgba(var(--g), .6); background: linear-gradient(135deg, rgba(var(--g), .16), transparent 60%) var(--bg); padding: 5px 7px; margin-bottom: 4px; }
+.scene .mp .src b { display: flex; justify-content: space-between; font-size: 10px; }
+.scene .mp .src em { font-style: normal; color: var(--ok); font-size: 8px; }
+.scene .sw { display: inline-block; width: 22px; height: 12px; border: 1px solid rgba(var(--g), .6); position: relative; }
+.scene .sw::after { content: ""; position: absolute; top: 2px; left: 11px; width: 7px; height: 6px; background: rgb(var(--g)); }
+.scene .mp .kv { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; margin-bottom: 4px; }
+.scene .mp .kv span { border: 1px solid var(--line); padding: 1px 4px; font-weight: 600; font-size: 9px; }
+.scene .mp .kv span:first-child { color: var(--ok); }
+.scene .mp .tl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }
+.scene .mp .tl i { font-style: normal; border: 1px solid var(--line); padding: 2px 4px; font-size: 8px; color: var(--fg); font-weight: 600; }
+.scene .mp .tl i.sel { border-color: var(--on); background: #1a1a1a; }
+
+/* ---------- install · pin it from the puzzle menu, then open the popup from the pinned icon ---------- */
+.scene .in.s7 { --T: 10s; }
+.scene .s7 .mp { right: 40px; animation-name: drop7; }
+.scene .s7 .cur { animation-name: c7; }
+.scene .s7 .menu { animation-name: menu7; }
+.scene .s7 .pin { animation-name: pin7; }
+.scene .s7 .newme { animation-name: land7; }
+@keyframes c7 { 0% { opacity: 0; transform: translate(170px, 200px); } 6% { opacity: 1; } 14%, 16% { transform: var(--a1); } 17.5% { transform: var(--a1) scale(.82); } 19%, 22% { transform: var(--a1); } 29%, 31% { transform: var(--a2); } 32.5% { transform: var(--a2) scale(.82); } 34%, 40% { transform: var(--a2); } 50%, 53% { transform: var(--a3); } 54.5% { transform: var(--a3) scale(.82); } 56%, 80% { opacity: 1; transform: var(--a3); } 88%, 100% { opacity: 0; transform: translate(250px, 170px); } }
+@keyframes menu7 { 0%, 17% { opacity: 0; transform: translateY(-8px) scaleY(.94); } 21%, 38% { opacity: 1; transform: none; } 42%, 100% { opacity: 0; transform: none; } }
+@keyframes pin7 { 0%, 32% { color: var(--faint); } 33%, 100% { color: var(--ok); } }
+@keyframes land7 { 0%, 40% { opacity: 0; transform: translateX(26px) scale(.6); } 46%, 53.5% { opacity: 1; transform: none; } 54.5% { transform: scale(.86); } 56%, 92% { opacity: 1; transform: none; } 97%, 100% { opacity: 0; transform: none; } }
+@keyframes drop7 { 0%, 55% { opacity: 0; transform: translateY(-8px) scaleY(.94); } 61%, 88% { opacity: 1; transform: none; } 94%, 100% { opacity: 0; transform: none; } }
+
+/* ---------- b · NEW badge, click, the popup says what changed ---------- */
+@keyframes press1 { 0%, 31% { transform: none; } 33% { transform: scale(.86); } 36%, 100% { transform: none; } }
+@keyframes drop1 { 0%, 34% { opacity: 0; transform: translateY(-8px) scaleY(.94); } 41%, 86% { opacity: 1; transform: none; } 93%, 100% { opacity: 0; transform: none; } }
+.scene .badge { position: absolute; right: -7px; bottom: -5px; background: var(--ok); color: #000; font-size: 7px; font-weight: 800; padding: 0 3px; line-height: 11px; letter-spacing: .04em; }
+.scene .s2 .badge { animation-name: badge2; }
+.scene .s2 .cur { animation-name: c2; }
+.scene .s2 .me { animation-name: press1; }
+.scene .s2 .mp { animation-name: drop1; }
+.scene .note { margin: 0 0 4px; display: flex; justify-content: space-between; border: 1px solid var(--line2); background: var(--panel); padding: 3px 6px; margin-bottom: 4px; font-size: 8px; color: var(--dim); }
+.scene .note b { color: var(--ok); font-weight: 600; }
+.scene .s2 .note { animation-name: note2; }
+@keyframes badge2 { 0%, 31% { opacity: 1; transform: none; } 35%, 92% { opacity: 0; transform: scale(.4); } 97%, 100% { opacity: 1; transform: none; } }
+@keyframes c2 { 0% { opacity: 0; transform: translate(170px, 200px); } 8% { opacity: 1; } 28%, 31% { transform: var(--a1); } 33% { transform: var(--a1) scale(.82); } 36%, 46% { transform: var(--a1); } 56%, 76% { opacity: 1; transform: var(--a2); } 84%, 100% { opacity: 0; transform: translate(260px, 150px); } }
+@keyframes note2 { 0%, 55% { background: var(--panel); color: var(--dim); border-color: var(--line2); } 58%, 82% { background: #1a1a1a; color: var(--on); border-color: var(--on); } 88%, 100% { background: var(--panel); color: var(--dim); } }
+
+/* ---------- c · flip the switch, the frame sharpens ---------- */
+.scene .vid { position: absolute; left: 14px; top: 14px; width: 352px; height: 150px; border: 1px solid var(--line2); overflow: hidden; background: #000; }
+.scene .vid img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.scene .vid .aft { clip-path: inset(0 100% 0 0); }
+.scene .vid .scan { position: absolute; top: 0; bottom: 0; left: 0; width: 2px; background: var(--on); opacity: 0; }
+.scene .vid .rs { position: absolute; left: 8px; top: 8px; background: rgba(11, 11, 11, .85); border: 1px solid var(--line2); color: var(--dim); padding: 1px 6px; font-size: 8px; text-transform: uppercase; letter-spacing: .1em; }
+.scene .card3 { position: absolute; left: 14px; top: 174px; width: 352px; height: 52px; border: 1px solid rgba(var(--r), .5); background: linear-gradient(135deg, rgba(var(--r), .14), transparent 60%) var(--bg); padding: 6px 10px; }
+.scene .card3 b { font-size: 11px; display: block; }
+.scene .card3 em { font-style: normal; font-size: 9px; position: absolute; left: 10px; bottom: 6px; }
+.scene .card3 .off { color: rgba(var(--r), .9); }
+.scene .card3 .onn { color: var(--ok); opacity: 0; }
+.scene .card3 .sw3 { position: absolute; right: 10px; top: 16px; width: 30px; height: 16px; border: 1px solid rgba(var(--r), .5); }
+.scene .card3 .sw3 i { position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; background: rgba(var(--r), .75); }
+.scene .s3 .cur { animation-name: c3; }
+.scene .s3 .card3 { animation-name: card3; }
+.scene .s3 .sw3 { animation-name: sw3; }
+.scene .s3 .sw3 i { animation-name: knob3; }
+.scene .s3 .off { animation-name: hide3; }
+.scene .s3 .onn { animation-name: show3; }
+.scene .s3 .aft { animation-name: wipe3; }
+.scene .s3 .scan { animation-name: scan3; }
+.scene .s3 .rs { animation-name: rs3; }
+@keyframes c3 { 0% { opacity: 0; transform: translate(200px, 120px); } 8% { opacity: 1; } 28%, 31% { transform: var(--a1); } 33% { transform: var(--a1) scale(.82); } 36%, 74% { opacity: 1; transform: var(--a1); } 84%, 100% { opacity: 0; transform: translate(280px, 120px); } }
+@keyframes card3 { 0%, 33% { border-color: rgba(var(--r), .5); background: linear-gradient(135deg, rgba(var(--r), .14), transparent 60%) var(--bg); } 36%, 88% { border-color: rgba(var(--g), .6); background: linear-gradient(135deg, rgba(var(--g), .16), transparent 60%) var(--bg); } 94%, 100% { border-color: rgba(var(--r), .5); } }
+@keyframes sw3 { 0%, 33% { border-color: rgba(var(--r), .5); } 35%, 90% { border-color: rgba(var(--g), .6); } 95%, 100% { border-color: rgba(var(--r), .5); } }
+@keyframes knob3 { 0%, 33% { transform: none; background: rgba(var(--r), .75); } 36%, 90% { transform: translateX(14px); background: rgb(var(--g)); } 95%, 100% { transform: none; background: rgba(var(--r), .75); } }
+@keyframes hide3 { 0%, 33% { opacity: 1; } 35%, 90% { opacity: 0; } 95%, 100% { opacity: 1; } }
+@keyframes show3 { 0%, 33% { opacity: 0; } 35%, 90% { opacity: 1; } 95%, 100% { opacity: 0; } }
+@keyframes wipe3 { 0%, 38% { clip-path: inset(0 100% 0 0); } 56%, 90% { clip-path: inset(0 0 0 0); } 96%, 100% { clip-path: inset(0 100% 0 0); } }
+@keyframes scan3 { 0%, 37% { opacity: 0; transform: none; } 39% { opacity: 1; transform: none; } 55% { opacity: 1; transform: translateX(350px); } 57%, 100% { opacity: 0; transform: translateX(350px); } }
+@keyframes rs3 { 0%, 50% { color: var(--dim); border-color: var(--line2); } 56%, 90% { color: var(--ok); border-color: rgba(var(--g), .6); } 96%, 100% { color: var(--dim); } }
+
+/* ---------- puzzle menu parts ---------- */
+.scene .pz svg, .scene .pin svg { width: 14px; height: 14px; display: block; }
+.scene .menu { position: absolute; right: 14px; top: 62px; width: 220px; border: 1px solid var(--line2); background: var(--bg); padding: 6px; transform-origin: 90% 0; box-shadow: 0 24px 40px -18px #000; }
+.scene .menu .phead { font-size: 8px; padding: 2px 4px 6px; }
+.scene .menu .it { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border: 1px solid var(--line); background: var(--panel); margin-bottom: 4px; }
+.scene .menu .it:last-child { margin-bottom: 0; }
+.scene .menu .it img { width: 14px; height: 14px; border-radius: 3px; }
+.scene .menu .it span { flex: 1; color: var(--fg); }
+.scene .menu .it.dim span { color: var(--faint); }
+.scene .menu .it .ph { flex: none; width: 14px; height: 14px; background: var(--line2); border-radius: 3px; }
+.scene .menu .it .pin { flex: none; color: var(--faint); }
+
+/* ---------- e · pick a heavier preset, the frame cost moves, still keeping up ---------- */
+.scene .pre { position: absolute; left: 14px; top: 14px; width: 352px; border: 1px solid var(--line2); background: var(--bg); padding: 6px 8px; }
+.scene .pre .pan { border: 1px solid var(--line); background: var(--panel); padding: 7px; margin-bottom: 6px; }
+.scene .pre .pan:last-child { margin-bottom: 0; }
+.scene .pre .phead { font-size: 8px; margin-bottom: 6px; }
+.scene .pre .grid { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.scene .pre .t { border: 1px solid var(--line); background: var(--bg); padding: 3px 7px; }
+.scene .pre .t b { display: block; font-size: 10px; }
+.scene .pre .t small { color: var(--faint); font-size: 8px; }
+.scene .pre .sel { position: absolute; left: 0; top: 0; width: calc((100% - 10px) / 3); height: calc((100% - 5px) / 2); border: 1px solid var(--on); pointer-events: none; }
+.scene .pre .ms { display: flex; align-items: baseline; gap: 10px; }
+.scene .pre .ms > span:first-child { color: var(--faint); font-size: 9px; text-transform: uppercase; letter-spacing: .1em; }
+.scene .pre .ms b { font-size: 16px; display: inline-grid; }
+.scene .pre .ms b span { grid-area: 1 / 1; }
+.scene .pre .ms .ok { color: var(--ok); font-size: 9px; margin-left: auto; }
+.scene .pre .track { height: 6px; background: var(--bar-dim); margin-top: 6px; position: relative; }
+.scene .pre .track i { position: absolute; inset: 0; background: var(--bar); transform-origin: left; transform: scaleX(.36); }
+.scene .pre .track s { position: absolute; top: -3px; bottom: -3px; right: 0; border-left: 1px dashed var(--faint); }
+.scene .s5 .cur { animation-name: c5; }
+.scene .s5 .sel { animation-name: sel5; }
+.scene .s5 .a { animation-name: hide5; }
+.scene .s5 .aa { animation-name: show5; }
+.scene .s5 .track i { animation-name: bar5; }
+@keyframes c5 { 0% { opacity: 0; transform: translate(260px, 210px); } 8% { opacity: 1; } 28%, 31% { transform: var(--a1); } 33% { transform: var(--a1) scale(.82); } 36%, 72% { opacity: 1; transform: var(--a1); } 82%, 100% { opacity: 0; transform: translate(200px, 200px); } }
+@keyframes sel5 { 0%, 32% { transform: none; } 38%, 88% { transform: translateY(calc(100% + 5px)); } 95%, 100% { transform: none; } }
+@keyframes hide5 { 0%, 33% { opacity: 1; } 36%, 90% { opacity: 0; } 95%, 100% { opacity: 1; } }
+@keyframes show5 { 0%, 33% { opacity: 0; } 36%, 90% { opacity: 1; } 95%, 100% { opacity: 0; } }
+@keyframes bar5 { 0%, 33% { transform: scaleX(.36); } 46%, 88% { transform: scaleX(.57); } 96%, 100% { transform: scaleX(.36); } }
+
+/* ---------- f · limit it to some sites ---------- */
+.scene .ext { position: absolute; left: 14px; top: 47px; width: 352px; border: 1px solid var(--line2); background: var(--bg); padding: 8px 10px; }
+.scene .ext .hd { display: flex; align-items: center; gap: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.scene .ext .hd img { width: 18px; height: 18px; border-radius: 4px; }
+.scene .ext .hd b { font-size: 11px; }
+.scene .ext .hd small { margin-left: auto; color: var(--faint); }
+.scene .ext .rw { display: flex; justify-content: space-between; align-items: center; padding-top: 10px; }
+.scene .ext .rw > span:first-child { color: var(--dim); }
+.scene .dd { position: relative; width: 170px; border: 1px solid var(--line2); background: var(--panel); padding: 3px 8px; display: grid; }
+.scene .dd > span { grid-area: 1 / 1; }
+.scene .dd::after { content: "▾"; position: absolute; right: 8px; top: 3px; color: var(--faint); }
+.scene .dd > .opts { grid-area: auto; position: absolute; left: -1px; right: -1px; top: calc(100% + 3px); border: 1px solid var(--line2); background: var(--bg); padding: 3px; z-index: 2; box-shadow: 0 24px 40px -18px #000; }
+.scene .opts i { position: relative; display: block; font-style: normal; padding: 3px 5px; color: var(--dim); }
+/* every option starts on the select text's left edge; the current one is ticked on the right */
+.scene .opts i.all::after { content: "✓"; position: absolute; right: 6px; color: var(--on); }
+.scene .ext .list { position: relative; margin-top: 12px; border: 1px solid var(--line); background: var(--panel); padding: 7px 9px 9px; height: 52px; }
+.scene .ext .lbl { display: block; color: var(--faint); font-size: 8px; text-transform: uppercase; letter-spacing: .14em; margin-bottom: 6px; }
+.scene .ext .all-sites { position: absolute; left: 9px; top: 26px; color: var(--dim); }
+.scene .sites { display: flex; gap: 4px; }
+.scene .sites i { font-style: normal; border: 1px solid var(--line); background: var(--panel); color: var(--dim); padding: 1px 7px; }
+.scene .sites i.add { border-color: rgba(var(--g), .6); color: var(--ok); }
+.scene .s6 .cur { animation-name: c6; }
+.scene .s6 .opts { animation-name: menu6; }
+.scene .s6 .spec { animation-name: hov6; }
+.scene .s6 .v1 { animation-name: hide6; }
+.scene .s6 .v2 { animation-name: show6; }
+.scene .s6 .sites { animation-name: sites6; }
+.scene .s6 .all-sites { animation-name: allsites6; }
+@keyframes c6 { 0% { opacity: 0; transform: translate(150px, 200px); } 8% { opacity: 1; } 22%, 25% { transform: var(--a1); } 27% { transform: var(--a1) scale(.82); } 30%, 34% { transform: var(--a1); } 44%, 48% { transform: var(--a2); } 50% { transform: var(--a2) scale(.82); } 53%, 72% { opacity: 1; transform: var(--a2); } 82%, 100% { opacity: 0; transform: translate(220px, 190px); } }
+@keyframes menu6 { 0%, 26% { opacity: 0; transform: translateY(-6px); } 31%, 51% { opacity: 1; transform: none; } 55%, 100% { opacity: 0; transform: none; } }
+@keyframes hov6 { 0%, 42% { background: transparent; color: var(--dim); } 45%, 100% { background: #1a1a1a; color: var(--on); } }
+@keyframes hide6 { 0%, 51% { opacity: 1; } 53%, 92% { opacity: 0; } 97%, 100% { opacity: 1; } }
+@keyframes show6 { 0%, 51% { opacity: 0; } 53%, 92% { opacity: 1; } 97%, 100% { opacity: 0; } }
+@keyframes allsites6 { 0%, 55% { opacity: 1; } 58%, 92% { opacity: 0; } 97%, 100% { opacity: 1; } }
+@keyframes sites6 { 0%, 56% { opacity: 0; transform: translateY(-4px); } 62%, 92% { opacity: 1; transform: none; } 97%, 100% { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  /* hold each scene on its "after" frame */
+  .scene .in * { animation-play-state: paused !important; animation-delay: calc(var(--T) * -.6) !important; }
+}
