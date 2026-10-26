@@ -4,26 +4,27 @@
 <link rel="icon" href="assets/icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="assets/site.css">
 
-<header class="bar">
+<header class="top">
   <div class="wrap">
-    <a class="brand" href="./#top"><img src="assets/icon.png" alt="" width="28" height="28">Anime4Nerd</a>
+    <a class="brand" href="./#top"><img src="assets/icon.png" alt="" width="24" height="24">anime4nerd</a>
     <nav class="nav" aria-label="Sections">
-      <a href="./#compare">before/after</a>
-      <a href="./#how">how it works</a>
-      <a href="./#presets">presets</a>
-      <a href="./#install">install</a>
-      <a href="privacy">privacy</a>
+      <a class="chip" href="./#compare">before / after</a>
+      <a class="chip" href="./#how">how it works</a>
+      <a class="chip" href="./#presets">presets</a>
+      <a class="chip" href="./#install">install</a>
+      <a class="chip" href="privacy">privacy</a>
     </nav>
+    <a class="btn primary" href="https://chromewebstore.google.com/detail/anime4nerd/kblnmcdmlgeidaclnhjmcffefmkehkpm" rel="noopener">add to chrome</a>
   </div>
 </header>
 
 <main class="wrap">
-  <section id="privacy" class="doc" style="border-bottom:0">
-    <span class="label">privacy policy · last updated 2026-10-17</span>
-    <h1 style="margin-top:10px;font-size:var(--step-3)">Privacy policy.</h1>
+  <section id="privacy" class="doc" style="border-top:0">
+    <div class="phead"><span>privacy policy · last updated 2026-10-17</span></div>
+    <h1 style="font-size:clamp(1.8rem, 3.6vw, 2.7rem);letter-spacing:-.03em;margin:14px 0 12px">Privacy policy.</h1>
     <div class="prose">
       <p><strong>Anime4Nerd does not collect, store, or transmit any personal data. Everything runs inside your browser.</strong></p>
       <h3>What the extension does</h3>
@@ -55,6 +56,6 @@
 </main>
 
 <footer class="wrap">
-  <span>Anime4Nerd · v1.0.1 · MIT</span>
+  <span>anime4nerd · v1.0.1 · mit</span>
   <span><a href="privacy">privacy</a> · <a href="./#credits">credits</a> · <a href="https://github.com/creedweb3/anime4nerd" rel="noopener">github</a></span>
 </footer>
