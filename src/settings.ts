@@ -1,10 +1,26 @@
 export type Preset = 'A' | 'B' | 'C' | 'AA' | 'BB' | 'CA';
 
+/** 'auto' picks 4x only when the video is drawn at more than 2x its source size. */
+export type Upscale = 'auto' | '2x' | '4x' | '8x' | '16x' | '32x';
+const UPSCALES: Upscale[] = ['auto', '2x', '4x', '8x', '16x', '32x'];
+
+/** The factor a manual choice asks for; null for auto. */
+export function requestedScale(u: Upscale): number | null {
+  return u === 'auto' ? null : parseInt(u, 10);
+}
+
+/** " · 16× capped: GPU limit" when the renderer ran below the manual choice, else ''. */
+export function capNote(u: Upscale, actualScale: number): string {
+  const want = requestedScale(u);
+  return want !== null && actualScale < want ? ` · ${want}× capped: GPU limit` : '';
+}
+
 /** Global rendering settings (apply to every enabled source). */
 export interface Settings {
   preset: Preset;
   darkenLines: boolean;
   thinLines: boolean;
+  upscale: Upscale;
 }
 
 export const PRESETS: { value: Preset; label: string; description: string }[] = [
@@ -25,6 +41,7 @@ export function normalize(raw: unknown): Settings {
     preset: PRESETS.some((p) => p.value === t.preset) ? (t.preset as Preset) : 'A',
     darkenLines: t.darkenLines === true,
     thinLines: t.thinLines === true,
+    upscale: UPSCALES.includes(t.upscale as Upscale) ? (t.upscale as Upscale) : 'auto',
   };
 }
 

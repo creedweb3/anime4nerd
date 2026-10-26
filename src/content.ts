@@ -6,11 +6,12 @@
 
 import {
   Message, Settings, Sources, Status, VideoInfo,
-  loadSettings, loadSources, onSettingsChanged, onSourcesChanged, sourceKey,
+  loadSettings, loadSources, onSettingsChanged, onSourcesChanged, requestedScale, sourceKey,
 } from './settings';
 import type { Anime4kRenderer } from './gpu';
 import { collectPageMeta, mediaSessionMeta } from './media-meta';
 import { uploadSize } from './video-size';
+import { FullscreenMenu } from './fullscreen-menu';
 
 type GpuModule = typeof import('./gpu');
 let gpuModule: Promise<GpuModule> | null = null;
@@ -53,6 +54,9 @@ class VideoUpscaler {
   private width = 0;
 
   private height = 0;
+
+  // Upscale factor the current renderer was built for (see wantedScale()).
+  private scale = 2;
 
   // Source frame-rate estimate from requestVideoFrameCallback metadata.
   private vfcSamples: { t: number; presented: number }[] = [];
@@ -159,7 +163,8 @@ class VideoUpscaler {
 
   configure(s: Settings) {
     const chainChanged = s.preset !== this.settings.preset
-      || s.darkenLines !== this.settings.darkenLines || s.thinLines !== this.settings.thinLines;
+      || s.darkenLines !== this.settings.darkenLines || s.thinLines !== this.settings.thinLines
+      || s.upscale !== this.settings.upscale;
     this.settings = s;
     if (chainChanged) this.teardown();
     this.sync();
@@ -249,6 +254,7 @@ class VideoUpscaler {
     this.starting = true;
     this.width = v.videoWidth;
     this.height = v.videoHeight;
+    this.scale = this.wantedScale();
     const gen = this.generation;
 
     const canvas = document.createElement('canvas');
@@ -267,7 +273,7 @@ class VideoUpscaler {
       if (gen !== this.generation) return;
       const r = await createAnime4kRenderer(v, canvas, this.settings, (msg) => {
         if (gen === this.generation) this.fail(msg);
-      });
+      }, this.scale);
       if (gen !== this.generation) { r.destroy(); return; }
       this.renderer = r;
       this.starting = false;
@@ -393,11 +399,25 @@ class VideoUpscaler {
   /** Re-check placement; called on every scan because players move or restyle the video without resizing it. */
   relayout() { this.layout(); }
 
+  /** Manual 2x-32x, or in auto 4x (a second x2 pass) only when the picture is drawn at more than 2x the source in device pixels. */
+  private wantedScale(): number {
+    const manual = requestedScale(this.settings.upscale);
+    if (manual !== null) return manual;
+    const v = this.video;
+    const r = v.getBoundingClientRect();
+    const { w, h } = paintedSize(getComputedStyle(v).objectFit, r.width, r.height, v.videoWidth, v.videoHeight);
+    const src = uploadSize(v);
+    const dpr = window.devicePixelRatio || 1;
+    return w * dpr > src.w * 2 || h * dpr > src.h * 2 ? 4 : 2;
+  }
+
   private layout() {
     const c = this.canvas;
     const v = this.video;
     const parent = v.parentElement;
     if (!c || !parent) return;
+    // Display size crossed the 2x line (fullscreen, theater mode, zoom): rebuild at the other scale.
+    if ((this.renderer || this.starting) && this.wantedScale() !== this.scale) { this.teardown(); this.sync(); return; }
     // Players move the <video> between containers (theater/fullscreen layouts): follow it.
     if (c.previousElementSibling !== v) { this.mountCanvas(c); return; }
     const vr = v.getBoundingClientRect();
@@ -470,6 +490,8 @@ let scanQueued = false;
 let lastScan = 0;
 function scan() {
   scanQueued = false;
+  if (stopped) return;
+  if (!contextAlive()) { shutdown(); return; }
   lastScan = performance.now();
   const found: HTMLVideoElement[] = [];
   collectVideos(document, found);
@@ -508,10 +530,63 @@ function list(): VideoInfo[] {
   return [...upscalers.values()].map((u) => u.info());
 }
 function notify() {
+  if (!contextAlive()) { shutdown(); return; }
   chrome.runtime.sendMessage({ type: 'a4k-changed' } satisfies Message).catch(() => {});
+  syncMenu();
 }
 
+// --- orphan handling -------------------------------------------------------------
+// When the extension reloads or updates, this copy keeps running but every chrome.* call
+// throws "Extension context invalidated", while a fresh copy is injected next to it.
+// The old copy must remove its canvases and menu and stop, or both draw over the video.
+const TAKEOVER_EVENT = 'a4k-takeover';
+let observer: MutationObserver | null = null;
+let scanTimer: number | null = null;
+let stopped = false;
+
+function contextAlive(): boolean {
+  try { return !!chrome.runtime?.id; } catch { return false; }
+}
+
+/** The page can dispatch this event too, so only a copy whose extension context is already dead obeys it. */
+function onTakeover() {
+  if (!contextAlive()) shutdown();
+}
+
+function shutdown() {
+  if (stopped) return;
+  stopped = true;
+  window.__a4kLoaded = false;
+  document.removeEventListener(TAKEOVER_EVENT, onTakeover);
+  observer?.disconnect();
+  if (scanTimer !== null) window.clearInterval(scanTimer);
+  for (const u of upscalers.values()) u.destroy();
+  upscalers.clear();
+  menu.mount(null);
+}
+
+// --- fullscreen menu -------------------------------------------------------------
+/** True if `node` is `outer` or inside it, crossing shadow-root boundaries. */
+function composedContains(outer: Element, node: Node): boolean {
+  for (let n: Node | null = node; n; n = n.parentNode ?? (n as ShadowRoot).host ?? null) if (n === outer) return true;
+  return false;
+}
+
+/** The highest-priority video inside the fullscreen element (a player container, not the bare video). */
+function fullscreenTarget(): { u: VideoUpscaler; container: Element } | null {
+  for (const u of [...upscalers.values()].sort((a, b) => b.priority() - a.priority())) {
+    const root = u.video.getRootNode() as Document | ShadowRoot;
+    const fs = root.fullscreenElement ?? document.fullscreenElement;
+    if (fs && fs !== u.video && composedContains(fs, u.video)) return { u, container: fs };
+  }
+  return null;
+}
+
+const menu = new FullscreenMenu(() => fullscreenTarget()?.u.info() ?? null, () => settings);
+function syncMenu() { if (!stopped) menu.mount(fullscreenTarget()?.container ?? null); }
+
 chrome.runtime.onMessage.addListener((msg: Message, _sender, respond) => {
+  if (stopped) return false; // a stopped copy must not answer for the live one
   if (msg?.type === 'a4k-list') { respond(list()); return true; }
   if (msg?.type === 'a4k-page-meta') {
     // Only the top document knows the page title / JSON-LD; iframes answer null.
@@ -526,20 +601,29 @@ chrome.runtime.onMessage.addListener((msg: Message, _sender, respond) => {
   return false;
 });
 
+// Tell any older copy (e.g. orphaned by an extension reload) to step aside. DOM events reach
+// every isolated world, and dispatch is synchronous, so it has cleared the flag below by now.
+document.dispatchEvent(new CustomEvent(TAKEOVER_EVENT));
 if (!window.__a4kLoaded) {
   window.__a4kLoaded = true;
+  document.addEventListener(TAKEOVER_EVENT, onTakeover);
   (async () => {
   [settings, sources] = await Promise.all([loadSettings(), loadSources()]);
-  onSettingsChanged((s) => { settings = s; for (const u of upscalers.values()) u.configure(s); notify(); });
+  if (stopped) return;
+  onSettingsChanged((s) => { if (stopped) return; settings = s; for (const u of upscalers.values()) u.configure(s); notify(); });
   onSourcesChanged((s) => {
+    if (stopped) return;
     sources = s;
     for (const u of upscalers.values()) u.setEnabled(sources[u.key] === true);
     applyRendererCap();
     notify();
   });
-  new MutationObserver(queueScan).observe(document.documentElement, { childList: true, subtree: true });
+  document.addEventListener('fullscreenchange', syncMenu);
+  document.addEventListener('mousemove', () => menu.wake(), { passive: true });
+  observer = new MutationObserver(queueScan);
+  observer.observe(document.documentElement, { childList: true, subtree: true });
   scan();
   // Videos that become visible later (lazy players) are picked up by periodic rescans.
-  setInterval(queueScan, 2000);
+  scanTimer = window.setInterval(queueScan, 2000);
   })();
 }

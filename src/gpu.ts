@@ -8,6 +8,7 @@ import restoreM from './shaders/Anime4K_Restore_CNN_M.glsl';
 import restoreSoftM from './shaders/Anime4K_Restore_CNN_Soft_M.glsl';
 import upscaleVL from './shaders/Anime4K_Upscale_CNN_x2_VL.glsl';
 import upscaleDenoiseVL from './shaders/Anime4K_Upscale_Denoise_CNN_x2_VL.glsl';
+import upscaleM from './shaders/Anime4K_Upscale_CNN_x2_M.glsl';
 import darkenHQ from './shaders/Anime4K_Darken_HQ.glsl';
 import thinHQ from './shaders/Anime4K_Thin_HQ.glsl';
 import {
@@ -42,8 +43,11 @@ export class SourceSizeChanged extends Error {
 /** How often render() re-checks the frame size and GL error state (each check stalls the GPU briefly). */
 const HEALTH_CHECK_MS = 1000;
 
-/** Standard Anime4K mpv preset chains: always exactly one x2 step. */
-function chainFor(s: Settings): string[] {
+/** Largest final output, in pixels (8K UHD); bigger frames risk exhausting GPU memory. */
+const MAX_OUTPUT_PX = 7680 * 4320;
+
+/** Standard Anime4K mpv preset chains: one x2 step, plus an extra (M) x2 step per doubling beyond 2x. */
+function chainFor(s: Settings, scale: number): string[] {
   const p: Preset = s.preset;
   const files = [clampHighlights];
   if (p === 'A' || p === 'AA') files.push(restoreVL);
@@ -51,9 +55,59 @@ function chainFor(s: Settings): string[] {
   files.push(p === 'C' || p === 'CA' ? upscaleDenoiseVL : upscaleVL);
   if (p === 'AA' || p === 'CA') files.push(restoreM);
   if (p === 'BB') files.push(restoreSoftM);
+  for (let k = scale; k > 2; k /= 2) files.push(upscaleM);
   if (s.darkenLines) files.push(darkenHQ);
   if (s.thinLines) files.push(thinHQ);
   return files;
+}
+
+/** GPU memory budget for one renderer's textures; above it the scale halves (never below 2x). */
+const MAX_TEXTURE_BYTES = 2 * 1024 ** 3;
+
+/** The chain's hook passes in run order. */
+function orderedPasses(s: Settings, scale: number): HookPass[] {
+  const passes: HookPass[] = [];
+  const deferred: HookPass[] = []; // PREKERNEL hooks run after all MAIN hooks (as in mpv)
+  for (const file of chainFor(s, scale)) {
+    for (const p of parseHookPasses(file)) {
+      if (p.hook === 'MAIN') passes.push(p);
+      else if (p.hook === 'PREKERNEL') deferred.push(p);
+      // other hook points (LUMA, CHROMA, OUTPUT...) do not exist for an RGB video source
+    }
+  }
+  return [...passes, ...deferred];
+}
+
+type Size = { w: number; h: number };
+
+/** Resolves mpv size references like "MAIN.w" or "OUTPUT.h" for a w x h source at `scale`. */
+function sizeResolver(get: (name: string) => Size | undefined, w: number, h: number, scale: number) {
+  return (ref: string): number => {
+    const [name, dim] = ref.split('.');
+    if (name === 'OUTPUT') return dim === 'w' ? w * scale : h * scale;
+    if (name === 'NATIVE') return dim === 'w' ? w : h;
+    const t = get(name);
+    if (!t) throw new Error(`Unknown texture in size expression: ${ref}`);
+    return dim === 'w' ? t.w : t.h;
+  };
+}
+
+/** Texture bytes a chain will allocate, by the same size rules as the real build below. */
+function estimateBytes(passes: HookPass[], w: number, h: number, scale: number): number {
+  const sizes = new Map<string, Size>([['MAIN', { w, h }]]);
+  const sizeOf = sizeResolver((n) => sizes.get(n), w, h, scale);
+  let bytes = w * h * 4; // RGBA8 video frame
+  for (const p of passes) {
+    if (p.when && evalRpn(p.when, sizeOf) === 0) continue;
+    const hooked = sizes.get('MAIN')!;
+    const out = {
+      w: p.width ? Math.round(evalRpn(p.width, sizeOf)) : hooked.w,
+      h: p.height ? Math.round(evalRpn(p.height, sizeOf)) : hooked.h,
+    };
+    bytes += out.w * out.h * 8; // RGBA16F
+    sizes.set(p.save ?? 'MAIN', out);
+  }
+  return bytes;
 }
 
 const VERT = `#version 300 es
@@ -137,6 +191,7 @@ export async function createAnime4kRenderer(
   canvas: HTMLCanvasElement,
   settings: Settings,
   onError: (msg: string) => void,
+  wantScale = 2,
 ): Promise<Anime4kRenderer> {
   const { w, h } = uploadSize(video);
   if (!w || !h) throw new Error('Waiting for video dimensions.');
@@ -154,9 +209,16 @@ export async function createAnime4kRenderer(
 
   const maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
   if (w * 2 > maxTex || h * 2 > maxTex) throw new Error("The upscaled video exceeds this GPU's texture limit.");
+  // Beyond 2x is optional: halve the scale until the output fits the texture limit, the output
+  // cap, and the memory budget for every intermediate texture of the chain.
+  let scale = wantScale;
+  let passes = orderedPasses(settings, scale);
+  const tooBig = () => w * scale > maxTex || h * scale > maxTex || w * h * scale * scale > MAX_OUTPUT_PX
+    || estimateBytes(passes, w, h, scale) > MAX_TEXTURE_BYTES;
+  while (scale > 2 && tooBig()) { scale /= 2; passes = orderedPasses(settings, scale); }
 
-  canvas.width = w * 2;
-  canvas.height = h * 2;
+  canvas.width = w * scale;
+  canvas.height = h * scale;
 
   let destroyed = false;
   const onLost = (e: Event) => {
@@ -185,27 +247,9 @@ export async function createAnime4kRenderer(
   const videoTex = makeTex(w, h, false);
 
   // --- build pass list ------------------------------------------------------
-  const passes: HookPass[] = [];
-  const deferred: HookPass[] = []; // PREKERNEL hooks run after all MAIN hooks (as in mpv)
-  for (const file of chainFor(settings)) {
-    for (const p of parseHookPasses(file)) {
-      if (p.hook === 'MAIN') passes.push(p);
-      else if (p.hook === 'PREKERNEL') deferred.push(p);
-      // other hook points (LUMA, CHROMA, OUTPUT...) do not exist for an RGB video source
-    }
-  }
-  passes.push(...deferred);
-
   // Named textures visible to later passes. MAIN starts as the video frame.
   const named = new Map<string, Tex>([['MAIN', videoTex]]);
-  const sizeOf = (ref: string): number => {
-    const [name, dim] = ref.split('.');
-    if (name === 'OUTPUT') return dim === 'w' ? w * 2 : h * 2;
-    if (name === 'NATIVE') return dim === 'w' ? w : h;
-    const t = named.get(name);
-    if (!t) throw new Error(`Unknown texture in size expression: ${ref}`);
-    return dim === 'w' ? t.w : t.h;
-  };
+  const sizeOf = sizeResolver((n) => named.get(n), w, h, scale);
 
   const compiled: CompiledPass[] = [];
   const vs = compile(gl, gl.VERTEX_SHADER, VERT, 'vertex');
@@ -247,8 +291,8 @@ export async function createAnime4kRenderer(
   }
 
   const finalTex = named.get('MAIN')!;
-  if (finalTex.w !== w * 2 || finalTex.h !== h * 2) {
-    // Can happen if the x2 WHEN condition failed; keep canvas in sync anyway.
+  if (finalTex.w !== w * scale || finalTex.h !== h * scale) {
+    // Can happen if an x2 WHEN condition failed; keep canvas in sync anyway.
     canvas.width = finalTex.w;
     canvas.height = finalTex.h;
   }

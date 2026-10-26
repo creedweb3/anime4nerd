@@ -44,6 +44,15 @@
       <button type="button" class="pill" data-field="darkenLines" role="menuitemcheckbox">darken lines</button>
       <button type="button" class="pill" data-field="thinLines" role="menuitemcheckbox">thin lines</button>
     </div>
+    <div class="pills" id="upscale" role="radiogroup" aria-label="upscale">
+      <span class="pills-label">upscale</span>
+      <button type="button" class="pill" data-upscale="auto" role="radio" title="4× only when the video is shown at more than 2× its size">auto</button>
+      <button type="button" class="pill" data-upscale="2x" role="radio">2×</button>
+      <button type="button" class="pill" data-upscale="4x" role="radio" title="Heavier: about 2× the GPU time and memory of 2×">4×</button>
+      <button type="button" class="pill" data-upscale="8x" role="radio" title="Experimental. Uses the largest scale up to this that fits your GPU (output capped at 8K).">8×</button>
+      <button type="button" class="pill" data-upscale="16x" role="radio" title="Experimental. Uses the largest scale up to this that fits your GPU (output capped at 8K).">16×</button>
+      <button type="button" class="pill" data-upscale="32x" role="radio" title="Experimental. Uses the largest scale up to this that fits your GPU (output capped at 8K).">32×</button>
+    </div>
   </section>
   <script src="popup.js"></script>
 </body>

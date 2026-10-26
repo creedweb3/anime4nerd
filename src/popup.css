@@ -236,5 +236,7 @@ body {
 .pill::before { content: "+ "; }
 .pill[aria-checked="true"] { background: var(--on); color: #000; border-color: var(--on); }
 .pill[aria-checked="true"]::before { content: "✓ "; }
+.pill[role="radio"]::before, .pill[role="radio"][aria-checked="true"]::before { content: none; }
+.pills-label { color: var(--faint); font-size: 11px; align-self: center; margin-right: auto; }
 
 .note { display: none; }
