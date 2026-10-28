@@ -43,7 +43,11 @@ for (const p of PRESETS) {
   b.className = 'tile';
   b.dataset.preset = p.value;
   b.setAttribute('role', 'menuitemradio');
-  b.innerHTML = `<b>${p.label}</b><small>${PRESET_DESC[p.value]}</small>`;
+  const name = document.createElement('b');
+  name.textContent = p.label;
+  const desc = document.createElement('small');
+  desc.textContent = PRESET_DESC[p.value];
+  b.append(name, desc);
   b.addEventListener('click', () => { void saveSettings({ preset: p.value }); });
   presetsEl.append(b);
 }

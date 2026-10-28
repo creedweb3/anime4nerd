@@ -1,5 +1,6 @@
 node_modules/
 dist/
+dist-firefox/
 test/*.js
 test/popup.css
 *.zip

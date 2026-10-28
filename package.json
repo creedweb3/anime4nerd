@@ -10,7 +10,9 @@
     "build": "node build.mjs",
     "watch": "node build.mjs --watch",
     "typecheck": "tsc -p tsconfig.json",
-    "pack": "node build.mjs && node pack.mjs"
+    "pack": "node build.mjs && node pack.mjs",
+    "build:firefox": "node build.mjs --firefox",
+    "pack:firefox": "node build.mjs --firefox && node pack.mjs --firefox"
   },
   "keywords": [],
   "author": "",
