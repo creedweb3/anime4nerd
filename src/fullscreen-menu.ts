@@ -3,7 +3,7 @@
 // upscale); the button fades out when the mouse is idle, like player controls.
 
 import {
-  PRESETS, Settings, Upscale, VideoInfo, capNote, dropsFrames, saveSettings, setSource,
+  PRESETS, Settings, Upscale, VideoInfo, capNote, frameVerdict, saveSettings, VERDICT_TEXT, setSource,
 } from './settings';
 
 const IDLE_MS = 2500;
@@ -210,12 +210,15 @@ export class FullscreenMenu {
     let cls = 'dim';
     let verdict = s ? 'paused' : (t?.status.toLowerCase() ?? '');
     if (live) {
-      const drops = load === null && !s!.timerSupported ? dropsFrames(s!.fps, fps) : null;
-      if (drops !== null) { cls = drops ? 'bad' : 'ok'; verdict = drops ? 'dropping frames' : 'keeping up'; } else if (load === null) { cls = 'ok'; verdict = 'running'; } else if (load > 1) { cls = 'bad'; verdict = 'dropping frames'; } else if (load > 0.8) { cls = 'warn'; verdict = 'near limit'; } else { cls = 'ok'; verdict = 'keeping up'; }
+      const fv = load === null && !s!.timerSupported ? frameVerdict(s!.fps, fps) : null;
+      if (fv) { cls = fv; verdict = VERDICT_TEXT[fv]; } else if (load === null) { cls = 'ok'; verdict = 'running'; } else if (load > 1) { cls = 'bad'; verdict = 'dropping frames'; } else if (load > 0.8) { cls = 'warn'; verdict = 'near limit'; } else { cls = 'ok'; verdict = 'keeping up'; }
     }
     this.perf.className = `perf ${cls}`;
     const noTimer = !!s && !s.timerSupported; // e.g. Firefox: no GPU timer queries, so no bars
-    this.perf.textContent = `gpu ${gpu === null ? (noTimer ? 'n/a' : '—') : `${gpu.toFixed(1)} ms`}${budget === null ? '' : ` / ${budget.toFixed(0)} ms`} · ${verdict}`;
+    // No GPU timer: frames drawn vs the video's fps, e.g. "57 / 60 fps · near limit".
+    this.perf.textContent = noTimer
+      ? `${live ? s!.fps.toFixed(0) : '—'} / ${fps === null ? '—' : fps.toFixed(0)} fps · ${verdict}`
+      : `gpu ${gpu === null ? '—' : `${gpu.toFixed(1)} ms`}${budget === null ? '' : ` / ${budget.toFixed(0)} ms`} · ${verdict}`;
     this.graph.style.display = noTimer ? 'none' : '';
     this.drawBars(s?.samples ?? [], budget, live);
   }
