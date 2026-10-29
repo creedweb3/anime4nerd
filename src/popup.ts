@@ -250,7 +250,7 @@ function paintPerf(v: VideoInfo | null) {
   }
   limitEl.style.display = budget !== null ? '' : 'none';
   if (budget !== null) limitEl.style.bottom = `${Math.round((budget / scale) * 100)}%`;
-  setText(perf.legend, samples.length ? `last 2 s · dashed = limit · red = late${live ? '' : ' · last run'}` : 'no measurements yet');
+  setText(perf.legend, samples.length ? `last 2 s · dashed = limit · red = late${live ? '' : ' · last run'}` : s && !s.timerSupported ? 'GPU timing not available in this browser' : 'no measurements yet');
 }
 
 // --- refresh ------------------------------------------------------------------------
