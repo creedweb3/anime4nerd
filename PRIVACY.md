@@ -1,6 +1,6 @@
 # Anime4Nerd — Privacy Policy
 
-_Last updated: 2026-10-17_
+_Last updated: 2026-10-29_
 
 **Short version: Anime4Nerd does not collect, store, or transmit any personal data. Everything runs inside your browser.**
 
@@ -10,13 +10,13 @@ Anime4Nerd upscales video on web pages you choose, using your computer's GPU. To
 
 ## Site access
 
-At install your browser asks you to allow the extension on all websites. That is needed because video players are often embedded from other domains, so it cannot know in advance which site the video comes from. On every page it only looks for `<video>` elements. It does nothing to a video until you switch that video on in the popup, and you can restrict it to specific sites at any time under your browser's extension settings → Site access.
+At install your browser asks you to allow the extension on all websites. That is needed because video players are often embedded from other domains, so it cannot know in advance which site the video comes from. On every page it only looks for `<video>` elements. It does nothing to a video until you switch that video on in the popup, and you can restrict it to specific sites at any time in your browser's extension settings (Chrome, Edge, Brave: the extension's details → Site access; Firefox: `about:addons` → Anime4Nerd → Permissions).
 
 ## Data handled locally
 
 - **Video frames** are read into GPU memory to be upscaled and are discarded immediately after each frame is drawn. They are never saved or sent anywhere.
 - **Page metadata** (page title, headings, Open Graph tags, schema.org data, Media Session metadata) is read only when you open the popup, to label the video (for example "Attack on Titan · E1"). It stays in the popup and is not stored.
-- **Settings** (chosen preset, line effects, upscale factor, which sites you switched on) are stored with `chrome.storage`. They may sync between your own browsers if you have browser sync turned on. Nothing else is stored.
+- **Settings** (chosen preset, line effects, upscale factor, which sites you switched on) are stored with the browser's extension storage. The preset, line effects and upscale factor may sync between your own browsers if you have Chrome sync or Firefox Sync turned on; the per-site switches stay on this device. The only other stored value is the version number of an update whose "what's new" note you have not seen yet. Nothing else is stored.
 - **Performance numbers** (GPU time per frame, frame rate) are measured locally and shown in the popup. They are not recorded.
 
 ## Data leaving your device

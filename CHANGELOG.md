@@ -1,5 +1,36 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Firefox support (Firefox 140 or newer; the manifest also allows Firefox for
+  Android 142+). `npm run build:firefox` writes `dist-firefox/` and
+  `npm run pack:firefox` writes `Anime4Nerd firefox.zip`, from the same sources.
+  Presets, line effects, upscale factors, the per-site switch and the
+  fullscreen menu work as in Chrome; settings sync through Firefox Sync.
+  `test/firefox-smoke.mjs` is a headless Firefox smoke test.
+
+### Fixed
+- Firefox: upscaling was capped at about 25 fps on 60 fps video, because
+  Firefox calls `requestVideoFrameCallback` only about 25 times a second. The
+  Firefox build now renders every decoded frame. 1080p60 → 4K, Mode A, RTX 2060:
+  57 fps (Chrome: 55).
+- Pages that are just a video file (a `.webm` or `.mp4` opened directly): the
+  overlay no longer sets `position: relative` on `<body>` or `<html>`. In Firefox
+  that collapsed the video to 0×0 and the page went black.
+- Browsers without GPU timer queries (Firefox): the popup now says "GPU timing
+  not available in this browser" instead of "no measurements yet" forever, and
+  the fullscreen menu shows n/a and hides its empty graph. Both still say
+  "keeping up" or "dropping frames", by comparing frames drawn with the video's
+  own frame rate, which Firefox now also measures while upscaling.
+- `npm run pack` / `pack:firefox` on Linux and macOS now write a real zip
+  (Info-ZIP); GNU tar wrote a tar archive named `.zip`.
+
+### Docs
+- `PRIVACY.md` and `SECURITY.md` cover Firefox (site permissions, Firefox Sync,
+  AMO signing). The privacy policy now also says that the per-site switches are
+  not synced and names the stored "what's new" version flag.
+
 ## 1.1.1 (2026-10-26)
 
 ### Fixed

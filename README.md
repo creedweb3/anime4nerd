@@ -1,7 +1,7 @@
 # Anime4Nerd (browser extension)
 
 Real-time 2x–8x Anime4K upscaling of any `<video>` on a page, as a
-Chrome/Edge/Brave extension you control.
+Chrome/Edge/Brave and Firefox extension you control.
 
 It runs **bloc97's original Anime4K shaders** (`src/shaders/`, copied verbatim
 from https://github.com/bloc97/Anime4K, MIT) in WebGL2. A small loader
@@ -18,6 +18,20 @@ npm run build
 
 Output goes to `dist/`.
 
+For Firefox:
+
+```bash
+npm run build:firefox   # writes dist-firefox/
+npm run pack:firefox    # also writes "Anime4Nerd firefox.zip"
+```
+
+The Firefox build uses the same sources with a Firefox manifest
+(`firefoxManifest()` in `build.mjs`): `background.scripts` instead of a service
+worker, the add-on id `anime4nerd@creedweb3.github.io`, Firefox 140+ (Firefox
+for Android 142+), and `data_collection_permissions: none`. `pack` and
+`pack:firefox` call `tar -a` to write the zip, which needs bsdtar (Windows and
+macOS ship it; GNU tar on Linux does not write zip).
+
 ## Install (Chrome / Edge / Brave)
 
 From the Chrome Web Store:
@@ -33,6 +47,24 @@ From source:
    the video card.
 
 To limit it to certain sites, use the extension's "Site access" settings.
+
+## Install (Firefox)
+
+From Firefox Add-ons: coming soon (Firefox 140 or newer).
+
+From source, as a temporary add-on (removed when Firefox closes):
+
+1. `npm run build:firefox`.
+2. Open `about:debugging#/runtime/this-firefox`.
+3. **Load Temporary Add-on…** → pick `dist-firefox/manifest.json`.
+4. Open a page with a video, click the extension icon, and flip the switch on
+   the video card.
+
+Site access is under `about:addons` → Anime4Nerd → Permissions. Firefox has no
+GPU timer queries, so the popup shows "GPU timing not available in this
+browser" instead of GPU ms per frame (it still says whether upscaling keeps up
+with the video); everything else works as in Chrome, and
+settings sync through Firefox Sync if you use it.
 
 The switch is remembered per **site + stream host**, so once you turn on the
 player on a site it stays on for the next episode. Presets, line effects and
@@ -75,7 +107,10 @@ The Anime4K networks are trained for exactly 2x, so larger factors chain extra
 - `src/content.ts` runs in every frame (`all_frames: true`), finds `<video>`
   elements (including inside shadow roots) and reports them to the popup. For a
   video whose source switch is on it lays a `<canvas>` over the video and
-  drives one render per video frame with `requestVideoFrameCallback`.
+  drives one render per video frame with `requestVideoFrameCallback`. (Firefox
+  fires that callback only ~25 times a second on 60 fps video, so the Firefox
+  build renders on the first animation frame after
+  `getVideoPlaybackQuality().totalVideoFrames` changes.)
   It suspends in picture-in-picture, native video fullscreen and hidden tabs,
   rebuilds on resize, and falls back to the plain video on any GPU error.
 - `src/fullscreen-menu.ts` is the on-video menu shown while a player
@@ -137,6 +172,12 @@ Reference numbers, RTX 2060, 1920×1080 source → 3840×2160, Chromium (ANGLE D
 
 A 24 fps video gives a 41.7 ms budget, so A uses ~36% of the GPU, A+A ~57%.
 
+Firefox does not offer the timer query, so there the meter shows the output
+frame rate and whether it keeps up with the video (frames drawn vs the video's
+own frame rate), but no GPU time. Speed is about the same as Chrome. Same
+RTX 2060, 1080p60 source: Mode A → 4K 57 fps in Firefox, 55 in Chrome; A+A → 4K
+38 / 39; Mode A → 8K 34 / 31.
+
 ## Limitations
 
 - **CORS.** Uploading a video frame to WebGL requires the video to be
@@ -146,7 +187,8 @@ A 24 fps video gives a 41.7 ms budget, so A uses ~36% of the GPU, A+A ~57%.
   can never be read.
 - First start compiles ~40 large shaders: 5–10 s on first use, then cached by
   the browser.
-- WebGL2 only (no WebGPU). Firefox/Safari untested.
+- WebGL2 only (no WebGPU). Firefox 140+ is supported (separate build, see
+  above); Safari is untested.
 - The fullscreen button of the browser's own `<video controls>` does not go
   through the page's fullscreen API, so it still fullscreens the bare video:
   plain playback, no menu.
@@ -170,6 +212,19 @@ mocked `chrome.*` APIs. Copy `dist/content.js`, `dist/gpu.js`,
 Real fullscreen needs a user gesture, e.g. a click or CDP `Runtime.evaluate`
 with `userGesture: true`.
 
+## Firefox smoke test
+
+```bash
+npm run build:firefox
+node test/firefox-smoke.mjs
+```
+
+Needs `ffmpeg` on PATH and Playwright with its Firefox (`npm i -g playwright`,
+then `npx playwright install firefox`). It runs headless, installs
+`dist-firefox/` as a temporary add-on over Firefox's remote debugging protocol,
+and checks same-origin VP9 and H.264, a CORS source, a cross-origin iframe, the
+no-CORS message, a bare video file page and the fullscreen redirect.
+
 ## Credits
 
 - Anime4K shaders: bloc97 and contributors, MIT (`src/shaders/LICENSE`).
@@ -180,4 +235,5 @@ with `userGesture: true`.
 - Anime4K shaders: MIT, bloc97 (`src/shaders/LICENSE`, `THIRD_PARTY_NOTICES.md`).
 - Privacy: `PRIVACY.md`. No data leaves the browser.
 - Security model and user safety guide: `SECURITY.md`.
-- Store listing draft: `docs/STORE_LISTING.md`.
+- Store listing draft: `docs/STORE_LISTING.md`; Firefox Add-ons listing and
+  reviewer notes: `docs/AMO_LISTING.md`.
