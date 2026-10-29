@@ -213,7 +213,9 @@ export class FullscreenMenu {
       if (load === null) { cls = 'ok'; verdict = 'running'; } else if (load > 1) { cls = 'bad'; verdict = 'dropping frames'; } else if (load > 0.8) { cls = 'warn'; verdict = 'near limit'; } else { cls = 'ok'; verdict = 'keeping up'; }
     }
     this.perf.className = `perf ${cls}`;
-    this.perf.textContent = `gpu ${gpu === null ? '—' : `${gpu.toFixed(1)} ms`}${budget === null ? '' : ` / ${budget.toFixed(0)} ms`} · ${verdict}`;
+    const noTimer = !!s && !s.timerSupported; // e.g. Firefox: no GPU timer queries, so no bars
+    this.perf.textContent = `gpu ${gpu === null ? (noTimer ? 'n/a' : '—') : `${gpu.toFixed(1)} ms`}${budget === null ? '' : ` / ${budget.toFixed(0)} ms`} · ${verdict}`;
+    this.graph.style.display = noTimer ? 'none' : '';
     this.drawBars(s?.samples ?? [], budget, live);
   }
 
