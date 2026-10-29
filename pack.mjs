@@ -10,10 +10,15 @@ const firefox = process.argv.includes('--firefox');
 const dir = firefox ? 'dist-firefox' : 'dist';
 const out = firefox ? 'Anime4Nerd firefox.zip' : 'Anime4Nerd prod.zip';
 if (existsSync(out)) rmSync(out);
-// bsdtar ships with Windows 10+ and macOS; -a picks the format from the .zip extension.
-// On Windows use System32's bsdtar explicitly: Git-for-Windows puts GNU tar first on PATH, which cannot write zip.
-const tar = process.platform === 'win32' ? `${process.env.SystemRoot || 'C:\\Windows'}\\System32\\tar.exe` : 'tar';
-execFileSync(tar, ['-a', '-c', '-f', `../${out}`, '*'], { cwd: dir, stdio: 'inherit', shell: false });
+if (process.platform === 'win32') {
+  // System32's bsdtar (Windows 10+); -a picks zip from the extension. Git-for-Windows puts GNU tar
+  // first on PATH, which cannot write zip.
+  const tar = `${process.env.SystemRoot || 'C:\\Windows'}\\System32\\tar.exe`;
+  execFileSync(tar, ['-a', '-c', '-f', `../${out}`, '*'], { cwd: dir, stdio: 'inherit', shell: false });
+} else {
+  // Linux/macOS (e.g. an AMO reviewer rebuilding from source): Info-ZIP.
+  execFileSync('zip', ['-q', '-r', '-X', `../${out}`, '.'], { cwd: dir, stdio: 'inherit', shell: false });
+}
 const sha = createHash('sha256').update(readFileSync(out)).digest('hex');
 writeFileSync(`${out}.sha256`, `${sha}  ${out}\n`);
 console.log(`wrote ${out} (v${version})\nsha256 ${sha}`);
