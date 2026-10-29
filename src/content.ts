@@ -334,10 +334,12 @@ class VideoUpscaler {
       if (gen === this.generation) {
         this.rendering = false;
         if (this.rerender) { this.rerender = false; this.sync(); } else if (!v.paused && !v.ended && !v.seeking && !this.suspended()) {
-          this.usesVfc = typeof v.requestVideoFrameCallback === 'function';
+          // Firefox fires requestVideoFrameCallback for only ~25 frames a second even on 60 fps
+          // video, so it polls instead (see nextDecodedFrame).
+          this.usesVfc = !__FIREFOX__ && typeof v.requestVideoFrameCallback === 'function';
           this.frameHandle = this.usesVfc
             ? v.requestVideoFrameCallback((_now, meta) => { this.frameHandle = null; this.noteSourceFrame(meta); this.frame(); })
-            : requestAnimationFrame(() => { this.frameHandle = null; this.frame(); });
+            : this.nextDecodedFrame();
         }
       }
     }
@@ -368,6 +370,18 @@ class VideoUpscaler {
     if (a && b && b.t - a.t > 500 && b.presented > a.presented) {
       this.sourceFps = ((b.presented - a.presented) * 1000) / (b.t - a.t);
     }
+  }
+
+  /** Render on the first animation frame after the decoder has produced a new frame. */
+  private nextDecodedFrame(): number {
+    const decoded = () => this.video.getVideoPlaybackQuality().totalVideoFrames;
+    const last = decoded();
+    const tick = () => {
+      if (decoded() === last) { this.frameHandle = requestAnimationFrame(tick); return; }
+      this.frameHandle = null;
+      this.frame();
+    };
+    return requestAnimationFrame(tick);
   }
 
   private stopLoop() {
