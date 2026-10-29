@@ -1,5 +1,5 @@
 import {
-  Message, PRESETS, Settings, VideoInfo, capNote, dropsFrames, loadSettings, onSettingsChanged, onSourcesChanged, saveSettings, setSource,
+  Message, PRESETS, Settings, VideoInfo, capNote, frameVerdict, loadSettings, VERDICT_TEXT, onSettingsChanged, onSourcesChanged, saveSettings, setSource,
 } from './settings';
 import { EMPTY_META, MediaMeta } from './media-meta';
 import { WHATS_NEW_URL, clearWhatsNew, pendingWhatsNew } from './whats-new';
@@ -195,9 +195,28 @@ const barEls: HTMLElement[] = [];
 const limitEl = document.createElement('s');
 for (let i = 0; i < BARS; i += 1) { const b = document.createElement('i'); barEls.push(b); perf.bars.append(b); }
 perf.bars.append(limitEl);
+const tiles = [perf.load, perf.ms, perf.fps, perf.avg, perf.limit, perf.late];
+const GPU_LABELS = tiles.map((el) => el.previousElementSibling!.textContent!);
+// No GPU timer (Firefox): the same tiles show frame-rate figures instead.
+const FRAME_LABELS = ['Video', 'Frames kept', 'Output', 'Missed', 'Frame limit', 'Passes · VRAM'];
+
+/** No-GPU-timer tiles: the video's fps, share of its frames drawn, frames missed, passes and VRAM. */
+function paintFrameTiles(v: VideoInfo, s: NonNullable<VideoInfo['stats']>, live: boolean) {
+  const src = v.sourceFps ?? s.sourceFps;
+  const fv = live ? frameVerdict(s.fps, src) : null;
+  setText(perf.load, src ? `${src.toFixed(0)} fps` : '—');
+  setText(perf.ms, fv && src ? `${Math.round(Math.min(s.fps / src, 1) * 100)}%` : '—');
+  setText(perf.avg, fv && src ? `${Math.max(0, Math.round(src - s.fps))} / s` : '—');
+  setText(perf.late, `${s.passes} · ${Math.round(s.textureBytes / 1048576)} MB`);
+  perf.load.className = perf.late.className = '';
+  perf.ms.className = perf.avg.className = fv ?? '';
+}
 
 function paintPerf(v: VideoInfo | null) {
   const f = (n: number | null, d = 1) => (n === null ? '—' : n.toFixed(d));
+  const noTimer = !!v?.enabled && !!v.stats && !v.stats.timerSupported;
+  tiles.forEach((el, i) => setText(el.previousElementSibling as HTMLElement, (noTimer ? FRAME_LABELS : GPU_LABELS)[i]));
+  perf.bars.style.display = noTimer ? 'none' : '';
 
   // Off: everything cleared.
   if (!v || !v.enabled) {
@@ -230,11 +249,12 @@ function paintPerf(v: VideoInfo | null) {
   setText(perf.limit, budget === null ? '—' : `${f(budget, 0)} ms`);
   setText(perf.late, late === null ? '—' : `${late} / 2 s`);
   perf.late.className = late ? (late > 3 ? 'bad' : 'warn') : '';
+  if (noTimer) paintFrameTiles(v, s!, live);
 
   let vc = 'dim'; let vt = '● paused';
   if (v.status === 'Unavailable') { vc = 'bad'; vt = '● not possible'; } else if (v.status === 'Loading') { vc = 'warn'; vt = '● starting'; } else if (live) {
-    const drops = load === null && !s!.timerSupported ? dropsFrames(s!.fps, v.sourceFps ?? s!.sourceFps) : null;
-    if (drops !== null) { vc = drops ? 'bad' : 'ok'; vt = drops ? '● dropping frames' : '● keeping up'; } else if (load === null) { vc = 'ok'; vt = '● running'; } else if (load > 1) { vc = 'bad'; vt = '● dropping frames'; } else if (load > 0.8) { vc = 'warn'; vt = '● near limit'; } else { vc = 'ok'; vt = '● keeping up'; }
+    const fv = load === null && !s!.timerSupported ? frameVerdict(s!.fps, v.sourceFps ?? s!.sourceFps) : null;
+    if (fv) { vc = fv; vt = `● ${VERDICT_TEXT[fv]}`; } else if (load === null) { vc = 'ok'; vt = '● running'; } else if (load > 1) { vc = 'bad'; vt = '● dropping frames'; } else if (load > 0.8) { vc = 'warn'; vt = '● near limit'; } else { vc = 'ok'; vt = '● keeping up'; }
   }
   setText(perf.verdict, vt);
   perf.verdict.className = `verdict ${vc}`;
@@ -297,8 +317,10 @@ async function refresh() {
     for (const { v } of list) if (v.enabled && v.stats?.gpuMs != null) gpuMs = (gpuMs ?? 0) + v.stats.gpuMs;
     hintEl.textContent = list.length === 0 ? 'off' : active ? `on · ${settings.preset.toLowerCase()}` : on ? 'starting' : 'off';
     hintEl.classList.toggle('on', active > 0);
-    gpuChip.textContent = gpuMs === null ? 'gpu —' : `gpu ${gpuMs.toFixed(1)} ms`;
-    gpuChip.classList.toggle('on', gpuMs !== null);
+    // Without GPU timing (Firefox) the chip shows the frame rate drawn instead.
+    const drawn = list.find((x) => x.v.enabled && x.v.stats && !x.v.stats.timerSupported && x.v.stats.fps > 0)?.v.stats;
+    gpuChip.textContent = gpuMs !== null ? `gpu ${gpuMs.toFixed(1)} ms` : drawn ? `${drawn.fps.toFixed(0)} fps` : 'gpu —';
+    gpuChip.classList.toggle('on', gpuMs !== null || !!drawn);
   } finally {
     refreshing = false;
   }

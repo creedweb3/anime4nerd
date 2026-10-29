@@ -9,12 +9,17 @@ export function requestedScale(u: Upscale): number | null {
   return u === 'auto' ? null : parseInt(u, 10);
 }
 
+export type FrameVerdict = 'ok' | 'warn' | 'bad';
+export const VERDICT_TEXT: Record<FrameVerdict, string> = { ok: 'keeping up', warn: 'near limit', bad: 'dropping frames' };
+
 /**
- * Verdict without GPU timing (Firefox): true when fewer frames are drawn than the video plays,
- * null when the video's own frame rate is not known yet.
+ * Verdict without GPU timing (Firefox), from frames drawn vs the video's own frame rate:
+ * 'ok' at 97% or more, 'warn' from 90%, else 'bad'. null while the video's frame rate is unknown.
  */
-export function dropsFrames(renderedFps: number, sourceFps: number | null): boolean | null {
-  return sourceFps ? renderedFps < sourceFps * 0.95 : null;
+export function frameVerdict(renderedFps: number, sourceFps: number | null): FrameVerdict | null {
+  if (!sourceFps) return null;
+  const kept = renderedFps / sourceFps;
+  return kept >= 0.97 ? 'ok' : kept >= 0.9 ? 'warn' : 'bad';
 }
 
 /** " · 16× capped: GPU limit" when the renderer ran below the manual choice, else ''. */

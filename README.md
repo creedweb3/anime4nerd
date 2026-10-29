@@ -29,8 +29,8 @@ The Firefox build uses the same sources with a Firefox manifest
 (`firefoxManifest()` in `build.mjs`): `background.scripts` instead of a service
 worker, the add-on id `anime4nerd@creedweb3.github.io`, Firefox 140+ (Firefox
 for Android 142+), and `data_collection_permissions: none`. `pack` and
-`pack:firefox` call `tar -a` to write the zip, which needs bsdtar (Windows and
-macOS ship it; GNU tar on Linux does not write zip).
+`pack:firefox` write the zip with Windows' own `tar.exe` on Windows and with
+`zip` on Linux and macOS.
 
 ## Install (Chrome / Edge / Brave)
 
@@ -172,9 +172,9 @@ Reference numbers, RTX 2060, 1920×1080 source → 3840×2160, Chromium (ANGLE D
 
 A 24 fps video gives a 41.7 ms budget, so A uses ~36% of the GPU, A+A ~57%.
 
-Firefox does not offer the timer query, so there the meter shows the output
-frame rate and whether it keeps up with the video (frames drawn vs the video's
-own frame rate), but no GPU time. Speed is about the same as Chrome. Same
+Firefox does not offer the timer query, so there the meter shows frame-rate
+figures instead of GPU time: the video's fps, the share of its frames drawn,
+frames missed per second, passes and VRAM, and whether it keeps up. Speed is about the same as Chrome. Same
 RTX 2060, 1080p60 source: Mode A → 4K 57 fps in Firefox, 55 in Chrome; A+A → 4K
 38 / 39; Mode A → 8K 34 / 31.
 

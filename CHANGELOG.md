@@ -20,9 +20,11 @@
   that collapsed the video to 0×0 and the page went black.
 - Browsers without GPU timer queries (Firefox): the popup now says "GPU timing
   not available in this browser" instead of "no measurements yet" forever, and
-  the fullscreen menu shows n/a and hides its empty graph. Both still say
-  "keeping up" or "dropping frames", by comparing frames drawn with the video's
-  own frame rate, which Firefox now also measures while upscaling.
+  the GPU fields and graph make way for frame-rate figures: the video's fps,
+  the share of its frames drawn, frames missed per second, and passes and VRAM.
+  The top chip shows the frame rate drawn. The popup and the fullscreen menu
+  say "keeping up" (97% or more of the video's frames drawn), "near limit"
+  (90% or more) or "dropping frames".
 - `npm run pack` / `pack:firefox` on Linux and macOS now write a real zip
   (Info-ZIP); GNU tar wrote a tar archive named `.zip`.
 
