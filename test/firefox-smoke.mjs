@@ -1,5 +1,5 @@
-// Firefox smoke test: same-origin (VP9, H.264), CORS, no-CORS, cross-origin iframe and the
-// fullscreen redirect must behave as in Chrome.
+// Firefox smoke test: same-origin (VP9, H.264), CORS, no-CORS, cross-origin iframe, a bare
+// video file page and the fullscreen redirect must behave as in Chrome.
 //
 // Needs ffmpeg on PATH, Playwright (global or local) with its Firefox
 // (`npx playwright install firefox`), and a fresh `npm run build:firefox`.
@@ -173,6 +173,22 @@ try {
     const canvas = await canvasSize(p);
     const ok = fast(info) && (want === null || (canvas?.[0] === want[0] && canvas?.[1] === want[1]));
     check(name, ok, `status=${info?.status} fps=${info?.stats?.fps} canvas=${canvas} ${info?.message ?? ''}`);
+    await p.close();
+  }
+
+  {
+    // Firefox's own page for a bare video file: upscaling must not collapse the video to 0x0.
+    const p = await ctx.newPage();
+    await p.goto(`http://${page}/v.webm`);
+    await p.evaluate(() => { const v = document.querySelector('video'); v.muted = true; v.loop = true; return v.play(); });
+    await p.waitForTimeout(12000);
+    const info = (await list(p))[0];
+    const r = await p.evaluate(() => {
+      const box = (el) => { const b = el?.getBoundingClientRect(); return b && [b.x, b.y, b.width, b.height].map(Math.round); };
+      return { video: box(document.querySelector('video')), canvas: box(document.querySelector('canvas.a4k-canvas')) };
+    });
+    const over = r.canvas && r.video[2] > 0 && r.canvas.every((n, i) => Math.abs(n - r.video[i]) <= 1);
+    check('direct-file', fast(info) && over, `status=${info?.status} fps=${info?.stats?.fps} video=${r.video} canvas=${r.canvas}`);
     await p.close();
   }
 

@@ -408,7 +408,7 @@ class VideoUpscaler {
   private mountCanvas(canvas: HTMLCanvasElement) {
     const parent = this.video.parentElement;
     if (!parent) return;
-    if (getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
+    if (!pageLevel(parent) && getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
     this.video.insertAdjacentElement('afterend', canvas);
     this.layout();
   }
@@ -450,9 +450,15 @@ class VideoUpscaler {
     const [posX, posY] = cs.objectPosition.split(' ');
     const ox = objectOffset(posX, bw - pw);
     const oy = objectOffset(posY, bh - ph);
-    // An absolutely positioned child is placed from the parent's padding box and scrolls with it.
-    c.style.left = `${vr.left - pr.left - parent.clientLeft + parent.scrollLeft + boxL + ox}px`;
-    c.style.top = `${vr.top - pr.top - parent.clientTop + parent.scrollTop + boxT + oy}px`;
+    if (pageLevel(parent) && getComputedStyle(parent).position === 'static') {
+      // No positioned parent (see mountCanvas): the canvas is placed in page coordinates.
+      c.style.left = `${vr.left + window.scrollX + boxL + ox}px`;
+      c.style.top = `${vr.top + window.scrollY + boxT + oy}px`;
+    } else {
+      // An absolutely positioned child is placed from the parent's padding box and scrolls with it.
+      c.style.left = `${vr.left - pr.left - parent.clientLeft + parent.scrollLeft + boxL + ox}px`;
+      c.style.top = `${vr.top - pr.top - parent.clientTop + parent.scrollTop + boxT + oy}px`;
+    }
     c.style.width = `${pw}px`;
     c.style.height = `${ph}px`;
     // object-fit: cover (or none) paints past the content box; clip the canvas to it like the video.
@@ -462,6 +468,14 @@ class VideoUpscaler {
     const z = cs.zIndex;
     c.style.zIndex = z && z !== 'auto' ? String(Number(z) + 1) : '1';
   }
+}
+
+/**
+ * <body>/<html> are never made position: relative. Firefox's page for a bare video file centers the
+ * video absolutely inside a zero-height <body>, so a relative <body> would collapse it to 0x0.
+ */
+function pageLevel(el: Element): boolean {
+  return el === document.body || el === document.documentElement;
 }
 
 /** CSS size of the picture inside a bw x bh content box for the given object-fit. */
