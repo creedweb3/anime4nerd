@@ -9,6 +9,14 @@ export function requestedScale(u: Upscale): number | null {
   return u === 'auto' ? null : parseInt(u, 10);
 }
 
+/**
+ * Verdict without GPU timing (Firefox): true when fewer frames are drawn than the video plays,
+ * null when the video's own frame rate is not known yet.
+ */
+export function dropsFrames(renderedFps: number, sourceFps: number | null): boolean | null {
+  return sourceFps ? renderedFps < sourceFps * 0.95 : null;
+}
+
 /** " · 16× capped: GPU limit" when the renderer ran below the manual choice, else ''. */
 export function capNote(u: Upscale, actualScale: number): string {
   const want = requestedScale(u);
