@@ -13,7 +13,7 @@ const common = {
   bundle: true,
   target: firefox ? 'firefox128' : 'chrome120',
   // Firefox's chrome.* is a callback-era alias; browser.* is the same API with promises everywhere.
-  define: firefox ? { chrome: 'browser' } : undefined,
+  define: firefox ? { chrome: 'browser', __FIREFOX__: 'true' } : { __FIREFOX__: 'false' },
   loader: { '.glsl': 'text' },
   sourcemap: watch ? 'inline' : false,
   minify: !watch,
