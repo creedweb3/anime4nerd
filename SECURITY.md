@@ -30,7 +30,7 @@ tampered with. Each is addressed below.
 | Risk | Protection |
 |---|---|
 | Popup HTML injection from page titles | All page-derived strings are inserted with `textContent`; the only `innerHTML` uses are constant templates. |
-| A page spoofing extension messages | No `externally_connectable`, so web pages cannot message the extension. The background worker accepts no messages at all. |
+| A page spoofing extension messages | No `externally_connectable`, so web pages cannot message the extension. The background script (a service worker in Chrome) accepts no messages at all. |
 | Broad site access | Required because players are embedded from arbitrary domains. The content script does no work beyond finding `<video>` elements until the user switches a video on. Users can narrow access per site in the browser. |
 | Regex denial of service from long page strings | Every page string is capped at 300 characters (URLs at 2048) before any pattern runs; overlapping quantifiers were removed. |
 | Deeply nested JSON-LD | Parser depth capped at 8 levels / 200 nodes; the handler is wrapped so a failure returns `null` instead of hanging the popup. |
@@ -40,7 +40,7 @@ tampered with. Each is addressed below.
 | A page restyling the fullscreen menu to steal clicks (clickjacking) | The menu lives in a closed shadow root with its position and visibility pinned by inline `!important` styles, and a click only counts if it is a real user event on a menu that is not scaled, oversized or faded. |
 | Code in the page's own JavaScript world | `fullscreen-redirect.js` (page world, ~30 lines) only wraps `requestFullscreen` so a video marked `data-a4k-on` fullscreens its parent instead. It has no extension APIs, reads no page data and sends nothing; a page can only affect its own fullscreen behaviour through it. |
 | A page stopping the extension with a forged takeover event | The `a4k-takeover` DOM event (used to retire a copy orphaned by an extension reload) is obeyed only by a copy whose extension context is already gone. |
-| Fingerprinting via extension files | `gpu.js` uses `use_dynamic_url`, so its URL changes per session. |
+| Fingerprinting via extension files | `gpu.js` uses `use_dynamic_url`, so its URL changes per session. Firefox ignores that key (the Firefox build drops it); there, extension URLs carry a random id per installation. |
 | Supply chain | Zero runtime npm dependencies in the shipped package. Build uses esbuild + TypeScript only. Shaders are copied verbatim from a pinned bloc97 commit (see `THIRD_PARTY_NOTICES.md`). |
 
 ## What was reviewed
@@ -73,11 +73,14 @@ canvas already was.
 
 ## For people who install it
 
-- Install only from the Chrome Web Store listing or from a zip whose source you
-  trust. Unpacked installs run whatever is in the folder.
+- Install only from the Chrome Web Store or Firefox Add-ons listing, or from a
+  zip whose source you trust. Unpacked and temporary installs run whatever is in
+  the folder.
 - Want it on fewer sites? `chrome://extensions` → Anime4Nerd → Details →
   Site access → "On specific sites", then add only the sites you watch on
-  (and their player domains, which the popup shows on each video card).
+  (and their player domains, which the popup shows on each video card). In
+  Firefox, the site permissions are under `about:addons` → Anime4Nerd →
+  Permissions.
 - It only acts on a video after you switch that video on in the popup.
 - It cannot and does not bypass DRM. If a video is protected, you will see
   "This video source does not allow browser upscaling".
@@ -91,8 +94,8 @@ canvas already was.
   updating `PRIVACY.md` and this file.
 - Pin the bloc97 shader commit; re-run the review checklist above before a
   release that touches message handling or the popup renderer.
-- Sign releases: the Chrome Web Store signs the CRX; for zips, publish a SHA-256
-  next to the download.
+- Sign releases: the Chrome Web Store signs the CRX and addons.mozilla.org signs
+  the Firefox package; for zips, publish a SHA-256 next to the download.
 
 ## Reporting a vulnerability
 

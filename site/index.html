@@ -27,7 +27,7 @@
 <main class="wrap" id="top">
   <section class="hero">
     <div>
-      <div class="phead"><span>browser extension · chrome · brave · edge</span></div>
+      <div class="phead"><span>browser extension · chrome · brave · edge · firefox</span></div>
       <h1><span>Sharper</span><span class="o">anime.</span></h1>
       <p class="lede">Right in your browser. The original Anime4K neural upscaler, running live on your own GPU. Switch it on for any web video and every frame is restored and doubled in resolution, or more.</p>
       <div class="cta">
@@ -288,6 +288,13 @@
         </ol>
         <div class="foot"><span class="chip">release 1.1.1</span><span class="chip">mit</span><a class="chip" href="https://github.com/creedweb3/anime4nerd" rel="noopener">source on github →</a></div>
         </div>
+        <div class="panel">
+        <div class="phead"><span>option c · firefox</span></div>
+        <h3>From Firefox Add-ons</h3>
+        <p>Coming soon to addons.mozilla.org, for Firefox 140 or newer. Developers can load it from source as a temporary add-on; the README has the steps.</p>
+        <!-- AMO placeholder: once listed, replace the "coming soon" chip with <a class="btn primary" href="https://addons.mozilla.org/firefox/addon/anime4nerd/" rel="noopener">add to firefox</a> (check the real slug). -->
+        <div class="foot"><span class="chip">firefox add-ons · coming soon</span><span class="chip">firefox 140+</span><span class="chip">webgl2 gpu</span><a class="chip" href="https://github.com/creedweb3/anime4nerd#install-firefox" rel="noopener">readme →</a></div>
+        </div>
       </div>
   </section>
 
@@ -311,9 +318,9 @@
         <div class="panel faq">
         <details name="faq" open><summary>Does it work on live action or regular shows?</summary><p>It runs on any video, but it is made for anime. The Anime4K networks are trained on hand-drawn animation: clean line art and flat colour. On live action, films and 3D-animated shows the result can look over-sharpened or painted, so the browser's normal scaling usually looks better there.</p></details>
         <details name="faq"><summary>Does it work on every site?</summary><p>It works on any site where the video is served with cross-origin access, which most players do. DRM-protected video (Widevine) cannot be read by any extension, so it plays normally.</p></details>
-        <details name="faq"><summary>What do I need?</summary><p>Chrome, Brave or Edge 116 or newer and a GPU with WebGL2. A mid-range GPU handles Mode A at 24 fps comfortably.</p></details>
+        <details name="faq"><summary>What do I need?</summary><p>Chrome, Brave or Edge 116 or newer (Firefox 140 or newer, coming soon) and a GPU with WebGL2. A mid-range GPU handles Mode A at 24 fps comfortably.</p></details>
         <details name="faq"><summary>Can it upscale more than 2×?</summary><p>Yes. The Anime4K networks are trained for exactly 2×, so 4× and up chain extra 2× passes. Auto picks 4× when a small video fills a big screen, like 720p fullscreen on a 1440p or 4K display. You can also choose up to 32×; Anime4Nerd uses the largest factor your GPU can hold (8K output at most) and says when it capped. Above 4× the browser shrinks most of the extra detail back to your screen size.</p></details>
-        <details name="faq"><summary>Can I limit it to some sites?</summary><p>Yes. In <code>chrome://extensions</code>, open Anime4Nerd's details and set Site access to "On specific sites".</p></details>
+        <details name="faq"><summary>Can I limit it to some sites?</summary><p>Yes. In <code>chrome://extensions</code>, open Anime4Nerd's details and set Site access to "On specific sites". In Firefox, use <code>about:addons</code> → Anime4Nerd → Permissions.</p></details>
         <div class="foot"><span>Something else?</span><a class="chip" href="https://github.com/creedweb3/anime4nerd/issues" rel="noopener">ask on github →</a></div>
         </div>
       </div>
