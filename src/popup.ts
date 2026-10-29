@@ -1,5 +1,5 @@
 import {
-  Message, PRESETS, Settings, VideoInfo, capNote, loadSettings, onSettingsChanged, onSourcesChanged, saveSettings, setSource,
+  Message, PRESETS, Settings, VideoInfo, capNote, dropsFrames, loadSettings, onSettingsChanged, onSourcesChanged, saveSettings, setSource,
 } from './settings';
 import { EMPTY_META, MediaMeta } from './media-meta';
 import { WHATS_NEW_URL, clearWhatsNew, pendingWhatsNew } from './whats-new';
@@ -233,7 +233,8 @@ function paintPerf(v: VideoInfo | null) {
 
   let vc = 'dim'; let vt = '● paused';
   if (v.status === 'Unavailable') { vc = 'bad'; vt = '● not possible'; } else if (v.status === 'Loading') { vc = 'warn'; vt = '● starting'; } else if (live) {
-    if (load === null) { vc = 'ok'; vt = '● running'; } else if (load > 1) { vc = 'bad'; vt = '● dropping frames'; } else if (load > 0.8) { vc = 'warn'; vt = '● near limit'; } else { vc = 'ok'; vt = '● keeping up'; }
+    const drops = load === null && !s!.timerSupported ? dropsFrames(s!.fps, v.sourceFps ?? s!.sourceFps) : null;
+    if (drops !== null) { vc = drops ? 'bad' : 'ok'; vt = drops ? '● dropping frames' : '● keeping up'; } else if (load === null) { vc = 'ok'; vt = '● running'; } else if (load > 1) { vc = 'bad'; vt = '● dropping frames'; } else if (load > 0.8) { vc = 'warn'; vt = '● near limit'; } else { vc = 'ok'; vt = '● keeping up'; }
   }
   setText(perf.verdict, vt);
   perf.verdict.className = `verdict ${vc}`;

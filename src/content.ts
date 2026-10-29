@@ -338,7 +338,7 @@ class VideoUpscaler {
           // video, so it polls instead (see nextDecodedFrame).
           this.usesVfc = !__FIREFOX__ && typeof v.requestVideoFrameCallback === 'function';
           this.frameHandle = this.usesVfc
-            ? v.requestVideoFrameCallback((_now, meta) => { this.frameHandle = null; this.noteSourceFrame(meta); this.frame(); })
+            ? v.requestVideoFrameCallback((_now, meta) => { this.frameHandle = null; this.noteSourceFrame(meta.presentedFrames); this.frame(); })
             : this.nextDecodedFrame();
         }
       }
@@ -351,7 +351,7 @@ class VideoUpscaler {
     const tick = (_now: number, meta: VideoFrameCallbackMetadata) => {
       this.fpsProbe = null;
       if (this.enabled) return;
-      this.noteSourceFrame(meta);
+      this.noteSourceFrame(meta.presentedFrames);
       if (!this.video.paused && !this.video.ended) this.fpsProbe = this.video.requestVideoFrameCallback(tick);
     };
     this.fpsProbe = this.video.requestVideoFrameCallback(tick);
@@ -361,9 +361,10 @@ class VideoUpscaler {
     if (this.fpsProbe !== null) { this.video.cancelVideoFrameCallback(this.fpsProbe); this.fpsProbe = null; }
   }
 
-  private noteSourceFrame(meta: VideoFrameCallbackMetadata) {
+  /** `frames`: any counter that rises by one per source frame (rVFC presentedFrames, decoded frames). */
+  private noteSourceFrame(frames: number) {
     const now = performance.now();
-    this.vfcSamples.push({ t: now, presented: meta.presentedFrames });
+    this.vfcSamples.push({ t: now, presented: frames });
     while (this.vfcSamples.length && now - this.vfcSamples[0].t > 2000) this.vfcSamples.shift();
     const a = this.vfcSamples[0];
     const b = this.vfcSamples[this.vfcSamples.length - 1];
@@ -377,8 +378,10 @@ class VideoUpscaler {
     const decoded = () => this.video.getVideoPlaybackQuality().totalVideoFrames;
     const last = decoded();
     const tick = () => {
-      if (decoded() === last) { this.frameHandle = requestAnimationFrame(tick); return; }
+      const now = decoded();
+      if (now === last) { this.frameHandle = requestAnimationFrame(tick); return; }
       this.frameHandle = null;
+      this.noteSourceFrame(now);
       this.frame();
     };
     return requestAnimationFrame(tick);
