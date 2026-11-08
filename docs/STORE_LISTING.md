@@ -33,7 +33,7 @@ Not affiliated with bloc97 or any streaming site. Anime4K is MIT licensed.
 Screenshot credits: the before/after image uses "A snapshot from the 2012 demo release from the Morevna Project" by Morevna Project (morevnaproject.org), licensed CC BY 3.0 (creativecommons.org/licenses/by/3.0). Cropped and upscaled for comparison. No endorsement implied.
 
 **Permission justifications (store form):**
-- `storage`: saves the chosen preset and which videos' sites are switched on.
+- `storage`: saves the chosen preset, which sites are switched on, and local usage counts (upscaled time and episodes) that decide when the popup shows a "rate it" card. Stays on the device; nothing is sent.
 - `scripting`: adds the upscaler to tabs that were already open at install, so no reload is needed.
 - `webNavigation`: lists the frames of the current tab, because video players are usually embedded in iframes.
 - Host permission `<all_urls>`: video players are embedded from many different domains (the page and the player's host differ), so the extension must be able to find a `<video>` in any frame. It reads frames only from videos the user switches on and sends nothing anywhere.
