@@ -1,7 +1,7 @@
 # Security
 
 This document describes what Anime4Nerd can and cannot do, how it is protected,
-what was reviewed, and how to use it safely. Last reviewed: 2026-10-26 (v1.1.0).
+what was reviewed, and how to use it safely. Last reviewed: 2026-11-08 (v1.2.0).
 
 ## Threat model in one paragraph
 
@@ -70,6 +70,17 @@ size rather than by every intermediate texture; the menu could be restyled by
 the page to capture clicks; a page could forge the takeover event; and a retired
 copy kept answering popup messages. The menu host is visible to the page, as the
 canvas already was.
+
+A fourth pass (2026-11-08, v1.2.0) covered the Firefox build: its manifest
+(Firefox background scripts, gecko id, `data_collection_permissions: none`), the
+Firefox render loop, the page-level overlay placement, the frame-rate stats, and
+the build and pack scripts. It found no critical, high or medium issues and
+confirmed that no code sends data anywhere, that page-derived text reaches the
+popup and menu only as text, and that the package holds only the extension
+files. Remaining low-severity notes: a page can tell the extension is installed
+from its takeover event and the page-world fullscreen flag, and the Firefox
+render loop checks for a new frame once per animation frame while a playing
+video stalls.
 
 ## For people who install it
 

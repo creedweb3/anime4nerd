@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 (2026-11-08)
 
 ### Added
 - Firefox support (Firefox 140 or newer; the manifest also allows Firefox for
