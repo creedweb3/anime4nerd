@@ -42,7 +42,7 @@ From source:
 1. Open `chrome://extensions` (or `brave://extensions`).
 2. Turn on **Developer mode**.
 3. **Load unpacked** → pick the `dist/` folder. (Or `npm run pack` and share
-   `Anime4Nerd prod.zip`; it unzips to the same folder.)
+   `Anime4Nerd chrome.zip`; it unzips to the same folder.)
 4. Open a page with a video, click the extension icon, and flip the switch on
    the video card.
 

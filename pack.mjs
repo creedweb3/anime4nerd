@@ -1,4 +1,4 @@
-// Zip dist/ into "Anime4Nerd prod.zip" with forward-slash entry names (required by the Chrome Web Store),
+// Zip dist/ into "Anime4Nerd chrome.zip" with forward-slash entry names (required by the Chrome Web Store),
 // then print its SHA-256 so a downloader can verify it.
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -8,7 +8,7 @@ const version = JSON.parse(readFileSync('manifest.json', 'utf8')).version;
 // --firefox zips dist-firefox/ for addons.mozilla.org instead.
 const firefox = process.argv.includes('--firefox');
 const dir = firefox ? 'dist-firefox' : 'dist';
-const out = firefox ? 'Anime4Nerd firefox.zip' : 'Anime4Nerd prod.zip';
+const out = firefox ? 'Anime4Nerd firefox.zip' : 'Anime4Nerd chrome.zip';
 if (existsSync(out)) rmSync(out);
 if (process.platform === 'win32') {
   // System32's bsdtar (Windows 10+); -a picks zip from the extension. Git-for-Windows puts GNU tar
