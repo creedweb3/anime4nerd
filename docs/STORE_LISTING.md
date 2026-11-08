@@ -1,15 +1,15 @@
 # Chrome Web Store listing (draft)
 
-**Name:** Anime4Nerd
+**Name:** Anime4Nerd: Anime Upscaler & Video Enhancer (Anime4K) (from `manifest.json`)
 
 **Summary (132 chars max):**
-Real-time 2x–8x Anime4K upscaling for any web video. Original bloc97 shaders, runs on your GPU, nothing leaves your browser.
+Anime upscaler for any web video: real-time Anime4K 2x–8x upscaling on your GPU. Sharper lines, less blur. Runs locally. (from `manifest.json`)
 
 **Category:** Entertainment (or Productivity)
 
 **Description:**
 
-Anime4Nerd runs the open-source Anime4K shaders on any web video, live, in your browser. Switch a video on and it is restored and upscaled 2× (or more) on your GPU while it plays: cleaner lines, less blur, less noise.
+An anime upscaler and video enhancer for the browser. Anime4Nerd runs the open-source Anime4K shaders on any web video, in real time. Switch a video on and it is restored and upscaled 2× (or more) on your GPU while it plays: sharper anime lines, less blur, less noise. A 1080p episode becomes 4K; 720p becomes 1440p, or 4K at 4×.
 
 What you get
 • Six presets: Mode A / B / C and their stronger A+A / B+B / C+A variants

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.2 (2026-11-08)
+
+### Changed
+- Extension name is now "Anime4Nerd: Anime Upscaler & Video Enhancer (Anime4K)" and the
+  summary starts with "Anime upscaler", so the Web Store search finds it. The
+  short name stays "Anime4Nerd". No code changes.
+
 ## 1.2.1 (2026-11-08)
 
 ### Added

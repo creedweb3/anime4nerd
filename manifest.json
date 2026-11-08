@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "Anime4Nerd",
+  "name": "Anime4Nerd: Anime Upscaler & Video Enhancer (Anime4K)",
   "short_name": "Anime4Nerd",
-  "version": "1.2.1",
-  "description": "Real-time 2x–8x Anime4K upscaling for any web video. Runs the original bloc97 shaders in WebGL2, on your GPU.",
+  "version": "1.2.2",
+  "description": "Anime upscaler for any web video: real-time Anime4K 2x–8x upscaling on your GPU. Sharper lines, less blur. Runs locally.",
   "author": "Anime4Nerd authors",
   "minimum_chrome_version": "116",
   "icons": {
