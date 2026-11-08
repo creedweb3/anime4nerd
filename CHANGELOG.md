@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2.1 (2026-11-08)
+
+### Added
+- Chrome build: a "rate it" card in the popup. Upscaled watch time is counted
+  locally (`chrome.storage.local`, key `anime4k-rate`); a video upscaled for
+  10 minutes counts as an episode. The card appears at 3, 12, 48 and 200
+  episodes with the totals and a rotating badge and line. ✕ hides it until the
+  next milestone; after "rate it" was clicked, the next card offers "already
+  rated", which stops it for good. Nothing is synced or sent. The Firefox
+  build is unchanged.
+
 ## 1.2.0 (2026-11-08)
 
 ### Added
