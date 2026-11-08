@@ -17,6 +17,19 @@
     <span><span class="update-label">updated</span><span class="update-dot">●</span> v<b id="whatsnew-ver"></b></span><span class="update-link">what's new →</span>
   </a>
 
+  <section class="rate-card" id="rate" hidden>
+    <button type="button" class="rate-x" id="rate-x" title="Hide until the next milestone" aria-label="Hide">✕</button>
+    <div class="rate-top">you've upscaled<span class="rate-badge" id="rate-badge"></span></div>
+    <div class="rate-big" id="rate-big"></div>
+    <div class="rate-row">
+      <div class="rate-lines"><span id="rate-l1"></span><br /><span id="rate-l2"></span></div>
+      <div class="rate-actions">
+        <a class="rate-go" id="rate-go" target="_blank" rel="noopener">★ rate it</a>
+        <button type="button" class="rate-done" id="rate-done" hidden>✓ already rated</button>
+      </div>
+    </div>
+  </section>
+
   <section class="panel">
     <div class="panel-head"><span>playing now</span><span id="count"></span></div>
     <div class="sources" id="sources"></div>

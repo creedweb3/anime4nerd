@@ -12,6 +12,7 @@ import type { Anime4kRenderer } from './gpu';
 import { collectPageMeta, mediaSessionMeta } from './media-meta';
 import { uploadSize } from './video-size';
 import { FullscreenMenu } from './fullscreen-menu';
+import { EPISODE_SECONDS } from './rate-prompt';
 
 type GpuModule = typeof import('./gpu');
 let gpuModule: Promise<GpuModule> | null = null;
@@ -98,6 +99,20 @@ class VideoUpscaler {
   private static readonly MAX_SIZE_REBUILDS = 3;
 
   private static readonly SIZE_REBUILD_WINDOW_MS = 30000;
+
+  // Watch counting for the rating card (see rate-prompt.ts): upscaled time on the current
+  // stream, and whether it already counted as an episode.
+  private lastFrameAt: number | null = null;
+
+  private watchSrc = '';
+
+  private watchSeconds = 0;
+
+  private episodeCounted = false;
+
+  private lastMediaTime = 0;
+
+  private static readonly RESTART_SECONDS = 60;
 
   constructor(video: HTMLVideoElement, settings: Settings, enabled: boolean, onUpdate: () => void) {
     this.video = video;
@@ -321,6 +336,7 @@ class VideoUpscaler {
       if (gen !== this.generation) return;
       if (this.canvas) this.canvas.hidden = false;
       this.setStatus('Active');
+      if (!__FIREFOX__) this.countWatch();
     } catch (e) {
       if (gen === this.generation) {
         // gpu.js is a separate bundle, so match the error by name rather than instanceof.
@@ -343,6 +359,27 @@ class VideoUpscaler {
         }
       }
     }
+  }
+
+  /**
+   * Credit the time since the previous drawn frame. Gaps of a second or more (paused, seeking,
+   * hidden, switched off) are not counted, so only time spent actually upscaling adds up.
+   */
+  private countWatch() {
+    const now = performance.now();
+    const gap = this.lastFrameAt === null ? 0 : (now - this.lastFrameAt) / 1000;
+    this.lastFrameAt = now;
+    if (gap <= 0 || gap >= 1) return;
+    const src = this.video.currentSrc || this.video.src;
+    const t = this.video.currentTime;
+    // A new stream, or a jump back to the start of the same one (players that reuse one
+    // MediaSource for the next episode), starts a new episode.
+    const restarted = t < VideoUpscaler.RESTART_SECONDS && this.lastMediaTime - t > VideoUpscaler.RESTART_SECONDS;
+    this.lastMediaTime = t;
+    if (src !== this.watchSrc || restarted) { this.watchSrc = src; this.watchSeconds = 0; this.episodeCounted = false; }
+    this.watchSeconds += gap;
+    watchReport.seconds += gap;
+    if (!this.episodeCounted && this.watchSeconds >= EPISODE_SECONDS) { this.episodeCounted = true; watchReport.episodes += 1; }
   }
 
   /** Keep measuring the video's frame rate while Anime4K is off (one callback per frame, no drawing). */
@@ -575,6 +612,24 @@ function notify() {
   syncMenu();
 }
 
+// --- watch counting for the rating card (Chrome only) -------------------------------
+// Totals since the last report; sent to the background about once a minute and on page hide.
+const watchReport = { seconds: 0, episodes: 0 };
+const WATCH_REPORT_MS = 60000;
+let watchTimer: number | null = null;
+
+function reportWatch() {
+  if (watchReport.seconds < 1 && !watchReport.episodes) return;
+  const msg: Message = { type: 'a4k-watch', seconds: watchReport.seconds, episodes: watchReport.episodes };
+  watchReport.seconds = 0;
+  watchReport.episodes = 0;
+  // A failed send puts the numbers back for the next report.
+  const restore = () => { watchReport.seconds += msg.seconds; watchReport.episodes += msg.episodes; };
+  try {
+    if (contextAlive()) chrome.runtime.sendMessage(msg).catch(restore);
+  } catch { /* context gone: nothing left to report to */ }
+}
+
 // --- orphan handling -------------------------------------------------------------
 // When the extension reloads or updates, this copy keeps running but every chrome.* call
 // throws "Extension context invalidated", while a fresh copy is injected next to it.
@@ -600,6 +655,8 @@ function shutdown() {
   document.removeEventListener(TAKEOVER_EVENT, onTakeover);
   observer?.disconnect();
   if (scanTimer !== null) window.clearInterval(scanTimer);
+  if (watchTimer !== null) window.clearInterval(watchTimer);
+  window.removeEventListener('pagehide', reportWatch);
   for (const u of upscalers.values()) u.destroy();
   upscalers.clear();
   menu.mount(null);
@@ -693,5 +750,9 @@ if (!window.__a4kLoaded) {
   scan();
   // Videos that become visible later (lazy players) are picked up by periodic rescans.
   scanTimer = window.setInterval(queueScan, 2000);
+  if (!__FIREFOX__) {
+    watchTimer = window.setInterval(reportWatch, WATCH_REPORT_MS);
+    window.addEventListener('pagehide', reportWatch);
+  }
   })();
 }

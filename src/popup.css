@@ -65,6 +65,80 @@ body {
 .update-note:hover, .update-note:focus-visible { border-color: var(--dim); outline: none; }
 .update-note:hover .update-link, .update-note:focus-visible .update-link { color: var(--on); }
 
+/* rating card (Chrome; see rate-prompt.ts) ---------------------------------- */
+.rate-card {
+  --accent: var(--fg);
+  position: relative;
+  margin-bottom: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line2);
+  background: var(--panel);
+}
+.rate-card[hidden] { display: none; }
+.rate-card.lv2, .rate-card.lv3 {
+  --accent: rgb(var(--g));
+  border-color: rgba(var(--g), 0.5);
+  background: linear-gradient(135deg, rgba(var(--g), 0.12), transparent 60%) var(--panel);
+}
+.rate-card.lv4 {
+  --accent: var(--warn);
+  border-color: rgba(227, 197, 138, 0.6);
+  background: linear-gradient(135deg, rgba(227, 197, 138, 0.14), transparent 60%) var(--panel);
+}
+.rate-top { color: var(--faint); font-size: 10px; }
+.rate-badge {
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 1px solid var(--line2);
+  color: var(--faint);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}
+.rate-card.lv2 .rate-badge, .rate-card.lv3 .rate-badge, .rate-card.lv4 .rate-badge { color: var(--accent); border-color: var(--accent); }
+.rate-big { color: var(--accent); font-size: 22px; font-weight: 700; line-height: 1.1; }
+.rate-row { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; margin-top: 8px; }
+.rate-lines { color: var(--faint); font-size: 10px; }
+.rate-actions { display: flex; flex-direction: column; align-items: stretch; gap: 4px; flex: none; }
+.rate-go {
+  padding: 4px 10px;
+  border: 1px solid var(--warn);
+  background: var(--warn);
+  color: #0b0b0b;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.rate-go:hover, .rate-go:focus-visible { filter: brightness(1.1); outline: none; }
+.rate-done {
+  padding: 2px 8px;
+  border: 1px solid var(--line2);
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.rate-done[hidden] { display: none; }
+.rate-done:hover, .rate-x:hover { color: var(--on); }
+.rate-x {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--faint);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
 /* panels ------------------------------------------------------------------- */
 .panel {
   border: 1px solid var(--line);

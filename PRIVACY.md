@@ -1,6 +1,6 @@
 # Anime4Nerd — Privacy Policy
 
-_Last updated: 2026-10-29_
+_Last updated: 2026-11-08_
 
 **Short version: Anime4Nerd does not collect, store, or transmit any personal data. Everything runs inside your browser.**
 
@@ -16,7 +16,8 @@ At install your browser asks you to allow the extension on all websites. That is
 
 - **Video frames** are read into GPU memory to be upscaled and are discarded immediately after each frame is drawn. They are never saved or sent anywhere.
 - **Page metadata** (page title, headings, Open Graph tags, schema.org data, Media Session metadata) is read only when you open the popup, to label the video (for example "Attack on Titan · E1"). It stays in the popup and is not stored.
-- **Settings** (chosen preset, line effects, upscale factor, which sites you switched on) are stored with the browser's extension storage. The preset, line effects and upscale factor may sync between your own browsers if you have Chrome sync or Firefox Sync turned on; the per-site switches stay on this device. The only other stored value is the version number of an update whose "what's new" note you have not seen yet. Nothing else is stored.
+- **Settings** (chosen preset, line effects, upscale factor, which sites you switched on) are stored with the browser's extension storage. The preset, line effects and upscale factor may sync between your own browsers if you have Chrome sync or Firefox Sync turned on; the per-site switches stay on this device. The only other stored values are the version number of an update whose "what's new" note you have not seen yet, and the usage counts below. Nothing else is stored.
+- **Usage counts** (Chrome, Edge, Brave): the total time upscaling has run and how many videos were upscaled for at least 10 minutes, plus which "rate it" card you last dismissed or answered, whether you clicked it or said you already rated, and whether you had the extension before these counts were added. These are numbers only: no titles, sites or addresses. They stay on this device (never synced, never sent) and are used only to show that card in the popup. Removing the extension deletes them.
 - **Performance numbers** (GPU time per frame, frame rate) are measured locally and shown in the popup. They are not recorded.
 
 ## Data leaving your device
@@ -27,7 +28,7 @@ None. The extension makes no network requests of its own. It has no analytics, n
 
 | Permission | Why |
 |---|---|
-| `storage` | Save your preset and the per-site on/off switch |
+| `storage` | Save your preset, the per-site on/off switch and the local usage counts |
 | `scripting` | Add the upscaler to tabs that were already open when the extension was installed |
 | `webNavigation` | Find the frames of the current tab, because players are often in iframes |
 | Access to all sites | Find videos and read their frames on whatever site the player is hosted on |

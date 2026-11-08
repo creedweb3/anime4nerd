@@ -3,6 +3,7 @@ import {
 } from './settings';
 import { EMPTY_META, MediaMeta } from './media-meta';
 import { WHATS_NEW_URL, clearWhatsNew, pendingWhatsNew } from './whats-new';
+import { REVIEW_URL, RateAction, cardFor, loadRate, pendingLevel } from './rate-prompt';
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
 const hintEl = $('#hint');
@@ -346,12 +347,41 @@ async function showWhatsNew() {
   await clearWhatsNew().catch(() => {});
 }
 
+/** Rating card at a new milestone (Chrome only). Answers go to the background, which stores them. */
+async function showRateCard() {
+  if (__FIREFOX__) return;
+  const state = await loadRate().catch(() => null);
+  const level = state && pendingLevel(state);
+  if (!state || !level) return;
+  const card = cardFor(state, level);
+  const el = $('#rate');
+  el.classList.add(`lv${card.level}`);
+  setText($('#rate-badge'), card.badge);
+  setText($('#rate-big'), card.big);
+  setText($('#rate-l1'), card.lines[0]);
+  setText($('#rate-l2'), card.lines[1]);
+  const go = $<HTMLAnchorElement>('#rate-go');
+  go.href = REVIEW_URL;
+  const done = $('#rate-done');
+  done.hidden = !card.alreadyRated;
+  const answer = (action: RateAction) => {
+    el.hidden = true;
+    chrome.runtime.sendMessage({ type: 'a4k-rate', action, level: card.level } satisfies Message).catch(() => {});
+  };
+  go.addEventListener('click', () => answer('clicked'));
+  go.addEventListener('auxclick', (e) => { if (e.button === 1) answer('clicked'); }); // middle-click opens a tab too
+  done.addEventListener('click', () => answer('rated'));
+  $('#rate-x').addEventListener('click', () => answer('dismiss'));
+  el.hidden = false;
+}
+
 (async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   tabId = tab?.id;
   try { tabHost = new URL(tab?.url ?? '').host; } catch { /* no url permission */ }
   tick();
   void showWhatsNew();
+  void showRateCard();
   paintSettings(await loadSettings());
   onSettingsChanged((s) => { paintSettings(s); void refresh(); });
   onSourcesChanged(() => { void refresh(); });

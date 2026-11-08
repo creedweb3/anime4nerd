@@ -1,3 +1,5 @@
+import type { RateAction } from './rate-prompt';
+
 export type Preset = 'A' | 'B' | 'C' | 'AA' | 'BB' | 'CA';
 
 /** 'auto' picks 4x only when the video is drawn at more than 2x its source size. */
@@ -160,4 +162,8 @@ export type Message =
   | { type: 'a4k-list' }
   | { type: 'a4k-page-meta' }
   | { type: 'a4k-highlight'; id: string | null }
-  | { type: 'a4k-changed' };
+  | { type: 'a4k-changed' }
+  // content -> background: upscaled time and finished episodes since the last report (rate-prompt.ts)
+  | { type: 'a4k-watch'; seconds: number; episodes: number }
+  // popup -> background: answer to the rating card
+  | { type: 'a4k-rate'; action: RateAction; level: number };

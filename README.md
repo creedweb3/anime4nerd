@@ -225,6 +225,25 @@ then `npx playwright install firefox`). It runs headless, installs
 and checks same-origin VP9 and H.264, a CORS source, a cross-origin iframe, the
 no-CORS message, a bare video file page and the fullscreen redirect.
 
+## Rating card (Chrome build)
+
+At 3, 12, 48 and 200 upscaled episodes the popup shows one "rate it" card with the
+user's own totals (`src/rate-prompt.ts`). An episode is a video upscaled for at
+least 10 minutes; time counts only while frames are being drawn. The counts live in
+`chrome.storage.local` (`anime4k-rate`), are written only by the background, and
+never leave the device. ✕ hides the card until the next milestone, "rate it" opens
+the Web Store reviews page, and "✓ already rated" (offered after a click) stops it
+for good. The Firefox build has none of this.
+
+```bash
+npx esbuild test/rate-test.ts --bundle --platform=node --format=esm --outfile=test/rate-test.js && node test/rate-test.js
+npm run build && node test/rate-e2e.mjs "C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"
+```
+
+The first runs the unit tests in Node; the second loads `dist/` into a real
+Chromium browser, counts a short upscaled playback and walks the card through
+every state.
+
 ## Credits
 
 - Anime4K shaders: bloc97 and contributors, MIT (`src/shaders/LICENSE`).

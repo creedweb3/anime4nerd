@@ -24,7 +24,7 @@
 
 <main class="wrap">
   <section id="privacy" class="doc" style="border-top:0">
-    <div class="phead"><span>privacy policy · last updated 2026-10-17</span></div>
+    <div class="phead"><span>privacy policy · last updated 2026-11-08</span></div>
     <h1 style="font-size:clamp(1.8rem, 3.6vw, 2.7rem);letter-spacing:-.03em;margin:14px 0 12px">Privacy policy.</h1>
     <div class="prose">
       <p><strong>Anime4Nerd does not collect, store, or transmit any personal data. Everything runs inside your browser.</strong></p>
@@ -37,13 +37,14 @@
         <li><strong>Video frames</strong> are read into GPU memory to be upscaled and discarded after each frame is drawn. They are never saved or sent anywhere.</li>
         <li><strong>Page metadata</strong> (page title, headings, Open Graph tags, schema.org data, Media Session metadata) is read only when you open the popup, to label the video. It is not stored.</li>
         <li><strong>Settings</strong> (preset, line effects, upscale factor, and which sites you switched on) are stored with your browser's extension storage. The preset, line effects and upscale factor may sync between your own browsers if you have Chrome sync or Firefox Sync turned on; the per-site switches stay on this device.</li>
+        <li><strong>Usage counts</strong> (Chrome, Edge, Brave): total upscaling time, how many videos were upscaled for 10 minutes or more, which "rate it" card you last answered and how, and whether you had the extension before these counts existed. Numbers only, no titles or sites. They stay on this device, are never synced or sent, and only decide when the popup shows that card.</li>
         <li><strong>Performance numbers</strong> are measured locally, shown in the popup, and not recorded.</li>
       </ul>
       <h3>Data leaving your device</h3>
       <p>None. The extension makes no network requests of its own. It has no analytics, telemetry, crash reporting, remote configuration, or accounts.</p>
       <h3>Permissions</h3>
       <ul>
-        <li><code>storage</code>: saves your preset and the per-site switch.</li>
+        <li><code>storage</code>: saves your preset, the per-site switch and the local usage counts.</li>
         <li><code>scripting</code>: adds the upscaler to tabs that were already open when you installed it.</li>
         <li><code>webNavigation</code>: lists the frames of the current tab, because players are often in iframes.</li>
         <li>Access to all sites: finds videos and reads their frames on whatever site the player is hosted on.</li>

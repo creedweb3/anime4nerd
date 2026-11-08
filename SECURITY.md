@@ -21,7 +21,8 @@ tampered with. Each is addressed below.
   `<video>` elements; upscaling starts from your click in the popup. You can
   restrict the extension to chosen sites under extension settings → Site access.
 - Never stores video frames, page text or URLs. Only the preset, two line-effect
-  booleans, the upscale factor and a per-site on/off map are stored.
+  booleans, the upscale factor, a per-site on/off map and (Chrome build) two usage
+  counters plus the rating card's state are stored, all in local extension storage.
 - Never executes code from a page. Shaders are bundled constants; page strings are
   only ever shown as text.
 
@@ -30,7 +31,7 @@ tampered with. Each is addressed below.
 | Risk | Protection |
 |---|---|
 | Popup HTML injection from page titles | All page-derived strings are inserted with `textContent`; the only `innerHTML` uses are constant templates. |
-| A page spoofing extension messages | No `externally_connectable`, so web pages cannot message the extension. The background script (a service worker in Chrome) accepts no messages at all. |
+| A page spoofing extension messages | No `externally_connectable`, so web pages cannot message the extension. In the Chrome build the background accepts only two message types, the usage report and the rating card answer, only from this extension's own scripts (`sender.id` check); counts are clamped per message and invalid answers are ignored. The Firefox background accepts no messages at all. |
 | Broad site access | Required because players are embedded from arbitrary domains. The content script does no work beyond finding `<video>` elements until the user switches a video on. Users can narrow access per site in the browser. |
 | Regex denial of service from long page strings | Every page string is capped at 300 characters (URLs at 2048) before any pattern runs; overlapping quantifiers were removed. |
 | Deeply nested JSON-LD | Parser depth capped at 8 levels / 200 nodes; the handler is wrapped so a failure returns `null` instead of hanging the popup. |

@@ -7,6 +7,10 @@
 // The content script guards against running twice.
 
 import { markUpdated, restoreBadge } from './whats-new';
+import { RateAction, addWatch, applyAction, markReturning, updateRate } from './rate-prompt';
+import type { Message } from './settings';
+
+const RATE_ACTIONS: readonly RateAction[] = ['dismiss', 'clicked', 'rated'];
 
 async function injectTab(tabId: number): Promise<void> {
   let frames: { frameId: number }[] = [];
@@ -22,8 +26,20 @@ async function injectTab(tabId: number): Promise<void> {
 chrome.runtime.onInstalled.addListener(async (details) => {
   const version = chrome.runtime.getManifest().version;
   if (details.reason === 'update' && details.previousVersion !== version) await markUpdated(version).catch(() => {});
+  if (details.reason === 'update' && !__FIREFOX__) await markReturning().catch(() => {});
   const tabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] });
   await Promise.allSettled(tabs.map((t) => (t.id ? injectTab(t.id) : Promise.resolve())));
 });
 
 chrome.runtime.onStartup.addListener(() => { void restoreBadge().catch(() => {}); });
+
+// Rating card counters (Chrome build only). Only this extension's own pages and content
+// scripts can send runtime messages here; values are clamped again in addWatch.
+if (!__FIREFOX__) {
+  chrome.runtime.onMessage.addListener((msg: Message, sender) => {
+    if (sender.id !== chrome.runtime.id) return false;
+    if (msg?.type === 'a4k-watch') void updateRate((s) => addWatch(s, msg.seconds, msg.episodes)).catch(() => {});
+    else if (msg?.type === 'a4k-rate' && RATE_ACTIONS.includes(msg.action)) void updateRate((s) => applyAction(s, msg.action, msg.level)).catch(() => {});
+    return false;
+  });
+}
