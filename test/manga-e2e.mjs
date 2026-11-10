@@ -36,8 +36,19 @@ ff(['-f', 'lavfi', '-i', 'testsrc2=size=3400x4900', '-frames:v', '1', '-q:v', '1
 ff(['-f', 'lavfi', '-i', 'testsrc2=size=64x64', '-frames:v', '1', path.join(work, 'icon.png')]);
 
 const serve = (handler) => new Promise((ok) => { const s = http.createServer(handler).listen(0, '127.0.0.1', () => ok(s)); });
+let blindHits = 0; // requests that must never be made
+let swapHits = 0;
 const images = await serve((req, res) => {
   if (req.url.startsWith('/nothing')) { res.writeHead(204).end(); return; }
+  if (req.url.includes('blind=1')) blindHits++;
+  const to = (url) => res.writeHead(302, { Location: url }).end();
+  if (req.url.startsWith('/to-local')) return to(`http://127.0.0.2:${images2.address().port}/colour.jpg?blind=1`);
+  if (req.url.startsWith('/to-trick')) return to(`http://trick.mangatest.example:${images2.address().port}/colour.jpg`);
+  if (req.url.startsWith('/to-ok')) return to(`http://same.mangatest.example:${images.address().port}/colour.jpg#frag`);
+  if (req.url.startsWith('/loop')) return to('/loop');
+  if (req.url.startsWith('/slow')) { setTimeout(() => res.writeHead(404).end(), 4000); return; }
+  // The page shows a normal image; whoever fetches the same URL again gets a huge one.
+  if (req.url.startsWith('/swap.jpg')) req.url = swapHits++ ? '/huge.jpg' : '/colour.jpg';
   const file = path.join(work, path.basename(req.url.split('?')[0]));
   if (!fs.existsSync(file)) { res.writeHead(404).end(); return; }
   res.writeHead(200, { 'Content-Type': file.endsWith('.png') ? 'image/png' : 'image/jpeg' }); // no CORS headers on purpose
@@ -79,6 +90,11 @@ const pages = await serve((req, res) => {
           }, 'image/png');
         }
       </script></body>`);
+    return;
+  }
+  if (req.url.includes('/swap/')) {
+    res.end(`<!doctype html><title>Swap Scans Chapter 4 - MangaReader</title><body style="margin:0;background:#222">
+      <div style="width:900px"><img id="s1" src="${imgBase}/swap.jpg" style="width:100%"><img id="s2" src="${imgBase}/colour.jpg" style="width:100%"></div></body>`);
     return;
   }
   if (req.url.includes('/huge/')) {
@@ -388,11 +404,11 @@ try {
   const dns = await ctx.newPage();
   const dnsUrl = `http://reader.mangatest.example:${pages.address().port}/blog`;
   await dns.goto(dnsUrl);
-  const ask = (url) => sw.evaluate(async ({ page, url }) => {
+  const ask = (url, page = dnsUrl) => sw.evaluate(async ({ page, url }) => {
     const [tab] = await chrome.tabs.query({ url: page });
     const [r] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: (u) => chrome.runtime.sendMessage({ type: 'a4k-fetch-image', url: u }), args: [url] });
     return r.result;
-  }, { page: dnsUrl, url });
+  }, { page, url });
   const tricked = await ask(`http://trick.mangatest.example:${images2.address().port}/colour.jpg`);
   check('public name resolving to a private address is refused', !tricked?.dataUrl && /local address/i.test(tricked?.error ?? ''), JSON.stringify(tricked).slice(0, 80));
   const samePlace = await ask(`http://same.mangatest.example:${images.address().port}/colour.jpg`);
@@ -402,6 +418,27 @@ try {
   await dns.waitForTimeout(700);
   const spoofed = await ask(`http://trick.mangatest.example:${images2.address().port}/colour.jpg`);
   check('a 204 navigation to a private address does not unlock it', dns.url() === dnsUrl && !spoofed?.dataUrl && /local address/i.test(spoofed?.error ?? ''), JSON.stringify(spoofed).slice(0, 80));
+  // Redirects are followed by hand: a local target is refused before it is requested.
+  const viaSame = `http://same.mangatest.example:${images.address().port}`;
+  const toLocal = await ask(`${viaSame}/to-local`);
+  check('redirect to a local address is refused without requesting it', !toLocal?.dataUrl && /redirected to a local/i.test(toLocal?.error ?? '') && blindHits === 0, `${JSON.stringify(toLocal).slice(0, 70)} hits=${blindHits}`);
+  const toTrick = await ask(`${viaSame}/to-trick`);
+  check('redirect to a name resolving to a private address is refused', !toTrick?.dataUrl && /local address/i.test(toTrick?.error ?? ''), JSON.stringify(toTrick).slice(0, 80));
+  const toOk = await ask(`${viaSame}/to-ok`);
+  check('an allowed redirect is still followed', !!toOk?.dataUrl?.startsWith('data:image/jpeg'), JSON.stringify(toOk).slice(0, 80));
+  const loop = await ask(`${viaSame}/loop`);
+  check('a redirect loop stops', /too many redirects/i.test(loop?.error ?? ''), JSON.stringify(loop).slice(0, 80));
+  // One tab filling its fetch slots does not make another tab wait.
+  const other = await ctx.newPage();
+  const otherUrl = `${dnsUrl}?other`;
+  await other.goto(otherUrl);
+  const slow = [1, 2, 3, 4].map((i) => ask(`${viaSame}/slow?${i}`));
+  await dns.waitForTimeout(300);
+  const tOther = Date.now();
+  const quick = await ask(`${viaSame}/colour.jpg`, otherUrl);
+  check('a busy tab does not hold up another tab', !!quick?.dataUrl && Date.now() - tOther < 2000, `${Date.now() - tOther} ms`);
+  await Promise.all(slow);
+  await other.close();
   await dns.close();
   // 7. A page over the size cap is left alone; the rest of the chapter is still upscaled.
   await setManga({ '127.0.0.1': true });
@@ -414,6 +451,16 @@ try {
   check('page over the size cap is not decoded or upscaled', hugeNow.h1 === 3400 && hugeNow.h2 === 1800 && hs.failed === 1 && /too large/i.test(hs.lastError ?? ''),
     JSON.stringify({ ...hugeNow, done: hs.done, failed: hs.failed, err: hs.lastError }));
   await huge.close();
+  // Downloaded bytes larger than the image on screen: refused by size, the rest still upscaled.
+  const swap = await ctx.newPage();
+  const swapUrl = `${base}/manga/swap/chapter-4`;
+  await swap.goto(swapUrl);
+  await swap.waitForFunction(() => document.getElementById('s2').naturalWidth === 1800, null, { timeout: 30000 }).catch(() => {});
+  const ss = await statusOf(swapUrl);
+  const swapNow = await swap.evaluate(() => ({ s1: document.getElementById('s1').naturalWidth, s2: document.getElementById('s2').naturalWidth }));
+  check('downloaded bytes over the size cap are not upscaled', swapNow.s1 === 900 && swapNow.s2 === 1800 && swapHits >= 2 && /too large/i.test(ss.lastError ?? ''),
+    JSON.stringify({ ...swapNow, swapHits, failed: ss.failed, err: ss.lastError }));
+  await swap.close();
 
   // 8. Kept copies of blob: originals are freed once the site replaces or removes the image.
   const kc = await ctx.newPage();

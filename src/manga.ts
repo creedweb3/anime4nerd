@@ -329,6 +329,15 @@ export function startManga(getSettings: () => Settings, loadGpu: () => Promise<G
     }, 'image/png');
   }
 
+  /** Pixel count of an image file from its header, without decoding it; 0 if it cannot be read. */
+  async function pixelsOf(blob: Blob): Promise<number> {
+    const url = URL.createObjectURL(blob);
+    const im = new Image();
+    await new Promise((ok) => { im.onload = im.onerror = ok; im.src = url; });
+    URL.revokeObjectURL(url);
+    return im.naturalWidth * im.naturalHeight;
+  }
+
   async function renderPage(img: HTMLImageElement, st: PageState) {
     // The site may swap the image, or the switch may flip, while this awaits: then drop the result.
     const gen = st.gen;
@@ -345,12 +354,14 @@ export function startManga(getSettings: () => Settings, loadGpu: () => Promise<G
     }
     if (!bitmap) {
       st.blob ??= await (prefetched.get(img) ?? loadBytes(st.src));
+      // The downloaded bytes can differ from the image on screen: check their size before decoding.
+      if (await pixelsOf(st.blob) > MAX_PAGE_PX) { st.blob = null; throw new Error(TOO_LARGE); }
       bitmap = await createImageBitmap(st.blob);
     }
     prefetched.delete(img);
     const copy = document.createElement('canvas');
     try {
-      // The downloaded bytes can differ from the image on screen.
+      // Again after decoding, in case the size could not be read first.
       if (bitmap.width * bitmap.height > MAX_PAGE_PX) { st.blob = null; throw new Error(TOO_LARGE); }
       if (!current()) return;
       st.grey = isGrey(bitmap);
