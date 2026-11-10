@@ -9,7 +9,10 @@
   --g: 159, 211, 168; --r: 227, 154, 154;
   --mono: "JetBrains Mono", "Cascadia Mono", Consolas, ui-monospace, monospace;
   --ease: cubic-bezier(.2, .7, .2, 1);
+  /* every scrollbar (page, wide tables on phones) in the site's own thin grey, no default arrows */
+  scrollbar-width: thin; scrollbar-color: var(--line2) transparent;
 }
+.table-wrap { scrollbar-width: thin; scrollbar-color: var(--line2) transparent; }
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
@@ -188,7 +191,8 @@ section { padding-block: clamp(56px, 7vw, 96px); border-top: 1px solid var(--lin
 .panel .foot { margin-top: auto; padding-top: 18px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--faint); font-size: 12px; }
 .panel .foot .btn { margin-right: 10px; }
 .faq .foot { justify-content: space-between; border-top: 1px solid var(--line); margin-top: auto; }
-.body > .table-wrap { flex: 1; }
+/* grows to fill the column but never shrinks below its table, which gave it a vertical scrollbar */
+.body > .table-wrap { flex: 1 0 auto; }
 .body > .table-wrap table { height: 100%; }
 .sec > .rail h2 { font-size: clamp(1.6rem, 2.6vw, 2.2rem); }
 .sec > .body { min-width: 0; }
@@ -266,12 +270,25 @@ th { font-weight: 500; font-size: 9px; letter-spacing: .16em; text-transform: up
 td { color: var(--dim); }
 td:first-child { color: var(--fg); font-weight: 600; }
 tr:last-child td { border-bottom: 0; }
-tbody tr { transition: background-color .12s; }
-tbody tr:hover { background: #161616; }
-/* the marker sits in the cell's left padding, so showing it moves nothing */
-tbody td:first-child { position: relative; }
-tbody td:first-child::before { content: "▸"; position: absolute; left: 3px; color: var(--on); opacity: 0; transition: opacity .12s; }
-tbody tr:hover td:first-child::before { opacity: 1; }
+/* hover: the panels' green crop marks settle onto the row's corners. The left pair hangs off the
+   first cell and the right pair off the last, so nothing needs the row's width and nothing moves.
+   Same timing as the panels: they grow out from just inside and fade, the same in and out. */
+tbody td { transition: color .25s ease; }
+tbody tr:hover td { color: var(--fg); }
+tbody td:first-child, tbody td:last-child { position: relative; }
+tbody td:first-child::after, tbody td:last-child::after {
+  --m: var(--ok);
+  content: ""; position: absolute; top: 3px; bottom: 3px; width: 9px; pointer-events: none;
+  opacity: 0; transition: opacity .2s var(--ease), transform .35s var(--ease);
+}
+tbody td:first-child::after { left: 3px; transform: translateX(4px) scaleY(.8);
+  background: linear-gradient(var(--m), var(--m)) 0 0 / 9px 1px no-repeat, linear-gradient(var(--m), var(--m)) 0 0 / 1px 9px no-repeat,
+              linear-gradient(var(--m), var(--m)) 0 100% / 9px 1px no-repeat, linear-gradient(var(--m), var(--m)) 0 100% / 1px 9px no-repeat; }
+tbody td:last-child::after { right: 3px; transform: translateX(-4px) scaleY(.8);
+  background: linear-gradient(var(--m), var(--m)) 100% 0 / 9px 1px no-repeat, linear-gradient(var(--m), var(--m)) 100% 0 / 1px 9px no-repeat,
+              linear-gradient(var(--m), var(--m)) 100% 100% / 9px 1px no-repeat, linear-gradient(var(--m), var(--m)) 100% 100% / 1px 9px no-repeat; }
+tbody tr:hover td:first-child::after, tbody tr:hover td:last-child::after { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) { tbody td:first-child::after, tbody td:last-child::after { transition: none; } }
 td.num { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--fg); }
 .bar-cell { display: flex; align-items: center; gap: 10px; }
 .meter { height: 5px; background: var(--bar-dim); flex: 1; min-width: 60px; position: relative; }
