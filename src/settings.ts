@@ -166,4 +166,8 @@ export type Message =
   // content -> background: upscaled time and finished episodes since the last report (rate-prompt.ts)
   | { type: 'a4k-watch'; seconds: number; episodes: number }
   // popup -> background: answer to the rating card
-  | { type: 'a4k-rate'; action: RateAction; level: number };
+  | { type: 'a4k-rate'; action: RateAction; level: number }
+  // content -> background (manga mode): fetch an image the page will not let us read
+  | { type: 'a4k-fetch-image'; url: string }
+  // popup -> content (manga mode): pages found / upscaled / failed in this frame
+  | { type: 'a4k-manga-status' };

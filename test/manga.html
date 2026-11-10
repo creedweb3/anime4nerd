@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manga prototype</title>
+<style>
+  :root { color-scheme: dark; --bg: #0b0b0b; --panel: #111; --line: #262626; --fg: #e4e4e4; --dim: #8d8d8d; --on: #fff; --ok: #9fd3a8; --bad: #e39a9a; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 13px/1.5 Consolas, ui-monospace, monospace; }
+  main { padding: 20px 16px 60px; max-width: 1500px; margin: 0 auto; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .lede { color: var(--dim); margin: 0 0 16px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+  button, label.file { background: var(--panel); color: var(--fg); border: 1px solid var(--line); padding: 6px 10px; font: inherit; cursor: pointer; }
+  button[aria-pressed="true"] { border-color: var(--on); color: var(--on); }
+  .zoom { margin-left: auto; color: var(--dim); }
+  #status { color: var(--dim); min-height: 1.5em; margin-bottom: 10px; }
+  #status.err { color: var(--bad); }
+  .layout { display: grid; grid-template-columns: 260px 1fr; gap: 16px; align-items: start; }
+  .thumb { position: relative; border: 1px solid var(--line); cursor: crosshair; overflow: hidden; }
+  .thumb canvas { display: block; width: 100%; height: auto; }
+  .thumb .box { position: absolute; border: 1px solid var(--ok); pointer-events: none; box-shadow: 0 0 0 9999px rgba(0,0,0,.35); }
+  .meta { color: var(--dim); font-size: 12px; margin-top: 6px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+  .zoomed .grid { grid-template-columns: repeat(auto-fill, minmax(460px, 1fr)); }
+  figure { margin: 0; border: 1px solid var(--line); background: var(--panel); }
+  figcaption { display: flex; justify-content: space-between; padding: 6px 8px; font-size: 12px; color: var(--dim); }
+  figcaption b { color: var(--on); }
+  figure canvas { display: block; width: 100%; height: auto; }
+  .zoomed figure canvas { image-rendering: pixelated; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Manga prototype: Anime4K on still pages</h1>
+  <p class="lede">Every preset runs at 2× through the extension's real renderer. "Browser 2×" is the plain smooth upscale you get without the extension. Click the page on the left to move the crop.</p>
+  <div class="bar" id="sources"></div>
+  <div class="bar">
+    <label class="file">add your own pages… <input id="files" type="file" accept="image/*" multiple hidden></label>
+    <span class="zoom">crop
+      <button data-zoom="1" aria-pressed="true">1:1</button>
+      <button data-zoom="2">2× zoom</button>
+    </span>
+  </div>
+  <div id="status"></div>
+  <div class="layout">
+    <div><div class="thumb" id="thumb"></div><div class="meta" id="meta"></div></div>
+    <div class="grid" id="grid"></div>
+  </div>
+</main>
+<script type="module" src="./manga.js"></script>
+</body>
+</html>

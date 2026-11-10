@@ -4,6 +4,9 @@ import {
 import { EMPTY_META, MediaMeta } from './media-meta';
 import { WHATS_NEW_URL, clearWhatsNew, pendingWhatsNew } from './whats-new';
 import { REVIEW_URL, RateAction, cardFor, loadRate, pendingLevel } from './rate-prompt';
+import { MANGA_PROTOCOL, loadMangaSites, onMangaSitesChanged, setMangaSites } from './manga-sites';
+import type { MangaStatus } from './manga';
+import type { MangaMeta } from './manga-meta';
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
 const hintEl = $('#hint');
@@ -217,6 +220,7 @@ function paintPerf(v: VideoInfo | null) {
   const f = (n: number | null, d = 1) => (n === null ? '—' : n.toFixed(d));
   const noTimer = !!v?.enabled && !!v.stats && !v.stats.timerSupported;
   tiles.forEach((el, i) => setText(el.previousElementSibling as HTMLElement, (noTimer ? FRAME_LABELS : GPU_LABELS)[i]));
+  tiles[0].title = ''; // the manga panel uses it
   perf.bars.style.display = noTimer ? 'none' : '';
 
   // Off: everything cleared.
@@ -281,9 +285,10 @@ async function refresh() {
   if (refreshing) return;
   refreshing = true;
   try {
-    const [found, metas] = await Promise.all([
+    const [found, metas, mangaReplies] = await Promise.all([
       sendToFrames<VideoInfo[]>({ type: 'a4k-list' }),
       sendToFrames<MediaMeta | null>({ type: 'a4k-page-meta' }),
+      __FIREFOX__ ? Promise.resolve([]) : sendToFrames<MangaStatus | null>({ type: 'a4k-manga-status' }),
     ]);
     const top = metas.find((m) => m.frameId === 0)?.value;
     if (top) pageMeta = top;
@@ -305,19 +310,31 @@ async function refresh() {
       if (sourcesEl.children[i] !== c.el) sourcesEl.insertBefore(c.el, sourcesEl.children[i] ?? null);
     });
     for (const [id, c] of cards) if (!seen.has(id)) { c.el.remove(); cards.delete(id); }
-    emptyEl.hidden = list.length > 0;
     countEl.textContent = list.length > 1 ? `${list.length} videos` : '';
+    // No frame answered at all: the page's content script is missing or orphaned (tab opened
+    // before an extension reload). Inject a fresh copy once, as the background does on install.
+    if (!__FIREFOX__ && !found.length && !mangaReplies.length && !injected && tabId !== undefined && mangaHost) {
+      injected = true;
+      void injectContent(tabId);
+    }
+    const manga = pickManga(mangaReplies);
+    try { paintMangaCard(manga); } catch { /* never let the manga card stop the rest of the popup */ }
+    emptyEl.hidden = list.length > 0 || !!manga;
+    const reading = !!manga && list.length === 0;
+    setText($('#nowLabel'), reading ? 'reading now' : 'playing now');
 
-    // Performance panel follows: hovered card, else first enabled, else first.
+    // Performance panel follows: hovered card, else first enabled, else first; manga when no video.
     const pick = list.find((x) => x.v.id === focusId) ?? list.find((x) => x.v.enabled) ?? list[0] ?? null;
-    paintPerf(pick?.v ?? null);
+    if (reading) paintMangaPerf(manga!); else paintPerf(pick?.v ?? null);
 
     const active = list.filter((x) => x.v.status === 'Active' && x.v.enabled).length;
     const on = list.filter((x) => x.v.enabled).length;
     let gpuMs: number | null = null;
     for (const { v } of list) if (v.enabled && v.stats?.gpuMs != null) gpuMs = (gpuMs ?? 0) + v.stats.gpuMs;
-    hintEl.textContent = list.length === 0 ? 'off' : active ? `on · ${settings.preset.toLowerCase()}` : on ? 'starting' : 'off';
-    hintEl.classList.toggle('on', active > 0);
+    const mangaBusy = reading && manga!.s.on && manga!.s.done > 0;
+    hintEl.textContent = reading ? (mangaBusy ? `manga · ${settings.preset.toLowerCase()}` : 'manga')
+      : list.length === 0 ? 'off' : active ? `on · ${settings.preset.toLowerCase()}` : on ? 'starting' : 'off';
+    hintEl.classList.toggle('on', active > 0 || mangaBusy);
     // Without GPU timing (Firefox) the chip shows the frame rate drawn instead.
     const drawn = list.find((x) => x.v.enabled && x.v.stats && !x.v.stats.timerSupported && x.v.stats.fps > 0)?.v.stats;
     gpuChip.textContent = gpuMs !== null ? `gpu ${gpuMs.toFixed(1)} ms` : drawn ? `${drawn.fps.toFixed(0)} fps` : 'gpu —';
@@ -375,6 +392,151 @@ async function showRateCard() {
   el.hidden = false;
 }
 
+// --- manga mode (local prototype, Chrome build only) -------------------------------
+let mangaHost = ''; // the address-bar host the switch belongs to
+let mangaSiteOn = false; // stored switch state for mangaHost
+let mangaPending: boolean | null = null; // clicked state until storage echoes it
+let injected = false;
+
+async function injectContent(id: number) {
+  const target = { tabId: id, allFrames: true };
+  await chrome.scripting.insertCSS({ target, files: ['content.css'] }).catch(() => {});
+  await chrome.scripting.executeScript({ target, files: ['content.js'] }).catch(() => {});
+}
+
+interface MangaView { s: MangaStatus; meta: MangaMeta; stale: boolean; frameHost: string | null }
+let lastManga: MangaView | null = null; // what the card shows; its frame host is switched on with the site
+
+/** The frame with the reader (most pages; a canvas reader only if no frame has images), and the best title. */
+function pickManga(replies: { frameId: number; value: MangaStatus | null }[]): MangaView | null {
+  // A page script from before an extension update may answer with an older shape: fill in what it lacks.
+  const fixed = replies.map((r) => (r.value ? { frameId: r.frameId, value: {
+    ...r.value, marks: r.value.marks ?? [], total: r.value.total ?? r.value.marks?.length ?? 0, reasons: r.value.reasons ?? [],
+  } } : r));
+  const found = fixed.filter((r): r is { frameId: number; value: MangaStatus } => !!r.value?.kind);
+  if (!found.length) return null;
+  const rank = (s: MangaStatus) => (s.kind === 'images' ? 1e6 : 0) + s.marks.length;
+  // The top page wins when it shows the pages itself: an embedded frame must not outrank it by faking more.
+  const topFound = found.find((r) => r.frameId === 0 && r.value.kind === 'images');
+  const best = topFound ?? found.reduce((a, b) => (rank(b.value) > rank(a.value) ? b : a));
+  // A reader in an iframe from another host is switched on with the site only when it is the one
+  // frame showing pages; with several candidates (ads imitating a reader) none is trusted.
+  const framesWithPages = found.filter((r) => r.frameId !== 0 && r.value.kind === 'images');
+  const frameHost = !topFound && framesWithPages.length === 1 && best === framesWithPages[0] ? best.value.host : null;
+  // The reader is often an iframe with a bare title; the top page usually names the chapter.
+  const top = replies.find((r) => r.frameId === 0)?.value?.meta;
+  const meta = top?.chapter ? top : best.value.meta.chapter ? best.value.meta : top?.series ? top : best.value.meta;
+  return { s: best.value, meta, stale: best.value.protocol !== MANGA_PROTOCOL, frameHost };
+}
+
+function mangaOn(): boolean { return mangaPending ?? mangaSiteOn; }
+
+function paintMangaCard(m: MangaView | null) {
+  lastManga = m;
+  const card = $('#manga-card');
+  card.hidden = !m;
+  // Manga pages are always 2x, so the upscale row does not apply (and the popup must fit without scrolling).
+  $('#upscale').hidden = !!m && m.s.kind === 'images';
+  if (!m) return;
+  const { s, meta } = m;
+  const on = mangaOn();
+  const loaded = s.marks.length; // pages on the page now
+  const n = s.total; // pages in the chapter, from its page counter or still-loading slots
+  card.classList.toggle('on', on && s.kind === 'images');
+  card.classList.toggle('unsupported', s.kind === 'canvas' && !on); // an unsupported reader can still be switched off
+  $<HTMLInputElement>('#manga-switch input').checked = on && s.kind === 'images';
+  setText($('#manga-title'), meta.series ?? mangaHost);
+  $('#manga-title').title = s.reasons.length ? `Detected: ${s.reasons.join(' · ')}` : '';
+  const tag = $('#manga-tag');
+  tag.hidden = !meta.chapter;
+  setText(tag, `${meta.volume ? `vol ${meta.volume} · ` : ''}ch ${meta.chapter ?? ''}`);
+  // One line: "9 pages · colour · 2000×2798"; source size and host in the tooltip.
+  const upscaled = on && s.done > 0;
+  const size = s.size ? (upscaled ? `${s.size.w * 2}×${s.size.h * 2}` : `${s.size.w}×${s.size.h}`) : '';
+  const mode = s.grey === null ? '' : s.grey ? 'b&w' : 'colour';
+  const nameEl = $('#manga-name');
+  setText(nameEl, s.kind === 'canvas' ? 'pages drawn on a canvas'
+    : [meta.chapterTitle, `${n} page${n === 1 ? '' : 's'}`, mode, size].filter(Boolean).join(' · '));
+  nameEl.title = [
+    s.size ? `${s.size.w}×${s.size.h}${upscaled ? ` → ${s.size.w * 2}×${s.size.h * 2}` : ''}` : '',
+    s.imageHost ? `pages from ${s.imageHost}` : '',
+  ].filter(Boolean).join(' · ');
+
+  const strip = $('#manga-pages');
+  while (strip.children.length > loaded) strip.lastElementChild!.remove();
+  while (strip.children.length < loaded) strip.append(document.createElement('i'));
+  s.marks.forEach((mk, i) => { strip.children[i].className = `${mk === 'todo' ? '' : mk}${i === s.current ? ' now' : ''}`; });
+
+  let cls = 'ok';
+  let text: string;
+  if (m.stale) { cls = 'warn'; text = '● Anime4Nerd was updated · reload this page to finish'; }
+  else if (s.kind === 'canvas') { cls = 'bad'; text = '● this reader draws pages on a canvas, so they cannot be upscaled yet'; }
+  else if (!on) { cls = 'off'; text = '● off · switch on to upscale this chapter'; }
+  else if (!s.on) { cls = 'dim'; text = '● starting…'; }
+  else if (s.failed) { cls = 'warn'; text = `● ${s.done} / ${n} pages · ${s.failed} failed (${s.lastError ?? 'unknown error'})`; }
+  else if (s.done < loaded) text = `● upscaling · ${s.done} / ${n} pages · Alt+M compares`;
+  else if (loaded < n) text = `● ${s.done} / ${n} pages · the rest as they load`;
+  else text = `● ${n} / ${n} pages upscaled · Alt+M compares`;
+  const state = $('#manga-state');
+  state.className = `state ${cls}`;
+  setText(state, text);
+}
+
+const MANGA_LABELS = ['GPU / page', 'Pages', 'Output', 'Mode', 'Failed', 'Next'];
+function paintMangaPerf({ s }: MangaView) {
+  const on = mangaOn() && s.on && s.kind === 'images';
+  const loaded = s.marks.length;
+  const n = s.total;
+  tiles.forEach((el, i) => setText(el.previousElementSibling as HTMLElement, MANGA_LABELS[i]));
+  perf.bars.style.display = 'none';
+  limitEl.style.display = 'none';
+  const next = s.marks.findIndex((mk, i) => mk === 'todo' && i >= (s.current ?? 0));
+  const values: [string, string][] = [
+    [on && s.perPageMs !== null ? `${Math.round(s.perPageMs)} ms` : '—', ''],
+    [s.kind === 'images' ? `${s.done} / ${n}` : '—', s.failed ? 'warn' : on && s.done ? 'ok' : ''],
+    [on && s.size && s.done ? `${s.size.w * 2}×${s.size.h * 2}` : '—', ''],
+    [s.grey === null ? '—' : s.grey ? 'b&w' : 'colour', ''],
+    [on ? String(s.failed) : '—', s.failed ? 'warn' : on ? 'ok' : ''],
+    [on && next >= 0 ? `p. ${next + 1}` : '—', ''],
+  ];
+  tiles.forEach((el, i) => { setText(el, values[i][0]); el.className = values[i][1]; });
+  // The whole page (read or download, GPU, encode) overlaps with the next pages, so it is the tooltip.
+  tiles[0].title = on && s.pageMs != null ? `whole page, start to shown: ${Math.round(s.pageMs)} ms` : '';
+  let vc = 'dim';
+  let vt = '● off';
+  if (s.kind === 'canvas') vt = '● n/a';
+  else if (on && s.failed) { vc = 'warn'; vt = '● partly'; }
+  else if (on && loaded && s.done === loaded) { vc = 'ok'; vt = loaded < n ? '● waiting for pages' : '● done'; }
+  else if (on) { vc = 'ok'; vt = '● upscaling'; }
+  setText(perf.verdict, vt);
+  perf.verdict.className = `verdict ${vc}`;
+  setText(perf.legend, s.kind === 'images' ? 'pages upscaled 2× · Mode C or C+A suits b&w' : 'not supported on this reader yet');
+}
+
+function initMangaCard(url: string | undefined) {
+  if (__FIREFOX__) return;
+  try { const u = new URL(url ?? ''); if (u.protocol === 'http:' || u.protocol === 'https:') mangaHost = u.hostname; } catch { /* no url */ }
+  if (!mangaHost) return;
+  void loadMangaSites().then((sites) => { mangaSiteOn = sites[mangaHost] === true; void refresh(); });
+  onMangaSitesChanged((sites) => {
+    mangaSiteOn = sites[mangaHost] === true;
+    if (mangaPending === mangaSiteOn) mangaPending = null;
+    void refresh();
+  });
+  const card = $('#manga-card');
+  card.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (card.classList.contains('unsupported')) return;
+    const want = !mangaOn();
+    mangaPending = want;
+    // The reader may be an iframe from another host: switch that host on too, since the user is
+    // switching on this chapter. Other frames on the site (ads) stay off.
+    const hosts = new Set([mangaHost, lastManga?.frameHost].filter((h): h is string => !!h));
+    setMangaSites([...hosts], want).catch(() => { mangaPending = null; void refresh(); });
+    void refresh();
+  });
+}
+
 (async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   tabId = tab?.id;
@@ -382,6 +544,7 @@ async function showRateCard() {
   tick();
   void showWhatsNew();
   void showRateCard();
+  initMangaCard(tab?.url);
   paintSettings(await loadSettings());
   onSettingsChanged((s) => { paintSettings(s); void refresh(); });
   onSourcesChanged(() => { void refresh(); });

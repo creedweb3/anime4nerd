@@ -37,6 +37,7 @@ const configs = [
 function firefoxManifest() {
   const m = JSON.parse(readFileSync('manifest.json', 'utf8'));
   delete m.minimum_chrome_version;
+  m.permissions = m.permissions.filter((p) => p !== 'webRequest'); // manga mode's address check, Chrome only
   m.background = { scripts: ['background.js'] };
   m.web_accessible_resources = m.web_accessible_resources.map(({ use_dynamic_url, ...r }) => r);
   m.browser_specific_settings = {

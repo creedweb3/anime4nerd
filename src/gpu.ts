@@ -30,7 +30,8 @@ export interface RenderStats {
 }
 
 export interface Anime4kRenderer {
-  render(): void;
+  /** Draws the source's current frame, or `frame` instead: a still of the same size (manga pages reuse one renderer). */
+  render(frame?: RenderSource): void;
   destroy(): void;
   stats(): RenderStats;
 }
@@ -186,14 +187,19 @@ function compile(gl: WebGL2RenderingContext, type: number, src: string, label: s
   return sh;
 }
 
+/** A playing video, or a still image (manga pages) that render() uploads the same way. */
+export type RenderSource = HTMLVideoElement | ImageBitmap;
+
 export async function createAnime4kRenderer(
-  video: HTMLVideoElement,
+  video: RenderSource,
   canvas: HTMLCanvasElement,
   settings: Settings,
   onError: (msg: string) => void,
   wantScale = 2,
 ): Promise<Anime4kRenderer> {
-  const { w, h } = uploadSize(video);
+  // ImageBitmap, not instanceof HTMLVideoElement: a video from another realm (iframe) is still a video.
+  const isVideo = !(video instanceof ImageBitmap);
+  const { w, h } = video instanceof ImageBitmap ? { w: video.width, h: video.height } : uploadSize(video);
   if (!w || !h) throw new Error('Waiting for video dimensions.');
 
   const gl = canvas.getContext('webgl2', {
@@ -384,7 +390,7 @@ export async function createAnime4kRenderer(
     lose?.loseContext();
   }
 
-  function render() {
+  function render(frame?: RenderSource) {
     if (destroyed || gl!.isContextLost()) return;
     const t0 = performance.now();
     pollQueries();
@@ -404,9 +410,9 @@ export async function createAnime4kRenderer(
     }
     gl!.activeTexture(gl!.TEXTURE0);
     gl!.bindTexture(gl!.TEXTURE_2D, videoTex.tex);
-    gl!.texSubImage2D(gl!.TEXTURE_2D, 0, 0, 0, w, h, gl!.RGBA, gl!.UNSIGNED_BYTE, video);
+    gl!.texSubImage2D(gl!.TEXTURE_2D, 0, 0, 0, w, h, gl!.RGBA, gl!.UNSIGNED_BYTE, frame ?? video);
     if (check) {
-      const size = decodedSize(video); // null = unreadable right now; don't treat as a change
+      const size = isVideo ? decodedSize(video as HTMLVideoElement) : null; // null = unreadable right now; don't treat as a change
       const err = gl!.getError();
       let problem: Error | null = null;
       if (size && (size.w !== w || size.h !== h)) problem = new SourceSizeChanged();

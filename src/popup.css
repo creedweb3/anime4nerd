@@ -20,6 +20,8 @@
 * { box-sizing: border-box; }
 
 html, body { overflow-x: hidden; }
+/* The popup's scrollbar belongs to the root element: never the browser's default one. */
+html { scrollbar-width: thin; scrollbar-color: var(--line2) transparent; }
 body {
   width: 380px;
   margin: 0;
@@ -311,6 +313,23 @@ body {
 .pill[aria-checked="true"] { background: var(--on); color: #000; border-color: var(--on); }
 .pill[aria-checked="true"]::before { content: "✓ "; }
 .pill[role="radio"]::before, .pill[role="radio"][aria-checked="true"]::before { content: none; }
+.pills[hidden] { display: none; }
 .pills-label { color: var(--faint); font-size: 11px; align-self: center; margin-right: auto; }
 
 .note { display: none; }
+
+/* manga mode (local prototype): chapter card in "playing now" ------------------- */
+.manga-card { margin-top: 10px; }
+.manga-card[hidden] { display: none; } /* .source sets display: flex, which would override hidden */
+.sources:empty + .manga-card { margin-top: 0; }
+/* one line: chapter tag and "9 pages · colour · 2000×2798", vertically centred together */
+.manga-card .episode { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.manga-card .tag { vertical-align: baseline; margin-right: 0; flex: none; }
+.manga-card .epname { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.manga-card.unsupported .switch { opacity: 0.35; pointer-events: none; }
+.pages { display: grid; grid-template-columns: repeat(auto-fill, minmax(7px, 1fr)); gap: 2px; margin-top: 2px; }
+.pages i { height: 8px; background: var(--bar-dim); }
+.pages i.done { background: rgb(var(--g)); }
+.pages i.fail { background: var(--warn); }
+.pages i.now { outline: 1px solid var(--on); outline-offset: 1px; }
+.pages:empty { display: none; }

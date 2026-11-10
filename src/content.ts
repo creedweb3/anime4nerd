@@ -13,6 +13,7 @@ import { collectPageMeta, mediaSessionMeta } from './media-meta';
 import { uploadSize } from './video-size';
 import { FullscreenMenu } from './fullscreen-menu';
 import { EPISODE_SECONDS } from './rate-prompt';
+import { MangaMode, startManga } from './manga';
 
 type GpuModule = typeof import('./gpu');
 let gpuModule: Promise<GpuModule> | null = null;
@@ -660,7 +661,11 @@ function shutdown() {
   for (const u of upscalers.values()) u.destroy();
   upscalers.clear();
   menu.mount(null);
+  manga?.stop();
 }
+
+/** Manga mode (local prototype, Chrome build only). */
+let manga: MangaMode | null = null;
 
 // --- fullscreen menu -------------------------------------------------------------
 /** True if `node` is `outer` or inside it, crossing shadow-root boundaries. */
@@ -716,6 +721,7 @@ chrome.runtime.onMessage.addListener((msg: Message, _sender, respond) => {
     try { respond(window.top === window ? collectPageMeta() : null); } catch { respond(null); }
     return true;
   }
+  if (msg?.type === 'a4k-manga-status') { respond(manga?.status() ?? null); return true; }
   if (msg?.type === 'a4k-highlight') {
     for (const u of upscalers.values()) u.highlight(u.id === msg.id);
     respond(true);
@@ -733,7 +739,8 @@ if (!window.__a4kLoaded) {
   (async () => {
   [settings, sources] = await Promise.all([loadSettings(), loadSources()]);
   if (stopped) return;
-  onSettingsChanged((s) => { if (stopped) return; settings = s; for (const u of upscalers.values()) u.configure(s); notify(); });
+  onSettingsChanged((s) => { if (stopped) return; settings = s; for (const u of upscalers.values()) u.configure(s); manga?.refresh(); notify(); });
+  if (!__FIREFOX__) manga = startManga(() => settings, loadGpu);
   onSourcesChanged((s) => {
     if (stopped) return;
     sources = s;

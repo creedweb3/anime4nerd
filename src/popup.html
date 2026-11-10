@@ -31,8 +31,15 @@
   </section>
 
   <section class="panel">
-    <div class="panel-head"><span>playing now</span><span id="count"></span></div>
+    <div class="panel-head"><span id="nowLabel">playing now</span><span id="count"></span></div>
     <div class="sources" id="sources"></div>
+    <div class="source manga-card" id="manga-card" hidden>
+      <div class="line"><div class="title" id="manga-title"></div><label class="switch" id="manga-switch"><input type="checkbox" aria-label="Upscale manga pages on this site" /></label></div>
+      <div class="episode"><span class="tag" id="manga-tag"></span><span class="epname" id="manga-name"></span></div>
+      <div class="pages" id="manga-pages"></div>
+      <div class="hr"></div>
+      <div class="state" id="manga-state"></div>
+    </div>
     <p class="empty" id="empty">No video found yet. Start playback, then reopen this popup.</p>
   </section>
 
