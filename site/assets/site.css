@@ -268,7 +268,10 @@ td:first-child { color: var(--fg); font-weight: 600; }
 tr:last-child td { border-bottom: 0; }
 tbody tr { transition: background-color .12s; }
 tbody tr:hover { background: #161616; }
-tbody tr:hover td:first-child::before { content: "▸ "; color: var(--on); }
+/* the marker sits in the cell's left padding, so showing it moves nothing */
+tbody td:first-child { position: relative; }
+tbody td:first-child::before { content: "▸"; position: absolute; left: 3px; color: var(--on); opacity: 0; transition: opacity .12s; }
+tbody tr:hover td:first-child::before { opacity: 1; }
 td.num { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--fg); }
 .bar-cell { display: flex; align-items: center; gap: 10px; }
 .meter { height: 5px; background: var(--bar-dim); flex: 1; min-width: 60px; position: relative; }
