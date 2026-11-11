@@ -50,7 +50,8 @@ To limit it to certain sites, use the extension's "Site access" settings.
 
 ## Install (Firefox)
 
-From Firefox Add-ons: coming soon (Firefox 140 or newer).
+From Firefox Add-ons (Firefox 140 or newer, also Firefox for Android):
+https://addons.mozilla.org/firefox/addon/anime4nerd/
 
 From source, as a temporary add-on (removed when Firefox closes):
 
