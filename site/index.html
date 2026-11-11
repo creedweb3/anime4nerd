@@ -463,6 +463,15 @@
         a.textContent = a.textContent.replace('add to chrome', 'install on pc');
       }
     });
+    // Install section: Firefox visitors get the Firefox option first and marked recommended.
+    var body = document.querySelector('#install .body');
+    var opts = body ? body.querySelectorAll(':scope > .panel') : [];
+    if (!firefox || opts.length !== 3) return;
+    var label = function (panel, text) { panel.querySelector('.phead span').textContent = text; };
+    body.insertBefore(opts[2], opts[0]);
+    label(opts[2], 'option a · recommended');
+    label(opts[0], 'option b · chrome, brave, edge');
+    label(opts[1], 'option c · manual');
   })();
   // Hero: a working copy of the popup. Figures are the measured RTX 2060 costs from the presets table.
   (function () {
