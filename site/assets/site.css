@@ -61,16 +61,15 @@ section { padding-block: clamp(56px, 7vw, 96px); border-top: 1px solid var(--lin
 .hero h1 .o { color: transparent; -webkit-text-stroke: 2px var(--ok); }
 .lede { color: var(--dim); max-width: 44ch; margin: 26px 0 0; }
 .cta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 24px; }
-/* Hero buttons plus the "available for" strip, which takes the buttons width: four equal cells,
+/* Hero buttons plus the "available for" strip, which takes the buttons width: four equal boxes,
    label centred above it. */
 .get { display: inline-flex; flex-direction: column; gap: 22px; margin-top: 24px; max-width: 100%; }
 .get .cta { margin-top: 0; }
-.avail { contain: inline-size; display: grid; grid-template-columns: repeat(4, 1fr); }
+.avail { contain: inline-size; display: grid; grid-template-columns: repeat(4, 1fr); column-gap: 6px; }
 .avail .lab { grid-column: 1 / -1; margin-bottom: 10px; text-align: center; color: var(--dim); font-size: 10px; line-height: 1; letter-spacing: .2em; text-transform: uppercase; white-space: nowrap; }
-.avail a { border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; gap: 7px; height: 38px; color: var(--dim); font-size: 11px; text-decoration: none; transition: color .12s, background-color .12s; }
-.avail a + a { border-left: 0; }
-.avail a:hover, .avail a:focus-visible { color: var(--on); background: var(--panel); }
-.avail svg { width: 14px; height: 14px; flex: none; }
+.avail a { border: 1px solid var(--line); background: var(--panel); display: flex; align-items: center; justify-content: center; gap: 7px; height: 40px; color: var(--dim); font-size: 11px; text-decoration: none; transition: color .12s, background-color .12s; }
+.avail a:hover, .avail a:focus-visible { color: var(--on); border-color: var(--line2); }
+.avail svg { width: 18px; height: 18px; flex: none; }
 .get .tick { contain: inline-size; justify-content: center; margin-top: 6px; }
 .tick { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 28px; }
 
