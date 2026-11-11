@@ -111,7 +111,7 @@
 .scene .menu .it .pin { flex: none; color: var(--faint); }
 
 /* ---------- e · pick a heavier preset, the frame cost moves, still keeping up ---------- */
-.scene .pre { position: absolute; left: 14px; top: 14px; width: 352px; border: 1px solid var(--line2); background: var(--bg); padding: 6px 8px; }
+.scene .pre { position: absolute; left: 14px; top: 14px; width: 352px; padding: 6px 8px; }
 .scene .pre .pan { border: 1px solid var(--line); background: var(--panel); padding: 7px; margin-bottom: 6px; }
 .scene .pre .pan:last-child { margin-bottom: 0; }
 .scene .pre .phead { font-size: 8px; margin-bottom: 6px; }
