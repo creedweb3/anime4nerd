@@ -24,6 +24,18 @@ shaders in a browser; it does not modify them.
 - Used only in the store listing screenshot `docs/store/anime4nerd-2-compare.png`;
   the credit is printed on the image.
 
+## Website browser icons (not shipped in the extension)
+
+The "available for" strip on the website (`site/index.html`) uses:
+
+- Chrome, Brave and Firefox icons from Simple Icons (https://simpleicons.org/),
+  CC0 1.0.
+- The Edge icon from Tabler Icons (https://tabler.io/icons), MIT License,
+  Copyright (c) 2020-2024 Paweł Kuna.
+
+The browser names and logos are trademarks of their owners; no endorsement is
+implied.
+
 ## Build tooling (not shipped)
 
 - esbuild (MIT) — bundler, development only
