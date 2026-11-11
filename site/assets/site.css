@@ -70,7 +70,9 @@ section { padding-block: clamp(56px, 7vw, 96px); border-top: 1px solid var(--lin
 .avail a { border: 1px solid var(--line); background: var(--panel); display: flex; align-items: center; justify-content: center; gap: 7px; height: 40px; color: var(--dim); font-size: 11px; text-decoration: none; transition: color .12s, background-color .12s; }
 .avail a:hover, .avail a:focus-visible { color: var(--on); border-color: var(--line2); }
 .avail svg { width: 18px; height: 18px; flex: none; }
-.get .tick { contain: inline-size; justify-content: center; margin-top: 6px; }
+.get .tick { contain: inline-size; gap: 6px; margin-top: 6px; }
+/* The chips stretch to the strip width, so the three rows line up at both edges. */
+.get .tick .chip { flex: 1 1 auto; text-align: center; }
 .tick { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 28px; }
 
 /* the stage that holds the live popup and its labels */
@@ -274,11 +276,11 @@ section { padding-block: clamp(56px, 7vw, 96px); border-top: 1px solid var(--lin
 
 /* presets: the popup's tiles with a frame-budget bar each */
 .table-wrap { overflow-x: auto; border: 1px solid var(--line); background: var(--panel); }
-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 600px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
 th { font-weight: 500; font-size: 9px; letter-spacing: .16em; text-transform: uppercase; color: var(--faint); }
 td { color: var(--dim); }
-td:first-child { color: var(--fg); font-weight: 600; }
+td:first-child { color: var(--fg); font-weight: 600; white-space: nowrap; }
 tr:last-child td { border-bottom: 0; }
 /* hover: the panels' green crop marks settle onto the row's corners. The left pair hangs off the
    first cell and the right pair off the last, so nothing needs the row's width and nothing moves.
@@ -387,7 +389,44 @@ footer a { color: var(--dim); }
   .cta .btn { width: 100%; justify-content: center; }
   .get { display: flex; }
   .avail a { gap: 6px; }
+  .get .tick .chip { padding-inline: 6px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .pipe::after, .readout div::after, .scene::after, .body > .panel::after, .sheet::after { transition: none; }
+}
+/* Very narrow phones: shrink the browser boxes' contents so "firefox" still fits inside its box. */
+@media (max-width: 380px) {
+  .avail a { gap: 4px; font-size: 10px; }
+  .avail svg { width: 15px; height: 15px; }
+}
+/* Phones: each table row becomes a small card (name and cost on top, the description under them),
+   so the tables never need sideways scrolling. */
+@media (max-width: 640px) {
+  .table-wrap table, .table-wrap tbody, .table-wrap tr, .table-wrap td { display: block; }
+  .table-wrap thead { display: none; }
+  .table-wrap tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 14px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  .table-wrap tbody tr:last-child { border-bottom: 0; }
+  .table-wrap tbody td { padding: 0; border: 0; }
+  .table-wrap tbody td:last-child { grid-column: 2; grid-row: 1; text-align: right; }
+  .table-wrap tbody td:not(:first-child):not(:last-child) { grid-column: 1 / -1; margin-top: 6px; }
+  .table-wrap tbody td::after { display: none; }
+  #presets tbody td:nth-child(3)::before { content: "best for: "; color: var(--faint); }
+  .meter { min-width: 48px; }
+}
+/* Small phones: the hero popup's header keeps one line (the "click anything" hint matters more
+   than its "the popup · live" caption), and the upscale label gets its own row so all six factors
+   fit side by side. */
+@media (max-width: 480px) {
+  .sheet > .phead { white-space: nowrap; }
+  .sheet > .phead > span:first-child { display: none; }
+  #ups .pills-label { flex-basis: 100%; margin: 0; }
+  #ups .pill { flex: 1 1 0; padding-inline: 0; text-align: center; }
+}
+/* Smallest phones (320px): tighten the popup's stat boxes and top chips so nothing spills past it. */
+@media (max-width: 340px) {
+  .pp { padding-inline: 6px; }
+  .pp .bar .chip { padding-inline: 5px; }
+  .pp .kv { gap: 4px; }
+  .pp .kv div { padding-inline: 5px; min-width: 0; }
+  .pp .kv b { font-size: 12px; }
 }
