@@ -111,12 +111,13 @@
 .scene .menu .it .pin { flex: none; color: var(--faint); }
 
 /* ---------- e · pick a heavier preset, the frame cost moves, still keeping up ---------- */
-.scene .pre { position: absolute; left: 14px; top: 14px; width: 352px; padding: 6px 8px; }
-.scene .pre .pan { border: 1px solid var(--line); background: var(--panel); padding: 7px; margin-bottom: 6px; }
+/* Centred in the stage, so the space around it is even on all sides. */
+.scene .pre { position: absolute; inset: 0; margin: auto; width: 352px; height: fit-content; }
+.scene .pre .pan { border: 1px solid var(--line); background: var(--panel); padding: 9px; margin-bottom: 8px; }
 .scene .pre .pan:last-child { margin-bottom: 0; }
 .scene .pre .phead { font-size: 8px; margin-bottom: 6px; }
 .scene .pre .grid { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
-.scene .pre .t { border: 1px solid var(--line); background: var(--bg); padding: 3px 7px; }
+.scene .pre .t { border: 1px solid var(--line); background: var(--bg); padding: 6px 8px; }
 .scene .pre .t b { display: block; font-size: 10px; }
 .scene .pre .t small { color: var(--faint); font-size: 8px; }
 .scene .pre .sel { position: absolute; left: 0; top: 0; width: calc((100% - 10px) / 3); height: calc((100% - 5px) / 2); border: 1px solid var(--on); pointer-events: none; }
@@ -125,7 +126,7 @@
 .scene .pre .ms b { font-size: 16px; display: inline-grid; }
 .scene .pre .ms b span { grid-area: 1 / 1; }
 .scene .pre .ms .ok { color: var(--ok); font-size: 9px; margin-left: auto; }
-.scene .pre .track { height: 6px; background: var(--bar-dim); margin-top: 6px; position: relative; }
+.scene .pre .track { height: 6px; background: var(--bar-dim); margin-top: 9px; position: relative; }
 .scene .pre .track i { position: absolute; inset: 0; background: var(--bar); transform-origin: left; transform: scaleX(.36); }
 .scene .pre .track s { position: absolute; top: -3px; bottom: -3px; right: 0; border-left: 1px dashed var(--faint); }
 .scene .s5 .cur { animation-name: c5; }
