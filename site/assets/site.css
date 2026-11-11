@@ -378,7 +378,7 @@ footer a { color: var(--dim); }
   .pipe::before, .pipe::after { display: none; }
   .readout { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .sec { grid-template-columns: minmax(0, 1fr); row-gap: 28px; }
-  .sec > .rail { position: static; }
+  .sec > .rail, .sec.long > .rail { position: static; }
   .sec > .rail .scene { max-width: 420px; }
 }
 @media (max-width: 640px) {
