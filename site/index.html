@@ -20,7 +20,7 @@
       <a class="chip" href="#changes">what's new</a>
       <a class="chip" href="privacy">privacy</a>
     </nav>
-    <a class="btn primary" href="https://chromewebstore.google.com/detail/anime4nerd/kblnmcdmlgeidaclnhjmcffefmkehkpm" rel="noopener">add to chrome</a>
+    <a class="btn primary" data-store href="https://chromewebstore.google.com/detail/anime4nerd/kblnmcdmlgeidaclnhjmcffefmkehkpm" rel="noopener">add to chrome</a>
   </div>
 </header>
 
@@ -31,7 +31,7 @@
       <h1><span>Sharper</span><span class="o">anime.</span></h1>
       <p class="lede">Right in your browser. The original Anime4K neural upscaler, running live on your own GPU. Switch it on for any web video and every frame is restored and doubled in resolution, or more.</p>
       <div class="cta">
-        <a class="btn primary" href="https://chromewebstore.google.com/detail/anime4nerd/kblnmcdmlgeidaclnhjmcffefmkehkpm" rel="noopener">add to chrome · free</a>
+        <a class="btn primary" data-store href="https://chromewebstore.google.com/detail/anime4nerd/kblnmcdmlgeidaclnhjmcffefmkehkpm" rel="noopener">add to chrome · free</a>
         <a class="btn" href="#compare">see before / after</a>
       </div>
       <div class="tick"><span class="chip">anime4k</span><span class="chip">webgl2</span><span class="chip">2×–8× output</span><span class="chip">no account</span><span class="chip">mit</span></div>
@@ -438,6 +438,24 @@
 </footer>
 
 <script>
+  // Store buttons: Firefox visitors (desktop and Android) get the Firefox Add-ons link. Other phones
+  // and tablets can't install it (mobile Chrome and Safari have no extensions), so their buttons
+  // point to the install section instead. Everyone else, and anyone without script, keeps Chrome.
+  (function () {
+    var ua = navigator.userAgent;
+    var firefox = /Firefox\//.test(ua);
+    var mobile = (navigator.userAgentData && navigator.userAgentData.mobile) || /Android|iPhone|iPad|iPod|Mobi/.test(ua);
+    if (!firefox && !mobile) return;
+    document.querySelectorAll('a[data-store]').forEach(function (a) {
+      if (firefox) {
+        a.href = 'https://addons.mozilla.org/firefox/addon/anime4nerd/';
+        a.textContent = a.textContent.replace('chrome', 'firefox');
+      } else {
+        a.href = '#install';
+        a.textContent = a.textContent.replace('add to chrome', 'install on pc');
+      }
+    });
+  })();
   // Hero: a working copy of the popup. Figures are the measured RTX 2060 costs from the presets table.
   (function () {
     var $ = function (id) { return document.getElementById(id); };
