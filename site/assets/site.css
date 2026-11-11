@@ -62,15 +62,16 @@ section { padding-block: clamp(56px, 7vw, 96px); border-top: 1px solid var(--lin
 .lede { color: var(--dim); max-width: 44ch; margin: 26px 0 0; }
 .cta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 24px; }
 /* Hero buttons plus the "available for" strip, which takes the buttons width: four equal cells,
-   label set into the top border. */
-.get { display: inline-flex; flex-direction: column; gap: 16px; margin-top: 24px; max-width: 100%; }
+   label centred above it. */
+.get { display: inline-flex; flex-direction: column; gap: 22px; margin-top: 24px; max-width: 100%; }
 .get .cta { margin-top: 0; }
-.avail { position: relative; contain: inline-size; display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line); }
-.avail .lab { position: absolute; top: 0; left: 50%; transform: translate(-50%, -50%); padding: 0 8px; background: var(--bg); color: var(--faint); font-size: 9px; line-height: 1; letter-spacing: .16em; text-transform: uppercase; white-space: nowrap; }
-.avail a { display: flex; align-items: center; justify-content: center; gap: 7px; height: 38px; color: var(--dim); font-size: 11px; text-decoration: none; transition: color .12s, background-color .12s; }
-.avail a + a { border-left: 1px solid var(--line); }
+.avail { contain: inline-size; display: grid; grid-template-columns: repeat(4, 1fr); }
+.avail .lab { grid-column: 1 / -1; margin-bottom: 10px; text-align: center; color: var(--dim); font-size: 10px; line-height: 1; letter-spacing: .2em; text-transform: uppercase; white-space: nowrap; }
+.avail a { border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; gap: 7px; height: 38px; color: var(--dim); font-size: 11px; text-decoration: none; transition: color .12s, background-color .12s; }
+.avail a + a { border-left: 0; }
 .avail a:hover, .avail a:focus-visible { color: var(--on); background: var(--panel); }
 .avail svg { width: 14px; height: 14px; flex: none; }
+.get .tick { contain: inline-size; justify-content: center; margin-top: 6px; }
 .tick { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 28px; }
 
 /* the stage that holds the live popup and its labels */
