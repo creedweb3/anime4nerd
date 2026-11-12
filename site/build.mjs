@@ -11,7 +11,7 @@ rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 cpSync(join(here, 'assets'), join(out, 'assets'), { recursive: true });
 
-for (const page of ['index.html', 'privacy.html', 'uninstalled.html']) {
+for (const page of ['index.html', 'privacy.html', 'uninstalled.html', 'report.html']) {
   const src = readFileSync(join(here, page), 'utf8').replace(/<meta name="claude:[^>]*>\s*/, '');
   // Head is everything up to the last <link>; the rest is the body.
   const split = src.indexOf('\n', src.lastIndexOf('<link ')) + 1;
