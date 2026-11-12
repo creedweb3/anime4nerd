@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased (1.2.4)
+
+### Added
+- A bug icon at the end of the popup's top bar opens a "report a problem" page
+  on the website, with the version and browser filled in. The page's optional
+  form sends only what you write (plus up to 3 screenshots you choose), and
+  only when you press send.
+- After the extension is removed, the browser opens a short, optional
+  feedback page on the website. The link carries only the version number.
+- The extension itself still makes no network requests and collects nothing.
+  The privacy policy describes both pages, what their forms store, the abuse
+  limits, and how long answers are kept.
+
 ## 1.2.3 (2026-11-12)
 
 ### Fixed

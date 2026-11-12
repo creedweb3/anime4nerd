@@ -8,7 +8,7 @@ Companion to `docs/STORE_LISTING.md` (Chrome Web Store). Upload `Anime4Nerd fire
 **Add-on URL slug:** anime4nerd (the AMO link becomes https://addons.mozilla.org/firefox/addon/anime4nerd/ if the slug is free)
 
 **Summary (250 chars max):**
-Real-time 2x–8x Anime4K upscaling for any web video. Runs the original bloc97 shaders in WebGL2 on your GPU. No data collection, no network requests, nothing leaves your browser.
+Real-time 2x–8x Anime4K upscaling for any web video. Runs the original bloc97 shaders in WebGL2 on your GPU. No data collection, no network requests; the video never leaves your browser.
 
 **Categories:** Photos, Music & Videos
 
@@ -35,7 +35,7 @@ Performance
 Speed is about the same as in Chrome: on an RTX 2060, 1080p60 → 4K with Mode A runs at about 57 fps in Firefox (55 in Chrome). Firefox does not offer GPU timer queries to WebGL, so the popup shows "GPU timing not available in this browser" where Chrome shows GPU milliseconds per frame; it still tells you whether upscaling keeps up with the video.
 
 Privacy
-No data collection, no network requests, no accounts. It only finds videos on the page and does nothing until you switch one on. Everything stays on your machine. Full policy: https://anime4nerd.pages.dev/privacy
+No data collection, no network requests, no accounts. It only finds videos on the page and does nothing until you switch one on. Everything stays on your machine. The popup's bug icon and the page shown after removal open optional forms on our website; they send only what you write, and only when you press send. Full policy: https://anime4nerd.pages.dev/privacy
 
 Requirements
 Firefox 140 or newer and a GPU with WebGL2. The video must be served with CORS (most players do this). DRM video (Widevine) cannot be read by any extension.
@@ -49,7 +49,7 @@ Not affiliated with bloc97 or any streaming site. Anime4K is MIT licensed. Sourc
 - Support email: leave empty (issues on GitHub), or add one if wanted.
 - License: MIT License
 - Privacy policy: paste the text of `PRIVACY.md` (AMO stores the policy text itself, not a link). The same policy is online at https://anime4nerd.pages.dev/privacy.
-- Data collection: the manifest declares `data_collection_permissions: { required: ["none"] }`, so AMO shows that the add-on collects no data.
+- Data collection: the manifest declares `data_collection_permissions: { required: ["none"] }`, so AMO shows that the add-on collects no data. The add-on itself sends nothing: `runtime.setUninstallURL` opens https://anime4nerd.pages.dev/uninstalled?v=<version> after removal, and the popup's bug icon opens https://anime4nerd.pages.dev/report?v=<version>&b=firefox in a tab. Both are website forms that send only when the user presses send (see `PRIVACY.md`). Mention this in the notes to reviewer.
 - "This add-on is experimental": no. "Requires payment": no.
 - Compatibility: Firefox desktop 140+. The manifest also sets Firefox for Android 142+ (`gecko_android`); only tick Android on upload once it has been tried on a phone (the smoke test covers desktop only).
 
@@ -163,4 +163,4 @@ Screenshot captions (optional):
 2. Before / after: browser scaling vs Anime4K A+A with darken lines.
 3. The fullscreen menu.
 4. The six presets.
-5. Privacy: nothing leaves your browser.
+5. Privacy: the video never leaves your browser.

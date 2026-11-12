@@ -253,7 +253,7 @@ every state.
 
 - Extension code: MIT (`LICENSE`).
 - Anime4K shaders: MIT, bloc97 (`src/shaders/LICENSE`, `THIRD_PARTY_NOTICES.md`).
-- Privacy: `PRIVACY.md`. No data leaves the browser.
+- Privacy: `PRIVACY.md`. The extension sends no data. The popup's bug icon and the page shown after removal open optional forms on the website, which send only what you write, when you press send.
 - Security model and user safety guide: `SECURITY.md`.
 - Store listing draft: `docs/STORE_LISTING.md`; Firefox Add-ons listing and
   reviewer notes: `docs/AMO_LISTING.md`.

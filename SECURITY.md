@@ -6,9 +6,12 @@ what was reviewed, and how to use it safely. Last reviewed: 2026-11-12 (v1.2.3).
 ## Threat model in one paragraph
 
 The extension's only job is to read video frames on sites you enable and draw an
-upscaled copy over the player. It has no server, no network code, no accounts and
-no analytics. The things that could go wrong are: a page you enabled tricking the
-extension into doing something on another site, a page feeding it strings that
+upscaled copy over the player. It has no server, no network code of its own, no
+accounts and no analytics. It only opens two pages of the website (after removal,
+and from the popup's bug icon); their optional forms post to a Cloudflare Pages
+Function (`functions/api/send.js`) only when the visitor presses send. The things
+that could go wrong are: a page you enabled tricking the extension into doing
+something on another site, a page feeding it strings that
 break the popup, a page making it eat CPU/GPU, or the published package being
 tampered with. Each is addressed below.
 
