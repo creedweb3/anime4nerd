@@ -34,6 +34,7 @@ const CUE_MIN_PX = 12;
 const CUE_EDGE_PCT = 0.5; // gap between the picture edge and the first/last row
 const CUE_MAX_LINES = 12; // a line setting further out than this would land off the picture
 const CUE_MIN_SIZE_PCT = 20;
+const CUE_LIFT_RECHECK_MS = [150, 1200, 3500]; // after a pointer move: shown, then faded control bars
 
 declare global { interface Window { __a4kLoaded?: boolean } }
 let nextId = 1;
@@ -498,6 +499,14 @@ class VideoUpscaler {
       this.cueListWatched = true;
       tracks.addEventListener('addtrack', hook);
       tracks.addEventListener('change', hook);
+      // Players show their control bar on pointer movement and fade it a few seconds later:
+      // re-check the subtitle lift shortly after a move and again once a fade has finished.
+      let timers: number[] = [];
+      document.addEventListener('pointermove', () => {
+        if (!this.cues || this.cues.hidden) return;
+        for (const t of timers) clearTimeout(t);
+        timers = CUE_LIFT_RECHECK_MS.map((ms) => window.setTimeout(() => this.paintCues(), ms));
+      }, { passive: true, capture: true });
     }
     hook();
   }
@@ -536,11 +545,50 @@ class VideoUpscaler {
       else text.textContent = (cue as { text?: string }).text ?? '';
       el.append(text);
       applyCueRules(text, this.video);
+      // A ::cue font size or line height sizes the whole cue box, rows included: move them from the
+      // text to the box, or rows keep the default height around smaller text and drift apart.
+      for (const k of ['fontSize', 'lineHeight'] as const) {
+        if (text.style[k]) { el.style[k] = text.style[k]; text.style[k] = ''; }
+      }
       const at = cuePlacement(cue);
       if (at) { Object.assign(el.style, at); placed.push(el); } else stack.append(el);
     }
+    // Bottom-anchored cues move up above the player's control bar while it is showing.
+    const lift = this.controlBarLift(c);
+    if (lift) {
+      stack.style.bottom = `calc(${CUE_EDGE_PCT}% + ${lift}px)`;
+      for (const el of placed) if (el.style.bottom) el.style.bottom = `calc(${el.style.bottom} + ${lift}px)`;
+    }
     box.replaceChildren(stack, ...placed);
     box.hidden = false;
+  }
+
+  /**
+   * Height in px of the player's control bar over the bottom of the picture, while it is visible;
+   * 0 when hidden or absent. A control bar here is something drawn over the video along the bottom
+   * edge, at least 40% of the picture wide and at most 35% tall (so full-size click layers don't count).
+   */
+  private controlBarLift(c: HTMLCanvasElement): number {
+    const v = this.video;
+    const root = v.getRootNode() as Document | ShadowRoot;
+    const r = c.getBoundingClientRect();
+    if (r.height < 50) return 0;
+    let top = r.bottom;
+    for (const fx of [0.2, 0.5, 0.8]) {
+      const x = r.left + r.width * fx;
+      const y = r.bottom - Math.min(8, r.height * 0.02);
+      if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) continue;
+      const hits = root.elementsFromPoint(x, y);
+      const vi = hits.indexOf(v);
+      for (const e of vi < 0 ? hits : hits.slice(0, vi)) {
+        if (e === c || e.contains(v) || this.cues?.contains(e)) continue;
+        const b = e.getBoundingClientRect();
+        if (b.height > r.height * 0.35 || b.width < r.width * 0.4 || b.bottom < r.bottom - r.height * 0.05) continue;
+        if (!isShown(e)) continue;
+        top = Math.min(top, b.top);
+      }
+    }
+    return Math.round(Math.min(r.height * 0.35, Math.max(0, r.bottom - top)));
   }
 
   /**
@@ -760,6 +808,18 @@ function applyCueRules(text: HTMLElement, video: HTMLVideoElement) {
       } catch { /* a selector the browser can't match from here (e.g. VTT-only syntax): skip it */ }
     }
   }
+}
+
+/** Painted at all: not display:none or visibility:hidden, and not faded out (opacity along the ancestors). */
+function isShown(el: Element): boolean {
+  let opacity = 1;
+  for (let n: Element | null = el; n; n = n.parentElement) {
+    const s = getComputedStyle(n);
+    if (s.display === 'none' || s.visibility === 'hidden') return false;
+    opacity *= Number(s.opacity);
+    if (opacity < 0.1) return false;
+  }
+  return true;
 }
 
 /** Nearest positioned ancestor below <body>, or null. */

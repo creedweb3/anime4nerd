@@ -115,6 +115,13 @@ const LAYOUT = [
     },
   },
   {
+    // While the player's control bar is showing, the redrawn subtitles sit above it; when it hides
+    // (opacity 0), they go back down to the bottom edge.
+    name: 'layout-cues-bar',
+    body: `<div style="position:relative;width:960px;height:540px">${video().replace('></video>', '><track kind="subtitles" src="bar.vtt" srclang="en" default></video>')}<div id="bar" style="position:absolute;left:0;right:0;bottom:0;height:64px;background:rgba(20,20,20,.7)"></div></div>`,
+    bar: true,
+  },
+  {
     name: 'layout-cap', // three eligible videos: only MAX_ACTIVE_RENDERERS (2) may run
     body: [1, 2, 3].map(() => video('width:480px;height:270px')).join(''),
     statuses: { Active: 2, Waiting: 1 },
@@ -146,9 +153,9 @@ const server = http.createServer((req, res) => {
   if (name.endsWith('.mp4')) {
     res.writeHead(200, { 'content-type': 'video/mp4' });
     fs.createReadStream(path.join(work, name)).pipe(res);
-  } else if (name === 'cues.vtt') {
+  } else if (name === 'cues.vtt' || name === 'bar.vtt') {
     res.writeHead(200, { 'content-type': 'text/vtt' });
-    res.end(CUES_VTT);
+    res.end(name === 'cues.vtt' ? CUES_VTT : 'WEBVTT\n\n00:00.000 --> 01:00.000\nAbove the bar\n');
   } else if (layout) {
     res.writeHead(200, { 'content-type': 'text/html' });
     res.end(`<!doctype html><body style="margin:0">${layout.body}</body>`);
@@ -213,7 +220,21 @@ try {
     });
     let ok;
     let detail;
-    if (l.cues) {
+    if (l.bar) {
+      const where = () => page.evaluate(() => {
+        const s = [...document.querySelectorAll('.a4k-cues span')].find((e) => e.textContent.trim() === 'Above the bar');
+        const c = document.querySelector('canvas.a4k-canvas').getBoundingClientRect();
+        const b = document.getElementById('bar').getBoundingClientRect();
+        return s && { cueBottom: Math.round(s.getBoundingClientRect().bottom), barTop: Math.round(b.top), pictureBottom: Math.round(c.bottom) };
+      });
+      const shown = await where();
+      await page.evaluate(() => { document.getElementById('bar').style.opacity = '0'; });
+      await page.mouse.move(400, 300); await page.waitForTimeout(1500); // a pointer move or a scan repaints
+      const hidden = await where();
+      ok = list?.[0]?.status === 'Active' && shown && hidden
+        && shown.cueBottom <= shown.barTop + 1 && hidden.cueBottom > hidden.barTop + 20;
+      detail = `status=${list?.[0]?.status} barShown=${JSON.stringify(shown)} barHidden=${JSON.stringify(hidden)}`;
+    } else if (l.cues) {
       const pos = await page.evaluate((texts) => {
         const c = document.querySelector('canvas.a4k-canvas')?.getBoundingClientRect();
         const spans = [...document.querySelectorAll('.a4k-cues span')];
