@@ -24,7 +24,8 @@ Dashboard home → **Turnstile** → **Add widget**:
 2. Hostnames: add `anime4nerd.pages.dev`. A hostname also covers its subdomains, so preview
    deploys (`<hash>.anime4nerd.pages.dev`) pass too; if a preview answers `403 not_verified`, add
    its hostname here.
-3. Widget mode: **Invisible**.
+3. Widget mode: **Managed**. The pages render it with `appearance: interaction-only`, which needs
+   Managed mode: most visitors see nothing, and only a suspicious one gets a checkbox.
 4. Create. Keep the page open: it shows the **Site key** and the **Secret key**.
 
 ## 3. Create the KV namespace
@@ -57,7 +58,11 @@ Then open https://anime4nerd.pages.dev/report, describe a test problem, add thre
 screenshots and send. Check that:
 
 - the browser console shows no Content-Security-Policy errors (the live Turnstile key is the only
-  part local tests cannot cover);
+  part local tests cannot cover). Per Cloudflare's Turnstile CSP reference the form pages allow
+  `script-src` and `frame-src https://challenges.cloudflare.com`; `connect-src` stays `'self'`
+  because pre-clearance is off. Inline scripts are allowed only by their SHA-256 hash, so if anything
+  ever rewrote the HTML in transit (Cloudflare features such as Rocket Loader or email obfuscation
+  on a custom domain), the scripts would be blocked rather than run: the forms fail closed;
 - Workers & Pages → **anime4nerd** → Functions → metrics show no errors and CPU time under 10 ms.
 
 Delete the test keys from KV afterwards.
@@ -69,24 +74,39 @@ Delete the test keys from KV afterwards.
   when the daily screenshot ceiling dropped some, `shotsDropped`. Treat every value as
   untrusted text: never paste it into HTML or run it.
 - Screenshots: keys `shot:<same time-id>:1` to `:3`, raw JPEG bytes, deleted automatically after
-  60 days (text answers stay until you delete them). The dashboard cannot show
+  60 days (text answers stay until you delete them). The server accepts only the headers a browser
+  canvas writes (JFIF, ICC profile, tables, frame); EXIF, XMP and comment segments are refused.
+  The compressed image data itself is not decoded, so open screenshots in an up-to-date image
+  viewer, never in a browser tab or tool that might treat them as anything else. The dashboard cannot show
   images; save one with
   `npx wrangler kv key get "shot:<time-id>:1" --namespace-id <namespace id> --remote > shot.jpg`.
 - Counters: keys `rl:<day>:…` expire by themselves after two days.
 
 ## Limits
 
-- 5 answers per visitor per UTC day, counted under a daily-rotating salted SHA-256 of the IP
-  (IPv6: of its /64 network). 100 answers and 30 screenshots per day in total; past the screenshot
+The tradeoff, said plainly: the daily totals protect the Free-plan quotas, so someone who gets
+past Turnstile from many IP addresses can use up a day's total for one form, and genuine answers
+are then refused (with a clear message) until the next UTC day. Nothing is billed and nothing
+already stored is lost. KV counters are read, then written, so parallel requests can overshoot a
+cap slightly; if that ever reaches a Free-plan KV quota, the function answers 503 "unavailable"
+rather than failing. Every refused request logs one line with its code only (no body, IP or
+headers), visible under Workers & Pages → anime4nerd → Functions → logs.
+
+
+- 5 answers and 3 screenshots per visitor per UTC day, counted under a daily-rotating salted
+  SHA-256 of the IP (IPv6: of its /64 network). A request without Cloudflare's CF-Connecting-IP
+  header is refused. 60 uninstall answers, 60 reports and 30 screenshots per day in total, each
+  form counted separately so a flood of one leaves the other working; past a screenshot
   ceiling the text is still stored. KV counters are eventually consistent, so a burst of parallel
   requests can exceed them slightly; every request still needs its own Turnstile token, and the
   daily totals bound the damage.
 - Body at most 1.05 MB; up to 3 JPEG screenshots of at most 260 KB each (the page re-encodes to
   at most 250 KB). A maximum-size report takes about 5 ms in local tests, under the 10 ms CPU limit.
 - Free-plan quotas that apply: Functions 100,000 requests/day and 10 ms CPU per request, KV 1,000
-  writes/day and 1 GB stored. One answer uses 3 writes plus 1 per screenshot and 1 more when it has
-  screenshots, so the daily ceilings stay under about 360 writes; 30 screenshots a day kept 60 days
-  stay under about 470 MB.
+  writes/day and 1 GB stored. One answer uses 3 writes, plus 1 per screenshot and 2 more when it
+  has screenshots, so the daily ceilings stay under about 450 writes; 30 screenshots a day kept 60
+  days stay under about 470 MB. Screenshots are decoded only after Turnstile, so the CPU cost of a
+  large report is paid only for verified visitors; check CPU time after deploy (step 5).
 - A Cloudflare WAF rate-limiting rule is not possible here: WAF rules need a zone (custom domain)
   on the account, and `pages.dev` is Cloudflare's. With a custom domain later, add one rule on
   `/api/*` under Security → WAF → Rate limiting rules.

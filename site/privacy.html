@@ -1,6 +1,6 @@
 <title>Anime4Nerd Privacy</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<meta name="description" content="Privacy policy for the Anime4Nerd browser extension. The extension collects nothing; the site's optional feedback forms send only what you write, when you press send.">
+<meta name="description" content="Privacy policy for the Anime4Nerd browser extension. No personal data is collected automatically; the site's optional feedback forms send only what you write, when you press send.">
 <link rel="icon" href="assets/icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -27,7 +27,7 @@
     <div class="phead"><span>privacy policy · last updated 2026-11-12</span></div>
     <h1 style="font-size:clamp(1.8rem, 3.6vw, 2.7rem);letter-spacing:-.03em;margin:14px 0 12px">Privacy policy.</h1>
     <div class="prose">
-      <p><strong>Anime4Nerd does not collect, store, or transmit any personal data. Everything runs inside your browser.</strong> The only way anything reaches us is an optional feedback or problem-report form on this website, and only when you fill it in and press send.</p>
+      <p><strong>Anime4Nerd collects no personal data automatically. Everything runs inside your browser.</strong> The only way anything reaches us is an optional feedback or problem-report form on this website, and only when you fill it in and press send. What you type and the screenshots you attach can contain personal information if you include it, so please leave out anything private.</p>
       <h3>What the extension does</h3>
       <p>Anime4Nerd upscales video on web pages using your computer's GPU. To do that it reads the frames of videos you switch on and draws the result over the video.</p>
       <h3>Site access</h3>
@@ -46,7 +46,7 @@
       <h3>Feedback and problem reports</h3>
       <ul>
         <li><strong>Only on send</strong>: each page has an optional form that sends only when you press send.</li>
-        <li><strong>What is sent</strong>: the reasons you ticked, the text you wrote, the version (and on the report page the browser), and on the report page up to 3 screenshots you chose. Screenshots are re-encoded as JPEG in your browser first, which also removes photo metadata such as location. Answers are stored with the date and time of sending, to the minute. No name, email, account or IP address is stored.</li>
+        <li><strong>What is sent</strong>: the reasons you ticked, the text you wrote, the version (and on the report page the browser), and on the report page up to 3 screenshots you chose. Screenshots are re-encoded as JPEG in your browser first, which removes photo metadata such as location; the server also refuses any image that still carries such metadata. A screenshot shows whatever was on your screen, so crop out anything private. Answers are stored with the date and time of sending, to the minute. No name, email, account or IP address is stored.</li>
         <li><strong>Abuse limits</strong>: a daily counter per visitor is kept under a one-way hash of the IP address (for IPv6, its /64 network) mixed with a secret and the date. The hash changes every day, the counter expires after two days, and the IP address itself is never stored. Cloudflare Turnstile, an invisible check that loads when you start using the form, verifies the sender is not a bot.</li>
         <li><strong>Where it goes</strong>: answers are stored with Cloudflare (Workers KV) and read only by the developer, to fix problems. Screenshots are deleted automatically after 60 days; text answers are kept until deleted. Nothing is shared or sold.</li>
       </ul>

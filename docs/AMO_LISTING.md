@@ -8,7 +8,7 @@ Companion to `docs/STORE_LISTING.md` (Chrome Web Store). Upload `Anime4Nerd fire
 **Add-on URL slug:** anime4nerd (the AMO link becomes https://addons.mozilla.org/firefox/addon/anime4nerd/ if the slug is free)
 
 **Summary (250 chars max):**
-Real-time 2x–8x Anime4K upscaling for any web video. Runs the original bloc97 shaders in WebGL2 on your GPU. No data collection, no network requests; the video never leaves your browser.
+Real-time 2x–8x Anime4K upscaling for any web video. Runs the original bloc97 shaders in WebGL2 on your GPU. No personal data collected automatically, no network requests; the video never leaves your browser.
 
 **Categories:** Photos, Music & Videos
 
@@ -35,7 +35,7 @@ Performance
 Speed is about the same as in Chrome: on an RTX 2060, 1080p60 → 4K with Mode A runs at about 57 fps in Firefox (55 in Chrome). Firefox does not offer GPU timer queries to WebGL, so the popup shows "GPU timing not available in this browser" where Chrome shows GPU milliseconds per frame; it still tells you whether upscaling keeps up with the video.
 
 Privacy
-No data collection, no network requests, no accounts. It only finds videos on the page and does nothing until you switch one on. Everything stays on your machine. The popup's bug icon and the page shown after removal open optional forms on our website; they send only what you write, and only when you press send. Full policy: https://anime4nerd.pages.dev/privacy
+No personal data is collected automatically; no network requests, no accounts. It only finds videos on the page and does nothing until you switch one on, and the video stays on your machine. The popup's bug icon and the page shown after removal open optional forms on our website; they send only what you write (and any screenshots you attach), and only when you press send. Full policy: https://anime4nerd.pages.dev/privacy
 
 Requirements
 Firefox 140 or newer and a GPU with WebGL2. The video must be served with CORS (most players do this). DRM video (Widevine) cannot be read by any extension.
@@ -88,6 +88,13 @@ would make that file differ from a reviewer's build.
 Anime4Nerd runs the Anime4K upscaling shaders over web <video> elements with WebGL2. It has no
 network code, no remote code, no analytics and no accounts. The full source is attached and is
 also at https://github.com/creedweb3/anime4nerd (MIT).
+
+Website pages it opens (no data is sent by the add-on itself):
+- After removal, runtime.setUninstallURL opens https://anime4nerd.pages.dev/uninstalled?v=<version>.
+- The popup's bug icon opens https://anime4nerd.pages.dev/report?v=<version>&b=firefox in a tab.
+Both pages have optional feedback forms that send only what the user types (and, on /report, up
+to 3 screenshots they attach) when they press send; that content may contain personal data the
+user chooses to include. Policy: https://anime4nerd.pages.dev/privacy
 
 Build steps
 1. Node.js 24 (built with Node 24.15.0, npm 11.12.1). Any OS; no other tools needed.

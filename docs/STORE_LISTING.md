@@ -24,7 +24,7 @@ How it works
 The original Anime4K GLSL shaders by bloc97 are loaded unchanged and run through WebGL2. Each video frame goes through the chosen chain of convolution passes and the result is drawn on a canvas over the player. The networks upscale exactly 2× per pass (1080p → 2160p); higher factors chain extra 2× passes.
 
 Privacy
-No data collection, no network requests, no accounts. It only finds videos on the page and does nothing until you switch one on. Everything stays on your machine. The popup's bug icon and the page shown after removal open optional forms on our website; they send only what you write, and only when you press send. Full policy: https://anime4nerd.pages.dev/privacy
+No personal data is collected automatically; no network requests, no accounts. It only finds videos on the page and does nothing until you switch one on, and the video stays on your machine. The popup's bug icon and the page shown after removal open optional forms on our website; they send only what you write (and any screenshots you attach), and only when you press send. Full policy: https://anime4nerd.pages.dev/privacy
 
 Requirements
 Chrome / Brave / Edge 116+, a GPU with WebGL2. The video must be served with CORS (most players do this). DRM video (Widevine) cannot be read by any extension.
@@ -64,5 +64,10 @@ The popup shows a fictional title ("Starlight Academy") on purpose: no real show
 
 - Single purpose: Upscales web video in real time with the Anime4K shaders, on videos the user switches on.
 - Remote code: No, I am not using remote code. All JavaScript and shaders ship in the package.
-- Data usage: check none of the data types. Nothing is collected or transmitted.
+- Data usage: check none of the data types. The extension itself collects and transmits nothing.
+  It only opens two website pages: https://anime4nerd.pages.dev/uninstalled?v=<version> after removal
+  (`chrome.runtime.setUninstallURL`) and https://anime4nerd.pages.dev/report?v=<version>&b=chrome from
+  the popup's bug icon. Their optional forms send what the user types and any screenshots they attach,
+  only when they press send, and that text or those screenshots may contain personal data the user
+  chooses to include. If a reviewer asks, say this and link the privacy policy.
 - Certify all three: not sold to third parties; not used for unrelated purposes; not used for creditworthiness or lending.

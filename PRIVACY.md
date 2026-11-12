@@ -2,7 +2,7 @@
 
 _Last updated: 2026-11-12_
 
-**Short version: Anime4Nerd does not collect, store, or transmit any personal data. Everything runs inside your browser. The only way anything reaches us is an optional feedback or problem-report form on our website, and only when you fill it in and press send.**
+**Short version: Anime4Nerd collects no personal data automatically. Everything runs inside your browser. The only way anything reaches us is an optional feedback or problem-report form on our website, and only when you fill it in and press send. What you type and the screenshots you attach can contain personal information if you include it, so please leave out anything private.**
 
 ## What the extension does
 
@@ -31,7 +31,7 @@ It opens two pages of our website, anime4nerd.pages.dev:
 
 Opening either page is an ordinary page visit. The pages load fonts from Google Fonts, and once you start using a form they load Cloudflare Turnstile (below). Each page has an optional form, and it sends only when you press send:
 
-- **What is sent**: the reasons you ticked, the text you wrote, the version (and on the report page the browser), and on the report page up to 3 screenshots you chose. Screenshots are re-encoded as JPEG in your browser before sending, which also removes photo metadata such as location. Text and screenshots are stored as plain data with the date and time of sending, to the minute. No name, email, account or IP address is stored.
+- **What is sent**: the reasons you ticked, the text you wrote, the version (and on the report page the browser), and on the report page up to 3 screenshots you chose. Screenshots are re-encoded as JPEG in your browser before sending, which removes photo metadata such as location; the server also refuses any image that still carries such metadata. A screenshot shows whatever was on your screen, so crop out anything private. Text and screenshots are stored as plain data with the date and time of sending, to the minute. No name, email, account or IP address is stored.
 - **Abuse limits**: to cap how many answers one visitor can send per day, the site keeps a counter under a one-way hash of your IP address mixed with a secret and the date. IPv6 addresses are counted by their network (/64). The hash changes every day and the counter expires after two days; the IP address itself is never stored. Cloudflare Turnstile, an invisible check that loads when you start using the form, verifies the sender is not a bot.
 - **Where it goes**: answers are stored with Cloudflare (Workers KV) and read only by the developer, to fix problems. Screenshots are deleted automatically after 60 days; text answers are kept until deleted. Nothing is shared or sold.
 
