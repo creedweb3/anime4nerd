@@ -43,6 +43,9 @@ body {
 }
 .chip.grow { flex: 1; }
 .chip.on { color: var(--on); border-color: var(--line2); }
+.chip.bug { display: flex; align-items: center; padding: 3px 6px; text-decoration: none; }
+.chip.bug:hover { color: var(--fg); border-color: var(--line2); }
+.chip.bug:focus-visible { color: var(--on); border-color: var(--on); outline: 1px solid var(--on); outline-offset: 1px; }
 
 /* what's new banner (after an update) -------------------------------------- */
 .update-note {

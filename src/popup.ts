@@ -4,6 +4,7 @@ import {
 import { EMPTY_META, MediaMeta } from './media-meta';
 import { WHATS_NEW_URL, clearWhatsNew, pendingWhatsNew } from './whats-new';
 import { REVIEW_URL, RateAction, cardFor, loadRate, pendingLevel } from './rate-prompt';
+import { BROWSER, reportUrl } from './site-links';
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
 const hintEl = $('#hint');
@@ -14,6 +15,8 @@ const presetNameEl = $('#presetName');
 const sourcesEl = $('#sources');
 const emptyEl = $('#empty');
 const presetsEl = $('#presets');
+// popup.html carries a plain /report link; this adds the version and browser.
+$<HTMLAnchorElement>('#report').href = reportUrl(chrome.runtime.getManifest().version, BROWSER);
 const perf = {
   verdict: $('#verdict'), load: $('#k-load'), ms: $('#k-ms'), fps: $('#k-fps'), avg: $('#k-avg'), limit: $('#k-limit'), late: $('#k-late'),
   bars: $('#bars'), legend: $('#legend'),

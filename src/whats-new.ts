@@ -3,8 +3,10 @@
 // one-line banner linking to the release notes and clears both. No network requests:
 // the site only opens if the user clicks the link.
 
+import { SITE } from './site-links';
+
 const KEY = 'anime4k-whats-new';
-export const WHATS_NEW_URL = 'https://anime4nerd.pages.dev/#changes';
+export const WHATS_NEW_URL = `${SITE}/#changes`;
 
 function showBadge(): Promise<void> {
   return Promise.all([

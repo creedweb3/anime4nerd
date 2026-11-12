@@ -9,8 +9,22 @@
 import { markUpdated, restoreBadge } from './whats-new';
 import { RateAction, addWatch, applyAction, markReturning, updateRate } from './rate-prompt';
 import type { Message } from './settings';
+import { uninstallUrl } from './site-links';
 
 const RATE_ACTIONS: readonly RateAction[] = ['dismiss', 'clicked', 'rated'];
+
+// After removal the browser opens the site's optional feedback page. The URL carries only the
+// version; the page sends answers only if the user fills it in and presses send. A failure here
+// must not stop the rest of the background script, so it is logged and ignored.
+function setUninstallPage(): void {
+  const warn = (e: unknown) => console.warn('Anime4Nerd: could not set the uninstall page', e);
+  try {
+    chrome.runtime.setUninstallURL(uninstallUrl(chrome.runtime.getManifest().version)).catch(warn);
+  } catch (e) {
+    warn(e);
+  }
+}
+setUninstallPage();
 
 async function injectTab(tabId: number): Promise<void> {
   let frames: { frameId: number }[] = [];
