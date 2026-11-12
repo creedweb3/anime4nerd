@@ -131,7 +131,8 @@ Files in the package
   element instead, because nothing can be drawn over a bare fullscreen video. It uses no
   extension APIs and sends nothing.
 - popup.html/js/css: the toolbar popup. Page-derived strings are set with textContent; the one
-  innerHTML use is a constant template without interpolation.
+  innerHTML use is a constant template without interpolation. Its bug icon is a plain link to
+  https://anime4nerd.pages.dev/report?v=<version>&b=firefox (target=_blank).
 
 Permissions
 - storage: preset, line effects and upscale factor (storage.sync); the per-site on/off map and
