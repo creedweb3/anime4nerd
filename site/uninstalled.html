@@ -23,14 +23,14 @@
   .scene.gone .it.out em { font-style: normal; font-size: 8px; color: var(--bad); border: 1px solid rgba(var(--r), .5); padding: 0 5px; }
 
   /* Numbered steps, like the "pass 01" strip on the home page. */
-  .step { display: flex; align-items: center; gap: 10px; margin: 18px 0 8px; }
-  form > .step:first-child { margin-top: 2px; }
+  .step { display: flex; align-items: center; gap: 10px; margin: 26px 0 12px; }
+  form > .step:first-child { margin-top: 10px; }
   .step i { font-style: normal; font-size: 10px; color: var(--dim); border: 1px solid var(--line2); padding: 1px 6px; }
   .step b { color: var(--fg); font-size: 13px; font-weight: 600; }
   .step span { margin-left: auto; color: var(--faint); font-size: 10px; text-transform: uppercase; letter-spacing: .14em; }
 
-  .why { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-  .why button { text-align: left; display: grid; gap: 3px; border: 1px solid var(--line); background: var(--bg); padding: 9px 11px; cursor: pointer; font: 12px/1.3 var(--mono); color: var(--fg); transition: border-color .12s, background-color .12s; }
+  .why { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .why button { text-align: left; display: grid; gap: 3px; border: 1px solid var(--line); background: var(--bg); padding: 11px 12px; cursor: pointer; font: 12px/1.3 var(--mono); color: var(--fg); transition: border-color .12s, background-color .12s; }
   .why button i { font-style: normal; font-size: 10px; color: var(--faint); }
   .why button em { font-style: normal; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .why button[aria-pressed="false"]:hover { border-color: var(--line2); }
@@ -38,14 +38,14 @@
   .why button[aria-pressed="true"] { border-color: rgba(var(--g), .7); background: linear-gradient(135deg, rgba(var(--g), .16), transparent 60%) var(--bg); }
   .why button[aria-pressed="true"] i { color: var(--ok); }
   .why button[aria-pressed="true"] em { color: var(--fg); }
-  .tips { display: grid; gap: 4px; margin-top: 10px; }
+  .tips { display: grid; gap: 8px; margin-top: 16px; }
   .tips:empty { display: none; }
-  .tips p { margin: 0; padding-left: 10px; border-left: 2px solid var(--ok); color: var(--ok); font-size: 12px; }
+  .tips p { margin: 0; padding: 2px 0 2px 12px; line-height: 1.5; border-left: 2px solid var(--ok); color: var(--ok); font-size: 12px; }
   .tips p b { color: var(--fg); font-weight: 600; }
   textarea { display: block; width: 100%; height: 76px; padding: 9px 11px; background: var(--bg); border: 1px solid var(--line2); color: var(--fg); font: 13px/1.5 var(--mono); resize: vertical; }
   textarea:focus { outline: none; border-color: var(--on); }
   /* Step 03: the button centred under its heading, the note centred under the button. */
-  .send { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 18px; }
+  .send { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 24px; }
   .send .btn { min-width: 220px; justify-content: center; }
   .send small { color: var(--faint); font-size: 11px; text-align: center; }
   .send button[disabled] { opacity: .45; cursor: default; }
