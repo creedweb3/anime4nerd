@@ -15,7 +15,8 @@
   position: absolute;
   pointer-events: none;
   box-sizing: border-box;
-  font: 400 1em/1.25 system-ui, sans-serif;
+  /* The browsers' own caption font and row height: the black strips of two rows just touch. */
+  font: 400 1em/1.2 sans-serif;
   color: #fff;
 }
 
@@ -28,7 +29,7 @@
   position: absolute;
   left: 4%;
   right: 4%;
-  bottom: 4%;
+  bottom: 0.5%;
   text-align: center;
 }
 

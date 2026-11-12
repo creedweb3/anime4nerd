@@ -26,12 +26,12 @@ const MIN_VIDEO_PX = 200; // ignore thumbnails / preview videos
 // cap live contexts (~16) and evict the oldest, so a page full of videos must not get one each.
 const MAX_ACTIVE_RENDERERS = 2;
 const STACK_CHECK_MS = 1000; // how often to check that the player's overlays still paint over the canvas
-// Redrawn subtitles (paintCues): the browser's default caption size is about 2.8% of the picture
-// height per text row (Chrome, 1080p fullscreen: rows 37 px apart).
-const CUE_FONT_SHARE = 0.0275;
-const CUE_LINE_HEIGHT = 1.25; // em per text row
+// Redrawn subtitles (paintCues), sized like Chrome's own captions: font 5% of the video height,
+// rows touching, the last row almost on the bottom edge. Pages' ::cue rules can change the size.
+const CUE_FONT_SHARE = 0.05;
+const CUE_LINE_HEIGHT = 1.2; // em per text row; must match line-height in content.css
 const CUE_MIN_PX = 12;
-const CUE_EDGE_PCT = 4; // gap between the picture edge and the first/last row
+const CUE_EDGE_PCT = 0.5; // gap between the picture edge and the first/last row
 const CUE_MAX_LINES = 12; // a line setting further out than this would land off the picture
 const CUE_MIN_SIZE_PCT = 20;
 
@@ -535,6 +535,7 @@ class VideoUpscaler {
       if ('getCueAsHTML' in cue) text.append((cue as VTTCue).getCueAsHTML());
       else text.textContent = (cue as { text?: string }).text ?? '';
       el.append(text);
+      applyCueRules(text, this.video);
       const at = cuePlacement(cue);
       if (at) { Object.assign(el.style, at); placed.push(el); } else stack.append(el);
     }
@@ -689,6 +690,76 @@ function cuePlacement(cue: TextTrackCue): Partial<CSSStyleDeclaration> | null {
   s.width = `${size}%`;
   s.textAlign = { start: 'left', center: 'center', end: 'right' }[align];
   return s;
+}
+
+// --- the page's own ::cue styles, applied to our subtitle copy --------------
+// Only the properties browsers let ::cue change (CSS Pseudo-Elements, WebVTT spec), so the copy
+// looks the way the browser would have drawn it with the page's styles.
+const CUE_PROPS = /^(color|opacity|visibility|text-decoration(-.+)?|text-shadow|background(-.+)?|outline(-.+)?|font(-.+)?|line-height|white-space|text-combine-upright|ruby-position)$/;
+const CUE_RULES_MS = 2000; // re-read the page's stylesheets at most this often
+interface CueRule { prefix: string; inner: string | null; decls: [string, string, string][] }
+let cueRules: { at: number; root: Document | ShadowRoot; rules: CueRule[] } | null = null;
+
+/** Split a selector list on top-level commas (not the ones inside ::cue(a, b) or :is(...)). */
+function splitSelectors(list: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < list.length; i += 1) {
+    const ch = list[i];
+    if (ch === '(') depth += 1;
+    else if (ch === ')') depth -= 1;
+    else if (ch === ',' && depth === 0) { out.push(list.slice(start, i)); start = i + 1; }
+  }
+  out.push(list.slice(start));
+  return out.map((s) => s.trim());
+}
+
+function readCueRules(root: Document | ShadowRoot): CueRule[] {
+  const rules: CueRule[] = [];
+  const walk = (list: CSSRuleList) => {
+    for (const r of list) {
+      if (r instanceof CSSMediaRule && !matchMedia(r.media.mediaText).matches) continue;
+      if (r instanceof CSSStyleRule && r.selectorText.includes('::cue')) {
+        const decls: [string, string, string][] = [];
+        for (const name of r.style) {
+          if (CUE_PROPS.test(name)) decls.push([name, r.style.getPropertyValue(name), r.style.getPropertyPriority(name)]);
+        }
+        if (!decls.length) continue;
+        for (const sel of splitSelectors(r.selectorText)) {
+          const m = sel.match(/^(.*?)::cue(?:\((.*)\))?$/);
+          if (m) rules.push({ prefix: m[1].trim(), inner: m[2]?.trim() || null, decls });
+        }
+      } else if ('cssRules' in r && (r as CSSGroupingRule).cssRules) {
+        walk((r as CSSGroupingRule).cssRules);
+      }
+    }
+  };
+  for (const sheet of [...root.styleSheets, ...(root.adoptedStyleSheets ?? [])]) {
+    try { walk(sheet.cssRules); } catch { /* cross-origin sheet: unreadable, as for any page script */ }
+  }
+  return rules;
+}
+
+/** Style one cue's text (and its <i>, <b>, <c.class> parts) with the page's ::cue rules. */
+function applyCueRules(text: HTMLElement, video: HTMLVideoElement) {
+  const root = video.getRootNode() as Document | ShadowRoot;
+  const now = performance.now();
+  if (!cueRules || cueRules.root !== root || now - cueRules.at > CUE_RULES_MS) cueRules = { at: now, root, rules: readCueRules(root) };
+  if (!cueRules.rules.length) return;
+  // Normal declarations first, then !important ones, each in stylesheet order: later rules win,
+  // !important beats normal, as in the cascade.
+  for (const important of [false, true]) {
+    for (const rule of cueRules.rules) {
+      try {
+        if (rule.prefix && !video.matches(rule.prefix)) continue;
+        const targets = rule.inner ? [...text.querySelectorAll<HTMLElement>(rule.inner)] : [text];
+        for (const el of targets) {
+          for (const [name, value, prio] of rule.decls) if ((prio === 'important') === important) el.style.setProperty(name, value);
+        }
+      } catch { /* a selector the browser can't match from here (e.g. VTT-only syntax): skip it */ }
+    }
+  }
 }
 
 /** Nearest positioned ancestor below <body>, or null. */

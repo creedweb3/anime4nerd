@@ -101,7 +101,10 @@ const LAYOUT = [
     // them above it, where the WebVTT cue settings ask, and falls back to bottom-centre for
     // placements that would land off the picture or that it doesn't support (vertical text).
     name: 'layout-cues',
-    body: video().replace('></video>', '><track kind="subtitles" src="cues.vtt" srclang="en" default></video>'),
+    // The page's own ::cue rules must carry over: yellow text, green <b>, and the cue's <i> stays italic.
+    body: '<style>video::cue { color: rgb(255, 200, 0); padding: 9em } ::cue(b) { color: rgb(0, 255, 0) }</style>'
+      + video().replace('></video>', '><track kind="subtitles" src="cues.vtt" srclang="en" default></video>'),
+    cueStyle: (s) => s.italic === 'italic' && s.color === 'rgb(255, 200, 0)' && s.bold === 'rgb(0, 255, 0)' && s.padding.startsWith('0px '), // ::cue can't set padding
     // fx/fy: where the cue's centre sits as a fraction of the picture.
     cues: {
       'Bottom line': (p) => p.fy > 0.75 && Math.abs(p.fx - 0.5) < 0.15,
@@ -122,7 +125,7 @@ const LAYOUT = [
 const CUES_VTT = `WEBVTT
 
 00:00.000 --> 01:00.000
-Bottom line
+<i>Bottom</i> <b>line</b>
 
 00:00.000 --> 01:00.000 line:0
 Top sign
@@ -220,8 +223,15 @@ try {
         }));
       }, Object.keys(l.cues));
       const bad = Object.entries(l.cues).filter(([t, okAt]) => !pos?.[t] || !okAt(pos[t])).map(([t]) => t);
-      ok = list?.[0]?.status === 'Active' && bad.length === 0;
-      detail = `status=${list?.[0]?.status} misplaced=${JSON.stringify(bad)} at=${JSON.stringify(pos)}`;
+      // Look of the "Bottom line" copy: page ::cue rules applied, cue markup kept, padding not copied.
+      const look = await page.evaluate(() => {
+        const s = [...document.querySelectorAll('.a4k-cues span')].find((e) => e.textContent.trim() === 'Bottom line');
+        const i = s?.querySelector('i'); const b = s?.querySelector('b');
+        return s && { color: getComputedStyle(s).color, padding: getComputedStyle(s).padding, italic: i && getComputedStyle(i).fontStyle, bold: b && getComputedStyle(b).color };
+      });
+      const styled = !l.cueStyle || (look && l.cueStyle(look));
+      ok = list?.[0]?.status === 'Active' && bad.length === 0 && styled;
+      detail = `status=${list?.[0]?.status} misplaced=${JSON.stringify(bad)} look=${JSON.stringify(look)} at=${JSON.stringify(pos)}`;
     } else if (l.statuses) {
       const counts = {};
       for (const i of list ?? []) counts[i.status] = (counts[i.status] ?? 0) + 1;
