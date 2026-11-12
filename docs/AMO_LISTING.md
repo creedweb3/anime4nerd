@@ -51,7 +51,7 @@ Not affiliated with bloc97 or any streaming site. Anime4K is MIT licensed. Sourc
 - Privacy policy: paste the text of `PRIVACY.md` (AMO stores the policy text itself, not a link). The same policy is online at https://anime4nerd.pages.dev/privacy.
 - Data collection: the manifest declares `data_collection_permissions: { required: ["none"] }`, so AMO shows that the add-on collects no data. The add-on itself sends nothing: `runtime.setUninstallURL` opens https://anime4nerd.pages.dev/uninstalled?v=<version> after removal, and the popup's bug icon opens https://anime4nerd.pages.dev/report?v=<version>&b=firefox in a tab. Both are website forms that send only when the user presses send (see `PRIVACY.md`). Mention this in the notes to reviewer.
 - "This add-on is experimental": no. "Requires payment": no.
-- Compatibility: Firefox desktop 140+. The manifest also sets Firefox for Android 142+ (`gecko_android`); only tick Android on upload once it has been tried on a phone (the smoke test covers desktop only).
+- Compatibility: Firefox desktop 140+ only. The manifest has no `gecko_android` key and Android must stay unticked on upload: the add-on has never been tested on a phone (the smoke test covers desktop only).
 
 ## Permission justifications
 
@@ -114,7 +114,7 @@ What the build does (build.mjs)
   THIRD_PARTY_NOTICES.md). src/mpv-hooks.ts turns them into WebGL2 fragment shaders.
 - The manifest is manifest.json with Firefox changes (firefoxManifest() in build.mjs):
   background.scripts instead of a service worker, gecko id anime4nerd@creedweb3.github.io,
-  strict_min_version 140.0 (Android 142.0), data_collection_permissions none.
+  strict_min_version 140.0 (desktop only), data_collection_permissions none.
 - No runtime npm dependencies. Dev dependencies: esbuild, typescript, @types/chrome,
   @webgpu/types.
 

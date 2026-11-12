@@ -27,8 +27,8 @@ npm run pack:firefox    # also writes "Anime4Nerd firefox.zip"
 
 The Firefox build uses the same sources with a Firefox manifest
 (`firefoxManifest()` in `build.mjs`): `background.scripts` instead of a service
-worker, the add-on id `anime4nerd@creedweb3.github.io`, Firefox 140+ (Firefox
-for Android 142+), and `data_collection_permissions: none`. `pack` and
+worker, the add-on id `anime4nerd@creedweb3.github.io`, desktop Firefox 140+
+(not Firefox for Android), and `data_collection_permissions: none`. `pack` and
 `pack:firefox` write the zip with Windows' own `tar.exe` on Windows and with
 `zip` on Linux and macOS.
 
@@ -50,7 +50,8 @@ To limit it to certain sites, use the extension's "Site access" settings.
 
 ## Install (Firefox)
 
-From Firefox Add-ons (Firefox 140 or newer, also Firefox for Android):
+From Firefox Add-ons (desktop Firefox 140 or newer; Firefox for Android is not
+supported):
 https://addons.mozilla.org/firefox/addon/anime4nerd/
 
 From source, as a temporary add-on (removed when Firefox closes):

@@ -299,7 +299,7 @@
         <div class="panel">
         <div class="phead"><span>option c · firefox</span></div>
         <h3>From Firefox Add-ons</h3>
-        <p>One click in Firefox 140 or newer, including Firefox for Android. Updates install automatically.</p>
+        <p>One click in desktop Firefox 140 or newer. Updates install automatically.</p>
         <div class="foot"><a class="btn primary" href="https://addons.mozilla.org/firefox/addon/anime4nerd/" rel="noopener">add to firefox</a><span class="chip">firefox 140+</span><span class="chip">webgl2 gpu</span><a class="chip" href="https://github.com/creedweb3/anime4nerd#install-firefox" rel="noopener">readme →</a></div>
         </div>
       </div>
@@ -464,13 +464,13 @@
 </footer>
 
 <script>
-  // Store buttons: Firefox visitors (desktop and Android) get the Firefox Add-ons link. Other phones
-  // and tablets can't install it (mobile Chrome and Safari have no extensions), so their buttons
+  // Store buttons: desktop Firefox visitors get the Firefox Add-ons link. Phones and tablets,
+  // Firefox for Android included, can't install it (the add-on is desktop only), so their buttons
   // point to the install section instead. Everyone else, and anyone without script, keeps Chrome.
   (function () {
     var ua = navigator.userAgent;
-    var firefox = /Firefox\//.test(ua);
     var mobile = (navigator.userAgentData && navigator.userAgentData.mobile) || /Android|iPhone|iPad|iPod|Mobi/.test(ua);
+    var firefox = !mobile && /Firefox\//.test(ua);
     if (!firefox && !mobile) return;
     document.querySelectorAll('a[data-store]').forEach(function (a) {
       if (firefox) {

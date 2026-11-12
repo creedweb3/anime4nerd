@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- Firefox build: desktop Firefox only. The manifest no longer declares Firefox
+  for Android support (it was never tested on a phone), and the README and
+  website no longer claim it. Firefox for Android visitors to the website are
+  pointed to the install section, like other phones.
+
 ## 1.2.4 (2026-11-12)
 
 ### Added

@@ -33,7 +33,8 @@ const configs = [
 ];
 
 // Firefox has no background service worker, ignores use_dynamic_url, and needs a fixed add-on id
-// plus the data-collection declaration AMO requires (140+ desktop, 142+ Android understand it).
+// plus the data-collection declaration AMO requires (Firefox 140+ understands it). Desktop only:
+// no gecko_android key, because the add-on has not been tested on Firefox for Android.
 function firefoxManifest() {
   const m = JSON.parse(readFileSync('manifest.json', 'utf8'));
   // AMO allows at most 45 characters in the name; the Chrome name is longer.
@@ -47,7 +48,6 @@ function firefoxManifest() {
       strict_min_version: '140.0',
       data_collection_permissions: { required: ['none'] },
     },
-    gecko_android: { strict_min_version: '142.0' },
   };
   writeFileSync(`${outdir}/manifest.json`, `${JSON.stringify(m, null, 2)}\n`);
 }
