@@ -19,6 +19,7 @@ What you get
 • Works on embedded players too (videos inside iframes are found automatically)
 • Live performance panel: GPU % per frame, ms, output fps, late frames, 2-second graph
 • Per-site switch that is remembered, so the next episode is already upscaled
+• Something wrong? The bug icon in the popup opens a short report form with your version filled in
 
 How it works
 The original Anime4K GLSL shaders by bloc97 are loaded unchanged and run through WebGL2. Each video frame goes through the chosen chain of convolution passes and the result is drawn on a canvas over the player. The networks upscale exactly 2× per pass (1080p → 2160p); higher factors chain extra 2× passes.
