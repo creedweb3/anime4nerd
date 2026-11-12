@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.2.3 (2026-11-12)
+
+### Fixed
+- The upscaled picture no longer covers the player's own controls, menus and
+  subtitles (reported in a Chrome Web Store review). The overlay canvas now
+  takes the video's own stacking level instead of one above it, so anything
+  the player draws over the video stays on top. If a player's overlays still
+  end up under it (controls placed before an unpositioned `<video>`), the
+  canvas moves to the start of the player's container. Seen on JW Player
+  sites such as anihosts.xyz and anixo.online, and on anilast.xyz.
+- Subtitle tracks the browser draws inside the `<video>` itself (`<track>`,
+  WebVTT; e.g. anilast.xyz, 9ime.live) were hidden while upscaling. The
+  active cues are now redrawn just above the upscaled picture: placed where
+  their WebVTT settings ask (falling back to bottom centre for placements off
+  the picture or vertical text), styled with the page's own `::cue` rules,
+  sized like the browser's captions, and lifted above the player's control
+  bar while it is showing.
+
+### Added
+- Firefox build: the "rate it" card from 1.2.1, linking to the Firefox
+  Add-ons review page.
+
+### Changed
+- Fullscreen menu: same size, with a status box (switch, video size,
+  performance) tinted green while upscaling and red while off, an even 3×2
+  preset grid, and full-width line and upscale rows.
+- Firefox build name: "Anime4Nerd: Anime Upscaler & Video Enhancer". Firefox
+  Add-ons allows at most 45 characters, so it drops "(Anime4K)" from the
+  Chrome name.
+
 ## 1.2.2 (2026-11-08)
 
 ### Changed
