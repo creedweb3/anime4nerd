@@ -88,6 +88,15 @@ const LAYOUT = [
     top: '#ctl',
   },
   {
+    // Controls placed before the <video> in the page (video not positioned): the canvas must still
+    // end up under them, so it may be mounted elsewhere than right after the video.
+    name: 'layout-controls-before',
+    body: `<div style="position:relative;width:960px;height:540px"><div id="ctl" style="position:absolute;left:0;right:0;bottom:0;height:48px;background:#333"></div>${video()}</div>`,
+    expect: (v) => ({ x: v.x + 120, y: v.y, w: 720, h: 540 }),
+    top: '#ctl',
+    anywhere: true,
+  },
+  {
     name: 'layout-cap', // three eligible videos: only MAX_ACTIVE_RENDERERS (2) may run
     body: [1, 2, 3].map(() => video('width:480px;height:270px')).join(''),
     statuses: { Active: 2, Waiting: 1 },
@@ -122,7 +131,10 @@ try {
   const sw = ctx.serviceWorkers()[0] ?? await ctx.waitForEvent('serviceworker', { timeout: 10000 });
   await sw.evaluate((key) => chrome.storage.local.set({ 'anime4k-sources': { [key]: true } }), `127.0.0.1:${port}::127.0.0.1:${port}`);
 
+  // ONLY=<regex> runs just the matching cases, e.g. ONLY=controls
+  const only = process.env.ONLY ? new RegExp(process.env.ONLY) : null;
   for (const c of CASES) {
+    if (only && !only.test(c.name)) continue;
     const page = await ctx.newPage();
     const glErrors = [];
     page.on('console', (m) => { if (/GL_INVALID|WebGL: /.test(m.text())) glErrors.push(m.text()); });
@@ -150,6 +162,7 @@ try {
   }
 
   for (const l of LAYOUT) {
+    if (only && !only.test(l.name)) continue;
     const page = await ctx.newPage();
     await page.goto(`http://127.0.0.1:${port}/${l.name}`);
     await page.waitForTimeout(12000);
@@ -190,7 +203,7 @@ try {
       }, l.top ?? null);
       const want = l.expect(r.video);
       const near = (a, b) => Math.abs(a - b) <= 1;
-      ok = list?.[0]?.status === 'Active' && r.canvas && r.nextToVideo
+      ok = list?.[0]?.status === 'Active' && r.canvas && (r.nextToVideo || l.anywhere)
         && near(r.canvas.x, want.x) && near(r.canvas.y, want.y) && near(r.canvas.w, want.w) && near(r.canvas.h, want.h)
         && r.clip === (l.clip ?? '')
         && (!l.top || (r.stack?.controlsOnTop && r.stack?.canvasOverVideo));

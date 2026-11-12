@@ -25,6 +25,7 @@ const MIN_VIDEO_PX = 200; // ignore thumbnails / preview videos
 // Each renderer holds a WebGL context, compiled shaders and large float textures; browsers
 // cap live contexts (~16) and evict the oldest, so a page full of videos must not get one each.
 const MAX_ACTIVE_RENDERERS = 2;
+const STACK_CHECK_MS = 1000; // how often to check that the player's overlays still paint over the canvas
 
 declare global { interface Window { __a4kLoaded?: boolean } }
 let nextId = 1;
@@ -49,6 +50,18 @@ class VideoUpscaler {
   private rerender = false;
 
   private failed = false;
+
+  /** Set when the canvas had to move to the start of this container (see coversOverlay). */
+  private lowered: Element | null = null;
+
+  private lastStackCheck = 0;
+
+  /** Our copy of the browser's own subtitles (see paintCues). */
+  private cues: HTMLDivElement | null = null;
+
+  private readonly cueTracks = new WeakSet<TextTrack>();
+
+  private cueListWatched = false;
 
   private starting = false;
 
@@ -281,6 +294,7 @@ class VideoUpscaler {
     canvas.setAttribute('aria-hidden', 'true');
     this.canvas = canvas;
     this.mountCanvas(canvas);
+    this.watchCues();
     this.setStatus('Loading', 'Preparing Anime4K (first start compiles shaders, 5–10 s).');
 
     const timeout = window.setTimeout(() => {
@@ -438,6 +452,8 @@ class VideoUpscaler {
     this.renderer = null;
     this.canvas?.remove();
     this.canvas = null;
+    this.cues?.remove();
+    this.cues = null;
     this.starting = false;
     this.rendering = false;
     this.rerender = false;
@@ -448,9 +464,98 @@ class VideoUpscaler {
   private mountCanvas(canvas: HTMLCanvasElement) {
     const parent = this.video.parentElement;
     if (!parent) return;
-    if (!pageLevel(parent) && getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
-    this.video.insertAdjacentElement('afterend', canvas);
+    if (this.lowered && this.lowered.contains(this.video)) {
+      // See coversOverlay: first in the player container, so all of the player's overlays paint over it.
+      this.lowered.prepend(canvas);
+    } else {
+      this.lowered = null;
+      if (!pageLevel(parent) && getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
+      this.video.insertAdjacentElement('afterend', canvas);
+    }
     this.layout();
+  }
+
+  /** Repaint our subtitle copy whenever a track's cues or modes change. */
+  private watchCues() {
+    const tracks = this.video.textTracks;
+    const hook = () => {
+      for (const t of tracks) {
+        if (this.cueTracks.has(t)) continue;
+        this.cueTracks.add(t);
+        t.addEventListener('cuechange', () => this.paintCues());
+      }
+      this.paintCues();
+    };
+    if (!this.cueListWatched) {
+      this.cueListWatched = true;
+      tracks.addEventListener('addtrack', hook);
+      tracks.addEventListener('change', hook);
+    }
+    hook();
+  }
+
+  /**
+   * The browser draws a <video>'s own subtitle tracks (<track>, WebVTT) inside the video picture, so
+   * the canvas covers them. Show the active cues again in a layer just above the canvas, over the
+   * same picture area, styled like the browser's default captions.
+   */
+  private paintCues() {
+    const c = this.canvas;
+    const active = c && !c.hidden
+      ? [...this.video.textTracks].filter((t) => t.mode === 'showing').flatMap((t) => [...(t.activeCues ?? [])])
+      : [];
+    if (!c || !active.length) { if (this.cues) this.cues.hidden = true; return; }
+    let box = this.cues;
+    if (!box) {
+      box = document.createElement('div');
+      box.className = 'a4k-cues';
+      box.setAttribute('aria-hidden', 'true'); // screen readers already get the real track
+      this.cues = box;
+    }
+    if (box.previousElementSibling !== c) c.insertAdjacentElement('afterend', box);
+    for (const k of ['left', 'top', 'width', 'height', 'clipPath', 'zIndex'] as const) box.style[k] = c.style[k];
+    box.style.fontSize = `${Math.max(12, parseFloat(c.style.height) * 0.05)}px`;
+    box.replaceChildren(...active.map((cue) => {
+      const line = document.createElement('span');
+      // getCueAsHTML keeps WebVTT's own <i>/<b>/<u> markup; it builds nodes, never runs page markup.
+      if ('getCueAsHTML' in cue) line.append((cue as VTTCue).getCueAsHTML());
+      else line.textContent = (cue as { text?: string }).text ?? '';
+      return line;
+    }));
+    box.hidden = false;
+  }
+
+  /**
+   * True when something the page draws over the video (controls, menus, subtitles) ends up under the
+   * canvas. Right after the video is the right place for almost every player, but a player that puts
+   * its controls before an unpositioned <video> would have them painted under the canvas. Checked by
+   * hit-testing a grid over the picture with and without the canvas.
+   */
+  private coversOverlay(c: HTMLCanvasElement): boolean {
+    const v = this.video;
+    const root = v.getRootNode() as Document | ShadowRoot;
+    const r = c.getBoundingClientRect();
+    // Rows reach close to the edges: control bars and subtitles sit in the bottom tenth.
+    const rows = [0.04, 0.25, 0.5, 0.75, 0.88, 0.96];
+    const cols = [0.06, 0.3, 0.5, 0.7, 0.94];
+    for (const fy of rows) {
+      for (const fx of cols) {
+        const x = r.left + r.width * fx;
+        const y = r.top + r.height * fy;
+        if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) continue;
+        const under = root.elementsFromPoint(x, y); // the canvas is pointer-events: none, so not listed
+        const vi = under.indexOf(v);
+        if (vi <= 0) continue;
+        const above = under.slice(0, vi).filter((e) => !e.contains(v));
+        if (!above.length) continue;
+        c.style.pointerEvents = 'auto';
+        const over = root.elementsFromPoint(x, y);
+        c.style.pointerEvents = '';
+        const ci = over.indexOf(c);
+        if (ci >= 0 && above.some((e) => over.indexOf(e) > ci)) return true;
+      }
+    }
+    return false;
   }
 
   /** Re-check placement; called on every scan because players move or restyle the video without resizing it. */
@@ -476,9 +581,14 @@ class VideoUpscaler {
     // Display size crossed the 2x line (fullscreen, theater mode, zoom): rebuild at the other scale.
     if ((this.renderer || this.starting) && this.wantedScale() !== this.scale) { this.teardown(); this.sync(); return; }
     // Players move the <video> between containers (theater/fullscreen layouts): follow it.
-    if (c.previousElementSibling !== v) { this.mountCanvas(c); return; }
+    const host = this.lowered;
+    const misplaced = host
+      ? c.parentElement !== host || host.firstElementChild !== c || !host.contains(v)
+      : c.previousElementSibling !== v;
+    if (misplaced) { this.mountCanvas(c); return; }
+    const box = host ?? parent; // the canvas's containing block
     const vr = v.getBoundingClientRect();
-    const pr = parent.getBoundingClientRect();
+    const pr = box.getBoundingClientRect();
     const cs = getComputedStyle(v);
     const px = (s: string) => parseFloat(s) || 0;
     // object-fit applies to the content box, inside the video's own border and padding.
@@ -490,14 +600,14 @@ class VideoUpscaler {
     const [posX, posY] = cs.objectPosition.split(' ');
     const ox = objectOffset(posX, bw - pw);
     const oy = objectOffset(posY, bh - ph);
-    if (pageLevel(parent) && getComputedStyle(parent).position === 'static') {
+    if (!host && pageLevel(parent) && getComputedStyle(parent).position === 'static') {
       // No positioned parent (see mountCanvas): the canvas is placed in page coordinates.
       c.style.left = `${vr.left + window.scrollX + boxL + ox}px`;
       c.style.top = `${vr.top + window.scrollY + boxT + oy}px`;
     } else {
-      // An absolutely positioned child is placed from the parent's padding box and scrolls with it.
-      c.style.left = `${vr.left - pr.left - parent.clientLeft + parent.scrollLeft + boxL + ox}px`;
-      c.style.top = `${vr.top - pr.top - parent.clientTop + parent.scrollTop + boxT + oy}px`;
+      // An absolutely positioned child is placed from its container's padding box and scrolls with it.
+      c.style.left = `${vr.left - pr.left - box.clientLeft + box.scrollLeft + boxL + ox}px`;
+      c.style.top = `${vr.top - pr.top - box.clientTop + box.scrollTop + boxT + oy}px`;
     }
     c.style.width = `${pw}px`;
     c.style.height = `${ph}px`;
@@ -508,8 +618,25 @@ class VideoUpscaler {
     // Same stacking level as the video: the canvas sits right after it in the DOM, so it paints over
     // the video but under anything the player draws on top (controls, menus, subtitles).
     const z = cs.zIndex;
-    c.style.zIndex = z && z !== 'auto' ? z : '';
+    c.style.zIndex = !host && z && z !== 'auto' ? z : '';
+    // Once a second while drawing: if the player's own overlays end up under the canvas, move it to
+    // the start of the player's positioned container (see coversOverlay).
+    const now = performance.now();
+    if (!host && !c.hidden && now - this.lastStackCheck > STACK_CHECK_MS) {
+      this.lastStackCheck = now;
+      const container = positionedAncestor(v);
+      if (container && this.coversOverlay(c)) { this.lowered = container; this.mountCanvas(c); return; }
+    }
+    this.paintCues(); // follow size and position changes
   }
+}
+
+/** Nearest positioned ancestor below <body>, or null. */
+function positionedAncestor(el: Element): Element | null {
+  for (let p = el.parentElement; p && !pageLevel(p); p = p.parentElement) {
+    if (getComputedStyle(p).position !== 'static') return p;
+  }
+  return null;
 }
 
 /**
