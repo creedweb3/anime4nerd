@@ -14,3 +14,4 @@ site/public/
 design/
 docs/private/
 *.stackdump
+.wrangler/

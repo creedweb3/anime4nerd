@@ -48,7 +48,9 @@
   .send .btn { min-width: 220px; justify-content: center; }
   .send small { color: var(--faint); font-size: 11px; text-align: center; }
   .send button[disabled] { opacity: .45; cursor: default; }
-  .err { color: var(--bad); font-size: 12px; margin: 10px 0 0; }
+  .err { color: var(--bad); font-size: 12px; margin: 10px 0 0; text-align: center; }
+  .ts { display: flex; justify-content: center; }
+  .ts:not(:empty) { margin-top: 16px; }
   .thanks { display: none; }
   .sent .thanks { display: block; }
   .sent form { display: none; }
@@ -59,7 +61,11 @@
   .first p { margin: 6px 0 0; color: var(--dim); font-size: 12px; }
   .first p b { color: var(--fg); font-weight: 600; }
   .drop { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px; border: 1px dashed var(--line2); background: var(--bg); cursor: pointer; transition: border-color .12s; }
+  .drop { position: relative; }
   .drop:hover, .drop.over { border-color: var(--on); }
+  .drop:focus-within { border-color: var(--on); outline: 1px solid var(--on); }
+  /* Visually hidden but focusable, so the picker works from the keyboard. */
+  .drop input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; clip-path: inset(50%); }
   .drop b { color: var(--fg); font-size: 12px; font-weight: 600; }
   .drop small { color: var(--faint); font-size: 11px; }
   .thumbs { display: flex; gap: 8px; margin-top: 10px; }
@@ -122,8 +128,9 @@
           <label class="step" for="note"><i>02</i><b>What happened?</b><span><span id="n">0</span> / 1000</span></label>
           <textarea id="note" maxlength="1000" placeholder="What did you do, what did you expect, what happened? Name the site if it's about one."></textarea>
           <div class="step"><i>03</i><b>Screenshots</b><span>optional · up to 3</span></div>
-          <label class="drop" id="drop"><input type="file" id="shots" accept="image/png,image/jpeg,image/webp" multiple hidden><b>+ add screenshots</b><small>or drop images here · png, jpg, webp</small></label>
+          <label class="drop" id="drop"><input type="file" id="shots" accept="image/png,image/jpeg,image/webp" multiple><b>+ add screenshots</b><small>or drop images here · png, jpg, webp · crop out anything private</small></label>
           <div class="thumbs" id="thumbs"></div>
+          <div id="ts" class="ts" data-sitekey="__TURNSTILE_SITEKEY__" data-action="report"></div>
           <div class="send">
             <button class="btn primary" type="submit" id="go" disabled>send report</button>
             <small>sent with <b id="env">anime4nerd · version unknown</b></small>
@@ -145,18 +152,19 @@
   <span><a href="./#changes">changes</a> · <a href="privacy">privacy</a> · <a href="https://github.com/creedweb3/anime4nerd" rel="noopener">github</a></span>
 </footer>
 
+<script src="assets/send.js"></script>
 <script>
   (function () {
     // Version and browser come from the link the extension opens (?v=1.2.4&b=chrome).
-    var q = new URLSearchParams(location.search);
-    var v = (q.get('v') || '').replace(/[^0-9.]/g, '').slice(0, 12);
-    var br = (q.get('b') || '').replace(/[^a-z]/g, '').slice(0, 12);
+    var v = window.a4nEnv.v;
+    var br = window.a4nEnv.b;
     document.getElementById('env').textContent = 'anime4nerd ' + (v || 'version unknown') + (br ? ' · ' + br : '');
     var picked = {};
+    var sending = false;
     var note = document.getElementById('note');
     var go = document.getElementById('go');
     var update = function () {
-      var keys = Object.keys(picked).filter(function (k) { return picked[k]; });
+      if (sending) return;
       go.disabled = !note.value.trim();
     };
     document.querySelectorAll('.why button').forEach(function (b) {
@@ -166,24 +174,36 @@
         update();
       });
     });
-    // Screenshots: up to 3 images, shown as thumbnails; nothing leaves the page until "send".
+    // Screenshots: up to 3 images, shown as thumbnails; none is sent until "send".
     var files = [];
+    var urls = new Map(); // file -> object URL of its thumbnail
     var thumbs = document.getElementById('thumbs');
     var drop = document.getElementById('drop');
+    var err = document.getElementById('err');
     var draw = function () {
+      urls.forEach(function (url, file) { if (files.indexOf(file) < 0) { URL.revokeObjectURL(url); urls.delete(file); } });
       thumbs.replaceChildren.apply(thumbs, files.map(function (file, i) {
+        if (!urls.has(file)) urls.set(file, URL.createObjectURL(file));
         var fig = document.createElement('figure');
-        fig.style.backgroundImage = 'url(' + URL.createObjectURL(file) + ')';
+        fig.style.backgroundImage = 'url("' + urls.get(file) + '")';
         var x = document.createElement('button');
-        x.type = 'button'; x.textContent = '✕'; x.setAttribute('aria-label', 'Remove screenshot');
-        x.addEventListener('click', function (e) { e.preventDefault(); files.splice(i, 1); draw(); });
+        x.type = 'button'; x.textContent = '✕'; x.setAttribute('aria-label', 'Remove screenshot ' + (i + 1));
+        x.addEventListener('click', function (e) { e.preventDefault(); if (sending) return; files.splice(i, 1); draw(); });
         fig.append(x);
         return fig;
       }));
       drop.style.display = files.length >= 3 ? 'none' : '';
     };
+    // Some systems give webp files no MIME type, so the file name counts too.
+    var isImage = function (file) {
+      return ['image/png', 'image/jpeg', 'image/webp'].indexOf(file.type) >= 0 || (!file.type && /\.(png|jpe?g|webp)$/i.test(file.name));
+    };
     var add = function (list) {
-      [].forEach.call(list, function (file) { if (files.length < 3 && ['image/png', 'image/jpeg', 'image/webp'].indexOf(file.type) >= 0) files.push(file); });
+      if (sending) return;
+      var skipped = 0;
+      [].forEach.call(list, function (file) { if (files.length < 3 && isImage(file)) files.push(file); else skipped++; });
+      err.textContent = 'Up to 3 screenshots, as png, jpg or webp. ' + skipped + (skipped === 1 ? ' file was' : ' files were') + ' left out.';
+      err.hidden = !skipped;
       draw();
     };
     document.getElementById('shots').addEventListener('change', function (e) { add(e.target.files); e.target.value = ''; });
@@ -191,9 +211,81 @@
     drop.addEventListener('dragleave', function () { drop.classList.remove('over'); });
     drop.addEventListener('drop', function (e) { e.preventDefault(); drop.classList.remove('over'); add(e.dataTransfer.files); });
     note.addEventListener('input', function () { document.getElementById('n').textContent = note.value.length; update(); });
+    // Re-encodes a screenshot to JPEG of at most ~250 KB. Drawing through a canvas also drops EXIF
+    // and other metadata; the white fill keeps transparent PNG areas from turning black.
+    var LIMIT = 250000;
+    var MAX_SIDE = 1600;
+    var jpeg = function (bmp, scale, quality) {
+      var c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(bmp.width * scale));
+      c.height = Math.max(1, Math.round(bmp.height * scale));
+      var g = c.getContext('2d');
+      g.fillStyle = '#fff';
+      g.fillRect(0, 0, c.width, c.height);
+      g.drawImage(bmp, 0, 0, c.width, c.height);
+      return new Promise(function (ok) { c.toBlob(ok, 'image/jpeg', quality); });
+    };
+    var shrink = function (file) {
+      return createImageBitmap(file).then(function (bmp) {
+        var attempt = function (scale, quality) {
+          return jpeg(bmp, scale, quality).then(function (blob) {
+            if (blob && blob.size <= LIMIT) return blob;
+            if (scale < 0.1) throw new Error('image_too_big');
+            return quality > 0.5 ? attempt(scale, quality - 0.15) : attempt(scale * 0.75, 0.8);
+          });
+        };
+        var done = function () { bmp.close(); };
+        return attempt(Math.min(1, MAX_SIDE / bmp.width, MAX_SIDE / bmp.height), 0.8).finally(done);
+      });
+    };
+    var base64 = function (blob) {
+      return new Promise(function (ok, no) {
+        var r = new FileReader();
+        r.onload = function () { ok(String(r.result).split(',')[1]); };
+        r.onerror = function () { no(r.error); };
+        r.readAsDataURL(blob);
+      });
+    };
+    // A screenshot that can't be read is removed, so pressing send again works.
+    var encode = function (file, i) {
+      return shrink(file).then(base64).catch(function () {
+        files.splice(files.indexOf(file), 1);
+        draw();
+        throw new Error('shot_' + (i + 1));
+      });
+    };
     document.getElementById('form').addEventListener('submit', function (e) {
       e.preventDefault();
-      document.getElementById('page').classList.add('sent');
+      if (sending || go.disabled) return;
+      sending = true;
+      err.hidden = true;
+      go.disabled = true;
+      go.textContent = 'sending…';
+      // What is sent is what was on screen when send was pressed.
+      var reasons = Object.keys(picked).filter(function (k) { return picked[k]; });
+      var text = note.value;
+      var chosen = files.slice();
+      chosen.reduce(function (prev, file, i) {
+        return prev.then(function (out) { return encode(file, i).then(function (s) { return out.concat(s); }); });
+      }, Promise.resolve([])).then(function (shots) {
+        return window.a4nSend({
+          kind: 'report',
+          reasons: reasons,
+          note: text,
+          v: v,
+          b: br,
+          shots: shots,
+        });
+      }).then(function () {
+        document.getElementById('page').classList.add('sent');
+      }, function (x) {
+        sending = false;
+        // The server refused a screenshot: drop them all so the text can still be sent.
+        if (x.message === 'bad_shot') { files = []; draw(); }
+        window.a4nError(x, err);
+        go.textContent = 'send report';
+        update();
+      });
     });
   })();
 </script>

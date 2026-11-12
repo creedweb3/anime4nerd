@@ -49,7 +49,9 @@
   .send .btn { min-width: 220px; justify-content: center; }
   .send small { color: var(--faint); font-size: 11px; text-align: center; }
   .send button[disabled] { opacity: .45; cursor: default; }
-  .err { color: var(--bad); font-size: 12px; margin: 10px 0 0; }
+  .err { color: var(--bad); font-size: 12px; margin: 10px 0 0; text-align: center; }
+  .ts { display: flex; justify-content: center; }
+  .ts:not(:empty) { margin-top: 16px; }
   .thanks { display: none; }
   .sent .thanks { display: block; }
   .sent form { display: none; }
@@ -114,6 +116,7 @@
           <div class="tips" id="tips" aria-live="polite"></div>
           <label class="step" for="note"><i>02</i><b>Anything else?</b><span><span id="n">0</span> / 500 · optional</span></label>
           <textarea id="note" maxlength="500" placeholder="Which site, what went wrong, what you'd want instead…"></textarea>
+          <div id="ts" class="ts" data-sitekey="__TURNSTILE_SITEKEY__" data-action="uninstall"></div>
           <div class="send">
             <button class="btn primary" type="submit" id="go" disabled>send feedback</button>
             <small>Sends only your answers and the version you had.</small>
@@ -142,19 +145,29 @@
 
 <script>
   (function () {
+    // Each tip is [bold lead, rest], rendered as text nodes.
     var TIPS = {
-      controls: '<b>Fixed in 1.2.3:</b> player controls, menus and built-in subtitles now stay on top.',
-      slow: '<b>Try Mode C</b> (lightest) or upscale 2×. The popup shows whether your GPU keeps up.',
-      site: '<b>Some sites block upscaling</b> (the popup says so). Name the site below and we\'ll look.',
-      look: '<b>Mode B</b> is softer for clean sources; live action looks better without upscaling.',
+      controls: ['Fixed in 1.2.3:', ' player controls, menus and built-in subtitles now stay on top.'],
+      slow: ['Try Mode C', ' (lightest) or upscale 2×. The popup shows whether your GPU keeps up.'],
+      site: ['Some sites block upscaling', ' (the popup says so). Name the site below and we\'ll look.'],
+      look: ['Mode B', ' is softer for clean sources; live action looks better without upscaling.'],
+    };
+    var tip = function (k) {
+      var p = document.createElement('p');
+      var b = document.createElement('b');
+      b.textContent = TIPS[k][0];
+      p.append(b, TIPS[k][1]);
+      return p;
     };
     var picked = {};
+    var sending = false;
     var note = document.getElementById('note');
     var go = document.getElementById('go');
+    var tips = document.getElementById('tips');
     var update = function () {
       var keys = Object.keys(picked).filter(function (k) { return picked[k]; });
-      document.getElementById('tips').innerHTML = keys.filter(function (k) { return TIPS[k]; }).map(function (k) { return '<p>' + TIPS[k] + '</p>'; }).join('');
-      go.disabled = !keys.length && !note.value.trim();
+      tips.replaceChildren.apply(tips, keys.filter(function (k) { return Object.hasOwn(TIPS, k); }).map(tip));
+      if (!sending) go.disabled = !keys.length && !note.value.trim();
     };
     document.querySelectorAll('.why button').forEach(function (b) {
       b.addEventListener('click', function () {
@@ -164,9 +177,28 @@
       });
     });
     note.addEventListener('input', function () { document.getElementById('n').textContent = note.value.length; update(); });
+    var err = document.getElementById('err');
     document.getElementById('form').addEventListener('submit', function (e) {
       e.preventDefault();
-      document.getElementById('page').classList.add('sent');
+      if (sending || go.disabled) return;
+      sending = true;
+      err.hidden = true;
+      go.disabled = true;
+      go.textContent = 'sending…';
+      window.a4nSend({
+        kind: 'uninstall',
+        reasons: Object.keys(picked).filter(function (k) { return picked[k]; }),
+        note: note.value,
+        v: window.a4nEnv.v,
+      }).then(function () {
+        document.getElementById('page').classList.add('sent');
+      }, function (x) {
+        sending = false;
+        window.a4nError(x, err);
+        go.textContent = 'send feedback';
+        update();
+      });
     });
   })();
 </script>
+<script src="assets/send.js"></script>
