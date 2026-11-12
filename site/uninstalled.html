@@ -45,7 +45,7 @@
   textarea { display: block; width: 100%; height: 76px; padding: 9px 11px; background: var(--bg); border: 1px solid var(--line2); color: var(--fg); font: 13px/1.5 var(--mono); resize: vertical; }
   textarea:focus { outline: none; border-color: var(--on); }
   /* Step 03: the button centred under its heading, the note centred under the button. */
-  .send { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .send { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 18px; }
   .send .btn { min-width: 220px; justify-content: center; }
   .send small { color: var(--faint); font-size: 11px; text-align: center; }
   .send button[disabled] { opacity: .45; cursor: default; }
@@ -114,7 +114,6 @@
           <div class="tips" id="tips" aria-live="polite"></div>
           <label class="step" for="note"><i>02</i><b>Anything else?</b><span><span id="n">0</span> / 500 · optional</span></label>
           <textarea id="note" maxlength="500" placeholder="Which site, what went wrong, what you'd want instead…"></textarea>
-          <div class="step"><i>03</i><b>Send it</b><span>anonymous</span></div>
           <div class="send">
             <button class="btn primary" type="submit" id="go" disabled>send feedback</button>
             <small>Sends only your answers and the version you had.</small>
