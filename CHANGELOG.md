@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.5 (2026-11-12)
 
 ### Changed
 - Firefox build: desktop Firefox only. The manifest no longer declares Firefox

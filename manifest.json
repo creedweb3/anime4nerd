@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Anime4Nerd: Anime Upscaler & Video Enhancer (Anime4K)",
   "short_name": "Anime4Nerd",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "description": "Anime upscaler for any web video: real-time Anime4K 2x–8x upscaling on your GPU. Sharper lines, less blur. Runs locally.",
   "author": "Anime4Nerd authors",
   "minimum_chrome_version": "116",

@@ -1,7 +1,7 @@
 # Security
 
 This document describes what Anime4Nerd can and cannot do, how it is protected,
-what was reviewed, and how to use it safely. Last reviewed: 2026-11-12 (v1.2.4).
+what was reviewed, and how to use it safely. Last reviewed: 2026-11-12 (v1.2.5).
 
 ## Threat model in one paragraph
 
