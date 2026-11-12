@@ -36,6 +36,8 @@ const configs = [
 // plus the data-collection declaration AMO requires (140+ desktop, 142+ Android understand it).
 function firefoxManifest() {
   const m = JSON.parse(readFileSync('manifest.json', 'utf8'));
+  // AMO allows at most 45 characters in the name; the Chrome name is longer.
+  m.name = 'Anime4Nerd: Anime Upscaler & Video Enhancer';
   delete m.minimum_chrome_version;
   m.background = { scripts: ['background.js'] };
   m.web_accessible_resources = m.web_accessible_resources.map(({ use_dynamic_url, ...r }) => r);

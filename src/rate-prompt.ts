@@ -1,10 +1,13 @@
-// "Rate it" card in the popup (Chrome build only). The content script counts time spent
+// "Rate it" card in the popup. The content script counts time spent
 // actually upscaling and videos upscaled for at least EPISODE_SECONDS, and sends the totals to
 // the background, which is the only writer of the stored counts. The popup shows one card per
 // milestone in LEVEL_EPISODES until the user says they already rated. Nothing here leaves the
 // browser: the counts live in chrome.storage.local and the store page only opens on a click.
 
-export const REVIEW_URL = 'https://chromewebstore.google.com/detail/kblnmcdmlgeidaclnhjmcffefmkehkpm/reviews';
+// The review page of the store this build ships through.
+export const REVIEW_URL = __FIREFOX__
+  ? 'https://addons.mozilla.org/firefox/addon/anime4nerd/reviews/'
+  : 'https://chromewebstore.google.com/detail/kblnmcdmlgeidaclnhjmcffefmkehkpm/reviews';
 const RATE_KEY = 'anime4k-rate';
 
 /** Episodes needed for card levels 1–4. */

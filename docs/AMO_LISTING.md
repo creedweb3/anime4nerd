@@ -58,7 +58,7 @@ Not affiliated with bloc97 or any streaming site. Anime4K is MIT licensed. Sourc
 AMO has no per-permission form; reviewers read the code and the notes to reviewer. Use these
 in the notes (they are also in `PRIVACY.md`):
 
-- `storage`: saves the preset, line effects and upscale factor (`storage.sync`, synced by Firefox Sync if the user has it on), the per-site on/off map (`storage.local`, key `anime4k-sources`) and a one-off "updated to x.y.z" flag for the What's new notice (`storage.local`). See `src/settings.ts` and `src/whats-new.ts`.
+- `storage`: saves the preset, line effects and upscale factor (`storage.sync`, synced by Firefox Sync if the user has it on), the per-site on/off map (`storage.local`, key `anime4k-sources`) and a one-off "updated to x.y.z" flag for the What's new notice (`storage.local`), and local usage counts (upscaled time and episodes, `storage.local` key `anime4k-rate`) that decide when the popup shows a "rate it" card linking to this add-on's reviews page; never synced or sent. See `src/settings.ts`, `src/whats-new.ts` and `src/rate-prompt.ts`.
 - `scripting`: on install or update, `src/background.ts` injects `content.css`, `content.js` and `fullscreen-redirect.js` into frames of tabs that were already open, so the user does not have to reload them. That is its only use.
 - `webNavigation`: `webNavigation.getAllFrames` lists the frames of a tab. The background uses it to inject frame by frame (one refused frame does not stop the rest), and the popup uses it to ask each frame for its videos, because players are usually in iframes.
 - Host permission `<all_urls>`: video players are embedded from many different domains (the page and the player's host differ), so the content script must run in every frame to find `<video>` elements, and must be able to read the frames of a video the user switches on. Until the user switches a video on in the popup, the content script only looks for `<video>` elements. Nothing is sent anywhere.
@@ -128,7 +128,7 @@ Files in the package
 
 Permissions
 - storage: preset, line effects and upscale factor (storage.sync); the per-site on/off map and
-  a "what's new" flag (storage.local).
+  a "what's new" flag and local usage counts for the "rate it" card (storage.local, never sent).
 - scripting: injection into already-open tabs on install/update (background.js only).
 - webNavigation: getAllFrames, to inject per frame and to let the popup query every frame,
   because video players are usually in iframes.

@@ -359,7 +359,7 @@ class VideoUpscaler {
       if (gen !== this.generation) return;
       if (this.canvas) this.canvas.hidden = false;
       this.setStatus('Active');
-      if (!__FIREFOX__) this.countWatch();
+      this.countWatch();
     } catch (e) {
       if (gen === this.generation) {
         // gpu.js is a separate bundle, so match the error by name rather than instanceof.
@@ -932,7 +932,7 @@ function notify() {
   syncMenu();
 }
 
-// --- watch counting for the rating card (Chrome only) -------------------------------
+// --- watch counting for the rating card -----------------------------------------
 // Totals since the last report; sent to the background about once a minute and on page hide.
 const watchReport = { seconds: 0, episodes: 0 };
 const WATCH_REPORT_MS = 60000;
@@ -1070,9 +1070,7 @@ if (!window.__a4kLoaded) {
   scan();
   // Videos that become visible later (lazy players) are picked up by periodic rescans.
   scanTimer = window.setInterval(queueScan, 2000);
-  if (!__FIREFOX__) {
-    watchTimer = window.setInterval(reportWatch, WATCH_REPORT_MS);
-    window.addEventListener('pagehide', reportWatch);
-  }
+  watchTimer = window.setInterval(reportWatch, WATCH_REPORT_MS);
+  window.addEventListener('pagehide', reportWatch);
   })();
 }

@@ -347,9 +347,8 @@ async function showWhatsNew() {
   await clearWhatsNew().catch(() => {});
 }
 
-/** Rating card at a new milestone (Chrome only). Answers go to the background, which stores them. */
+/** Rating card at a new milestone. Answers go to the background, which stores them. */
 async function showRateCard() {
-  if (__FIREFOX__) return;
   const state = await loadRate().catch(() => null);
   const level = state && pendingLevel(state);
   if (!state || !level) return;
