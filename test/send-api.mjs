@@ -1,9 +1,12 @@
 // Unit tests for functions/api/send.js. Run: node --test test/send-api.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { handle, ipBucket } from '../functions/api/send.js';
+import { handle, ipBucket, isJpeg } from '../functions/api/send.js';
 
 const ORIGIN = 'https://anime4nerd.pages.dev';
+// The function logs one line per refused request; keep test output readable.
+const logged = [];
+console.info = (line) => logged.push(line);
 
 function memoryKV() {
   const store = new Map();
@@ -30,10 +33,29 @@ const jpegBytes = (size = 100, sofMarker = 0xc0) => {
 };
 const jpeg = (size, sofMarker) => Buffer.from(jpegBytes(size, sofMarker)).toString('base64');
 
+// A canvas-style JPEG header: SOI, APP0 "JFIF", APP2 "ICC_PROFILE" (Chromium), then the frame.
+const canvasJpeg = (extraSegment = []) => {
+  const seg = (marker, text) => [0xff, marker, (text.length + 2) >> 8, (text.length + 2) & 0xff, ...Buffer.from(text, 'latin1')];
+  return new Uint8Array([
+    0xff, 0xd8,
+    ...seg(0xe0, 'JFIF\0\x01\x01\0\0\x01\0\x01\0\0'),
+    ...seg(0xe2, 'ICC_PROFILE\0\x01\x01'),
+    ...extraSegment,
+    ...seg(0xdb, '\0'.repeat(65)),
+    ...seg(0xc0, '\x08\0\x10\0\x10\x01\x01\x11\0'),
+    ...seg(0xc4, '\0'.repeat(20)),
+    ...seg(0xda, '\x01\x01\0\0\x3f\0'),
+    0x12, 0x34, 0x56,
+    0xff, 0xd9,
+  ]);
+};
+
 function post(body, { origin = ORIGIN, type = 'application/json', ip = '203.0.113.7', raw } = {}) {
+  const headers = { origin, 'content-type': type };
+  if (ip) headers['cf-connecting-ip'] = ip;
   return new Request(`${ORIGIN}/api/send`, {
     method: 'POST',
-    headers: { origin, 'content-type': type, 'cf-connecting-ip': ip },
+    headers,
     body: raw ?? JSON.stringify(body),
   });
 }
@@ -66,16 +88,39 @@ test('stores a valid uninstall answer', async () => {
 });
 
 test('strips control, bidi and invisible characters from the note', async () => {
-  const { env: e } = await send(report({ note: 'a\u0000b\u202Ec\r\nd\u0007\u200Be\u2028f\uFEFFg\uD800h' }));
+  const { env: e } = await send(report({ note: 'a\u0000b\u202Ec\r\nd\u0007\u200Be\u2028f\uFEFFg\uD800h\u00ADi\u180Ej\uFFF9k\u{E0041}l' }));
   const rec = [...e.FEEDBACK.store].find(([k]) => k.startsWith('report:'))[1].value;
-  assert.equal(JSON.parse(rec).note, 'abc\ndefg\uFFFDh');
+  assert.equal(JSON.parse(rec).note, 'abc\ndefg\uFFFDhijkl');
+});
+
+test('accepts canvas JPEG headers and refuses metadata or comment segments', () => {
+  assert.ok(isJpeg(canvasJpeg()), 'Chromium-style JFIF + ICC header refused');
+  const seg = (marker, text) => [0xff, marker, (text.length + 2) >> 8, (text.length + 2) & 0xff, ...Buffer.from(text, 'latin1')];
+  assert.ok(!isJpeg(canvasJpeg(seg(0xe1, 'Exif\0\0GPS'))), 'EXIF accepted');
+  assert.ok(!isJpeg(canvasJpeg(seg(0xe1, 'http://ns.adobe.com/xap/1.0/\0<x/>'))), 'XMP accepted');
+  assert.ok(!isJpeg(canvasJpeg(seg(0xfe, '<script>alert(1)</script>'))), 'comment accepted');
+  assert.ok(!isJpeg(canvasJpeg(seg(0xed, 'Photoshop 3.0\0'))), 'APP13 accepted');
+  const fakeApp0 = canvasJpeg();
+  fakeApp0[6] = 0x58; // "JFIF" -> "XFIF"
+  assert.ok(!isJpeg(fakeApp0), 'non-JFIF APP0 accepted');
+  const truncated = canvasJpeg().slice(0, 30);
+  assert.ok(!isJpeg(new Uint8Array([...truncated, 0xff, 0xd9])), 'truncated header accepted');
+  // Allowed segments may not carry extra payload or repeat beyond what an encoder writes.
+  assert.ok(!isJpeg(canvasJpeg(seg(0xe2, 'ICC_PROFILE\0' + 'x'.repeat(5000)))), 'oversized or second ICC accepted');
+  assert.ok(!isJpeg(canvasJpeg(seg(0xe0, 'JFIF\0\x01\x01\0\0\x01\0\x01\0\0'))), 'second APP0 accepted');
+  const thumb = canvasJpeg();
+  thumb[2 + 4 + 12] = 4; // thumbnail width 4 in APP0
+  assert.ok(!isJpeg(thumb), 'APP0 thumbnail accepted');
+  const dqt = seg(0xdb, '\0'.repeat(65));
+  assert.ok(!isJpeg(canvasJpeg([...dqt, ...dqt, ...dqt, ...dqt])), 'five DQT segments accepted');
+  assert.ok(!isJpeg(canvasJpeg(seg(0xdb, '\0'.repeat(600)))), 'oversized DQT accepted');
 });
 
 test('stores times cut to the minute and gives screenshots an expiry', async () => {
   const { env: e } = await send(report({ shots: [jpeg()] }));
   const [recKey, rec] = [...e.FEEDBACK.store].find(([k]) => k.startsWith('report:'));
   assert.match(JSON.parse(rec.value).at, /^\d{4}-\d\d-\d\dT\d\d:\d\dZ$/);
-  assert.match(recKey, /^report:\d{4}-\d\d-\d\dT\d\d:\d\dZ-[0-9a-f]{8}$/);
+  assert.match(recKey, /^report:\d{4}-\d\d-\d\dT\d\d:\d\dZ-[0-9a-f]{16}$/);
   assert.equal(rec.opts.expirationTtl, undefined, 'text answers are kept');
   const shot = [...e.FEEDBACK.store].find(([k]) => k.startsWith('shot:'))[1];
   assert.ok(shot.opts.expirationTtl > 0);
@@ -158,7 +203,7 @@ test('rejects wrong origin, type, broken JSON and oversize bodies', async () => 
   const chunk = new Uint8Array(100_000).fill(0x20);
   let sent = 0;
   const stream = new ReadableStream({ pull(c) { sent++ < 20 ? c.enqueue(chunk) : c.close(); } });
-  const req = new Request(`${ORIGIN}/api/send`, { method: 'POST', duplex: 'half', body: stream, headers: { origin: ORIGIN, 'content-type': 'application/json' } });
+  const req = new Request(`${ORIGIN}/api/send`, { method: 'POST', duplex: 'half', body: stream, headers: { origin: ORIGIN, 'content-type': 'application/json', 'cf-connecting-ip': '203.0.113.7' } });
   assert.equal(req.headers.get('content-length'), null);
   assert.equal((await handle(req, env(), passTurnstile)).status, 413);
   assert.ok(sent < 20, 'read the whole stream');
@@ -201,7 +246,7 @@ test('a maximum-size report stays well inside the CPU budget (warm, native base6
     const times = [];
     for (let i = 0; i < 15; i++) {
       const t0 = performance.now();
-      const r = await send(report({ shots: [big, big, big] }));
+      const r = await send(report({ shots: [big, big, big] }), { ip: `198.51.100.${i}` });
       times.push(performance.now() - t0);
       assert.equal(r.status, 200);
     }
@@ -222,10 +267,54 @@ test('caps answers per visitor per day', async () => {
   assert.equal((await send(report(), { ip: '198.51.100.1' }, e)).status, 200, 'other visitor blocked');
 });
 
-test('caps all answers per day', async () => {
+test('caps each form separately per day', async () => {
   const e = env();
-  await e.FEEDBACK.put(`rl:${new Date().toISOString().slice(0, 10)}:all`, '200');
+  await e.FEEDBACK.put(`rl:${new Date().toISOString().slice(0, 10)}:report`, '60');
   const r = await send(report(), {}, e);
   assert.equal(r.status, 429);
   assert.equal(r.body.error, 'daily_limit');
+  // A flood of reports leaves the uninstall form working.
+  assert.equal((await send(uninstall(), {}, e, passFor('uninstall'))).status, 200);
+});
+
+test('caps screenshots per visitor per day, keeping the text', async () => {
+  const e = env();
+  assert.equal((await send(report({ shots: [jpeg(), jpeg()] }), {}, e)).status, 200);
+  assert.equal((await send(report({ shots: [jpeg(), jpeg()] }), {}, e)).status, 200);
+  const recs = [...e.FEEDBACK.store].filter(([k]) => k.startsWith('report:')).map(([, v]) => JSON.parse(v.value));
+  assert.deepEqual(recs.map((r) => [r.shots, r.shotsDropped ?? 0]).sort(), [[1, 1], [2, 0]]);
+  assert.equal([...e.FEEDBACK.store.keys()].filter((k) => k.startsWith('shot:')).length, 3);
+});
+
+test('refuses a request without the Cloudflare client IP header', async () => {
+  const r = await send(report(), { ip: '' });
+  assert.equal(r.status, 400);
+  assert.equal(r.body.error, 'no_ip');
+  assert.equal((await send(report(), { ip: '' }, { ...env(), ALLOW_TEST_TURNSTILE: '1' })).status, 200);
+});
+
+test('screenshots are decoded only after Turnstile', async () => {
+  const notJpeg = Buffer.from('a'.repeat(300)).toString('base64');
+  assert.equal((await send(report({ shots: [notJpeg] }), {}, env(), failTurnstile)).status, 403);
+  assert.equal((await send(report({ shots: [notJpeg] }))).body.error, 'bad_shot');
+});
+
+test('a KV failure answers 503 unavailable, and logs only the code', async () => {
+  const broken = { ...memoryKV(), put: async () => { throw new Error('KV put() limit exceeded for the day.'); } };
+  logged.length = 0;
+  const r = await send(report({ note: 'secret note 203.0.113.7' }), {}, env(broken));
+  assert.equal(r.status, 503);
+  assert.equal(r.body.error, 'unavailable');
+  assert.equal(logged.length, 1);
+  assert.deepEqual(JSON.parse(logged[0]), { event: 'feedback_rejected', status: 503, code: 'unavailable' });
+  assert.ok(!logged[0].includes('secret') && !logged[0].includes('203.0.113.7'));
+  // A KV read failure is the same 503; an unrelated bug stays a 500 with only its type logged.
+  const unreadable = { ...memoryKV(), get: async () => { throw new Error('KV get() limit exceeded'); } };
+  assert.equal((await send(report(), {}, env(unreadable))).body.error, 'unavailable');
+  logged.length = 0;
+  const buggy = { ...memoryKV(), get: async () => '1', put: async () => {} };
+  const bug = await send(report(), {}, { ...env(buggy), IP_SALT: { toString() { throw new TypeError('boom'); } } });
+  assert.equal(bug.status, 500);
+  assert.equal(bug.body.error, 'error');
+  assert.deepEqual(JSON.parse(logged.at(-1)), { event: 'feedback_rejected', status: 500, code: 'error:TypeError' });
 });

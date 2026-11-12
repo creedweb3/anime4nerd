@@ -94,7 +94,9 @@
         ? "Couldn't read screenshot " + err.message.slice(5) + '. It was removed; press send again.'
         : err.message === 'bad_shot'
           ? "The screenshots couldn't be used and were removed. Press send again to send the text."
-          : "Couldn't send right now. Please try again in a moment.";
+          : err.message === 'unavailable'
+            ? "Answers can't be saved right now (today's storage limit may be reached). Please try again tomorrow."
+            : "Couldn't send right now. Please try again in a moment.";
     el.hidden = false;
   };
 })();
