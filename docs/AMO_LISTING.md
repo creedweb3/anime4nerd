@@ -119,8 +119,10 @@ What the build does (build.mjs)
   @webgpu/types.
 
 Files in the package
-- background.js: on install/update, injects the content scripts into tabs already open.
-  Accepts no messages.
+- background.js: on install/update, injects the content scripts into tabs already open, and
+  sets the uninstall page URL (runtime.setUninstallURL, version only). It accepts only the
+  two "rate it" card messages from the add-on's own pages (sender.id is checked, values
+  clamped) and stores the counts locally.
 - content.js (+ content.css): runs in every frame, finds <video> elements, answers the
   popup, and draws the upscaled canvas over videos the user switched on.
 - gpu.js: the WebGL2 renderer and the bundled shaders. Loaded with
