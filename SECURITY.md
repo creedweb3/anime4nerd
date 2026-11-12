@@ -1,7 +1,7 @@
 # Security
 
 This document describes what Anime4Nerd can and cannot do, how it is protected,
-what was reviewed, and how to use it safely. Last reviewed: 2026-11-12 (v1.2.3).
+what was reviewed, and how to use it safely. Last reviewed: 2026-11-12 (v1.2.4).
 
 ## Threat model in one paragraph
 
@@ -97,6 +97,19 @@ try/catch. Hit-testing for covered overlays and the control bar only reads layou
 build now has the rating card; its background accepts the same two message types
 with the same `sender.id` check and clamping as Chrome. No critical, high or medium
 issues; no new permissions; nothing is sent anywhere.
+
+A sixth pass (2026-11-12, v1.2.4) covered the uninstall page link, the popup's bug
+icon and the website forms behind them. The extension only calls
+`runtime.setUninstallURL` and sets a link `href`; both URLs carry only a validated
+`x.y.z` version (and the browser name), built with `URLSearchParams`. No new
+permissions, and the extension still sends nothing itself. The forms' Pages Function
+(`functions/api/send.js`) was reviewed over four rounds by security, code and
+TypeScript reviewers plus an independent review: strict allow-list validation,
+Turnstile verified server-side before any storage access, salted daily-rotating IP
+hashes for rate limits (raw IPs never stored), per-form and per-visitor daily caps on
+the Free plan, screenshots accepted only as canvas-style JPEGs without metadata, and
+per-page hash-pinned CSP. No critical or high issues; all medium and low findings
+were fixed.
 
 ## For people who install it
 

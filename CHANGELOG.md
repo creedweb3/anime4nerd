@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (1.2.4)
+## 1.2.4 (2026-11-12)
 
 ### Added
 - A bug icon at the end of the popup's top bar opens a "report a problem" page
