@@ -505,8 +505,10 @@ class VideoUpscaler {
     // inset() order: top right bottom left.
     const clip = [-oy, ox + pw - bw, oy + ph - bh, -ox].map((n) => Math.max(0, n));
     c.style.clipPath = clip.some((n) => n > 0) ? `inset(${clip.map((n) => `${n}px`).join(' ')})` : '';
+    // Same stacking level as the video: the canvas sits right after it in the DOM, so it paints over
+    // the video but under anything the player draws on top (controls, menus, subtitles).
     const z = cs.zIndex;
-    c.style.zIndex = z && z !== 'auto' ? String(Number(z) + 1) : '1';
+    c.style.zIndex = z && z !== 'auto' ? z : '';
   }
 }
 

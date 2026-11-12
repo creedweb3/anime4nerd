@@ -74,6 +74,20 @@ const LAYOUT = [
     expect: (v) => ({ x: v.x + 120, y: v.y, w: 720, h: 540 }),
   },
   {
+    // Player controls drawn over the video (z-index auto) must stay on top of the upscaled picture.
+    name: 'layout-controls',
+    body: `<div style="position:relative;width:960px;height:540px">${video()}<div id="ctl" style="position:absolute;left:0;right:0;bottom:0;height:48px;background:#333"></div></div>`,
+    expect: (v) => ({ x: v.x + 120, y: v.y, w: 720, h: 540 }),
+    top: '#ctl',
+  },
+  {
+    // Same, with a positioned video and controls at the same z-index after it.
+    name: 'layout-controls-z',
+    body: `<div style="position:relative;width:960px;height:540px">${video('position:relative;z-index:1')}<div id="ctl" style="position:absolute;z-index:1;left:0;right:0;bottom:0;height:48px;background:#333"></div></div>`,
+    expect: (v) => ({ x: v.x + 120, y: v.y, w: 720, h: 540 }),
+    top: '#ctl',
+  },
+  {
     name: 'layout-cap', // three eligible videos: only MAX_ACTIVE_RENDERERS (2) may run
     body: [1, 2, 3].map(() => video('width:480px;height:270px')).join(''),
     statuses: { Active: 2, Waiting: 1 },
@@ -152,7 +166,7 @@ try {
       ok = Object.entries(l.statuses).every(([s, n]) => counts[s] === n);
       detail = `statuses=${JSON.stringify(counts)}`;
     } else {
-      const r = await page.evaluate(() => {
+      const r = await page.evaluate((top) => {
         const v = document.querySelector('video');
         const c = document.querySelector('canvas.a4k-canvas');
         const vr = v.getBoundingClientRect();
@@ -162,14 +176,25 @@ try {
           canvas: cr && { x: cr.x, y: cr.y, w: cr.width, h: cr.height },
           clip: c?.style.clipPath ?? '',
           nextToVideo: c?.previousElementSibling === v,
+          // Paint order: let the canvas take hits for a moment and ask what is on top where the
+          // controls are, and in the middle of the picture (where the canvas must cover the video).
+          stack: top && c ? (() => {
+            c.style.pointerEvents = 'auto';
+            const t = document.querySelector(top).getBoundingClientRect();
+            const atControls = document.elementFromPoint(t.x + t.width / 2, t.y + t.height / 2);
+            const atMiddle = document.elementFromPoint(cr.x + cr.width / 2, cr.y + cr.height / 3);
+            c.style.pointerEvents = '';
+            return { controlsOnTop: atControls === document.querySelector(top), canvasOverVideo: atMiddle === c };
+          })() : null,
         };
-      });
+      }, l.top ?? null);
       const want = l.expect(r.video);
       const near = (a, b) => Math.abs(a - b) <= 1;
       ok = list?.[0]?.status === 'Active' && r.canvas && r.nextToVideo
         && near(r.canvas.x, want.x) && near(r.canvas.y, want.y) && near(r.canvas.w, want.w) && near(r.canvas.h, want.h)
-        && r.clip === (l.clip ?? '');
-      detail = `status=${list?.[0]?.status} canvas=${JSON.stringify(r.canvas)} want=${JSON.stringify(want)} clip="${r.clip}" nextToVideo=${r.nextToVideo}`;
+        && r.clip === (l.clip ?? '')
+        && (!l.top || (r.stack?.controlsOnTop && r.stack?.canvasOverVideo));
+      detail = `status=${list?.[0]?.status} canvas=${JSON.stringify(r.canvas)} want=${JSON.stringify(want)} clip="${r.clip}" nextToVideo=${r.nextToVideo}${l.top ? ` stack=${JSON.stringify(r.stack)}` : ''}`;
     }
     if (!ok) failures += 1;
     console.log(`${ok ? 'PASS' : 'FAIL'} ${l.name}: ${detail}`);
