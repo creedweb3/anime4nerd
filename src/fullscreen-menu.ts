@@ -27,19 +27,30 @@ const CSS = `
 button { font: inherit; color: inherit; cursor: pointer; }
 .toggle { width: 34px; height: 34px; border: 1px solid #3a3a3a; background: rgba(11,11,11,.85); font-size: 16px; line-height: 1; }
 .toggle:hover, .toggle[aria-expanded="true"] { border-color: #e4e4e4; }
-.panel { width: 260px; padding: 10px; border: 1px solid #3a3a3a; background: rgba(11,11,11,.94); display: grid; gap: 8px; }
+.panel { width: 260px; padding: 10px; border: 1px solid #3a3a3a; background: rgba(11,11,11,.94); display: grid; gap: 8px; box-shadow: 0 24px 40px -18px #000; }
 .panel[hidden] { display: none; }
+/* Status box: tinted like the popup's video card, green while upscaling and red while off. */
+.status { display: grid; gap: 6px; padding: 8px; border: 1px solid rgba(227,154,154,.45);
+  background: linear-gradient(135deg, rgba(227,154,154,.14), rgba(227,154,154,.02) 60%, transparent) #0b0b0b; }
+.status.on { border-color: rgba(159,211,168,.6);
+  background: linear-gradient(135deg, rgba(159,211,168,.16), rgba(159,211,168,.02) 60%, transparent) #0b0b0b; }
 .head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.meta { color: #8d8d8d; font-size: 11px; }
+.meta { color: #8d8d8d; font-size: 11px; margin-top: -2px; }
+.meta .cap { color: #e3c58a; }
 .perf { font-size: 11px; color: #8d8d8d; }
 .perf.ok { color: #9fd3a8; } .perf.warn { color: #e3c58a; } .perf.bad { color: #e39a9a; }
-.graph { display: block; width: 100%; height: 24px; }
-.label { color: #585858; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
-.row { display: flex; flex-wrap: wrap; gap: 4px; }
-.opt { border: 1px solid #3a3a3a; background: transparent; color: #8d8d8d; padding: 3px 8px; font-size: 11px; }
+.graph { display: block; width: 100%; height: 20px; }
+.switch { width: 36px; height: 20px; padding: 0; position: relative; border: 1px solid rgba(227,154,154,.45); background: #0b0b0b; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; background: rgba(227,154,154,.75); transition: left .08s, background .08s; }
+.switch[aria-checked="true"] { border-color: rgba(159,211,168,.6); }
+.switch[aria-checked="true"]::after { left: 18px; background: #9fd3a8; }
+.switch:hover { border-color: #e4e4e4; }
+.label { color: #585858; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; margin-top: 2px; }
+.row { display: flex; gap: 4px; }
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.opt { flex: 1; border: 1px solid #3a3a3a; background: transparent; color: #8d8d8d; padding: 3px 0; font-size: 11px; text-align: center; }
 .opt:hover { color: #e4e4e4; }
 .opt[aria-checked="true"] { background: #fff; border-color: #fff; color: #000; }
-.power[aria-checked="true"] { background: #9fd3a8; border-color: #9fd3a8; }
 .effect::before { content: "+ "; }
 .effect[aria-checked="true"]::before { content: "✓ "; }
 `;
@@ -52,6 +63,8 @@ export class FullscreenMenu {
   private readonly toggle = document.createElement('button');
 
   private readonly panel = document.createElement('div');
+
+  private readonly status = document.createElement('div');
 
   private readonly meta = document.createElement('div');
 
@@ -84,9 +97,10 @@ export class FullscreenMenu {
     head.className = 'head';
     const title = document.createElement('b');
     title.textContent = 'anime4nerd';
-    this.power.className = 'opt power';
+    this.power.className = 'switch';
     this.power.type = 'button';
     this.power.setAttribute('role', 'switch');
+    this.power.setAttribute('aria-label', 'Upscale this video');
     this.power.addEventListener('click', (e) => {
       if (!this.genuine(e)) return;
       const t = this.target();
@@ -98,24 +112,26 @@ export class FullscreenMenu {
     this.graph.className = 'graph';
     this.graph.title = 'GPU time per frame, last 2 s · dashed = frame limit · red = late';
 
+    this.status.className = 'status';
+    this.status.append(head, this.meta, this.perf, this.graph);
     this.panel.append(
-      head, this.meta, this.perf, this.graph,
-      this.group('preset', PRESETS.map((p) => [p.value, p.label]), (v) => ({ preset: v as Settings['preset'] }), 'preset'),
+      this.status,
+      ...this.group('preset', PRESETS.map((p) => [p.value, p.label]), (v) => ({ preset: v as Settings['preset'] }), 'preset', 'grid'),
       this.effects(),
-      this.group('upscale', UPSCALES, (v) => ({ upscale: v as Upscale }), 'upscale'),
+      ...this.group('upscale', UPSCALES, (v) => ({ upscale: v as Upscale }), 'upscale', 'row'),
     );
     this.wrap.append(this.toggle, this.panel);
     shadow.append(style, this.wrap);
     for (const ev of SWALLOW) this.host.addEventListener(ev, (e) => e.stopPropagation());
   }
 
-  private group(name: string, opts: [string, string][], patch: (v: string) => Partial<Settings>, field: 'preset' | 'upscale'): HTMLElement {
-    const box = document.createElement('div');
+  /** A label and its radio buttons, laid out as an even `grid` (3 per row) or a single `row`. */
+  private group(name: string, opts: [string, string][], patch: (v: string) => Partial<Settings>, field: 'preset' | 'upscale', layout: 'grid' | 'row'): HTMLElement[] {
     const label = document.createElement('div');
     label.className = 'label';
     label.textContent = name;
     const row = document.createElement('div');
-    row.className = 'row';
+    row.className = layout;
     row.setAttribute('role', 'radiogroup');
     for (const [value, text] of opts) {
       const b = document.createElement('button');
@@ -127,8 +143,7 @@ export class FullscreenMenu {
       b.addEventListener('click', (e) => { if (this.genuine(e)) saveSettings(patch(value)).catch(() => {}); });
       row.append(b);
     }
-    box.append(label, row);
-    return box;
+    return [label, row];
   }
 
   /**
@@ -184,13 +199,21 @@ export class FullscreenMenu {
     if (!this.host.isConnected) return;
     const t = this.target();
     const s = this.settings();
-    this.power.textContent = t?.enabled ? 'on' : 'off';
     this.power.setAttribute('aria-checked', String(!!t?.enabled));
+    this.status.classList.toggle('on', !!t?.enabled);
     const st = t?.stats;
     const scale = st && t ? Math.round(st.outputHeight / t.height) : 0;
     this.meta.textContent = !t ? '' : st
-      ? `${t.height}p → ${st.outputWidth}×${st.outputHeight} (${scale}×)${capNote(s.upscale, scale)}`
+      ? `${t.height}p → ${st.outputWidth}×${st.outputHeight} (${scale}×)`
       : `${t.height}p · ${t.status.toLowerCase()}`;
+    const cap = st && t ? capNote(s.upscale, scale) : '';
+    if (cap) {
+      // capNote is " · 8× capped: GPU limit": keep the dot plain, colour the note amber.
+      const note = document.createElement('span');
+      note.className = 'cap';
+      note.textContent = cap.replace(/^ · /, '');
+      this.meta.append(' · ', note);
+    }
     for (const b of this.panel.querySelectorAll<HTMLButtonElement>('[data-preset]')) b.setAttribute('aria-checked', String(b.dataset.preset === s.preset));
     for (const b of this.panel.querySelectorAll<HTMLButtonElement>('[data-upscale]')) b.setAttribute('aria-checked', String(b.dataset.upscale === s.upscale));
     for (const b of this.panel.querySelectorAll<HTMLButtonElement>('[data-field]')) {
