@@ -97,11 +97,45 @@ const LAYOUT = [
     anywhere: true,
   },
   {
+    // The browser draws <track> subtitles inside the video, under the canvas: Anime4Nerd redraws
+    // them above it, where the WebVTT cue settings ask, and falls back to bottom-centre for
+    // placements that would land off the picture or that it doesn't support (vertical text).
+    name: 'layout-cues',
+    body: video().replace('></video>', '><track kind="subtitles" src="cues.vtt" srclang="en" default></video>'),
+    // fx/fy: where the cue's centre sits as a fraction of the picture.
+    cues: {
+      'Bottom line': (p) => p.fy > 0.75 && Math.abs(p.fx - 0.5) < 0.15,
+      'Top sign': (p) => p.fy < 0.25,
+      'Left note': (p) => p.fx > 0.1 && p.fx < 0.3 && p.fy > 0.3 && p.fy < 0.7, // box from 10%, text left-aligned
+      'Weird far': (p) => p.fy > 0.75,
+      Sideways: (p) => p.fy > 0.75,
+    },
+  },
+  {
     name: 'layout-cap', // three eligible videos: only MAX_ACTIVE_RENDERERS (2) may run
     body: [1, 2, 3].map(() => video('width:480px;height:270px')).join(''),
     statuses: { Active: 2, Waiting: 1 },
   },
 ];
+
+// Cues for layout-cues: all active for the whole (looping) clip.
+const CUES_VTT = `WEBVTT
+
+00:00.000 --> 01:00.000
+Bottom line
+
+00:00.000 --> 01:00.000 line:0
+Top sign
+
+00:00.000 --> 01:00.000 line:50% position:10% align:start size:40%
+Left note
+
+00:00.000 --> 01:00.000 line:-40
+Weird far
+
+00:00.000 --> 01:00.000 vertical:rl
+Sideways
+`;
 
 const server = http.createServer((req, res) => {
   const name = path.basename(new URL(req.url, 'http://x').pathname);
@@ -109,6 +143,9 @@ const server = http.createServer((req, res) => {
   if (name.endsWith('.mp4')) {
     res.writeHead(200, { 'content-type': 'video/mp4' });
     fs.createReadStream(path.join(work, name)).pipe(res);
+  } else if (name === 'cues.vtt') {
+    res.writeHead(200, { 'content-type': 'text/vtt' });
+    res.end(CUES_VTT);
   } else if (layout) {
     res.writeHead(200, { 'content-type': 'text/html' });
     res.end(`<!doctype html><body style="margin:0">${layout.body}</body>`);
@@ -173,7 +210,19 @@ try {
     });
     let ok;
     let detail;
-    if (l.statuses) {
+    if (l.cues) {
+      const pos = await page.evaluate((texts) => {
+        const c = document.querySelector('canvas.a4k-canvas')?.getBoundingClientRect();
+        const spans = [...document.querySelectorAll('.a4k-cues span')];
+        return c && Object.fromEntries(texts.map((t) => {
+          const s = spans.find((e) => e.textContent.trim() === t)?.getBoundingClientRect();
+          return [t, s ? { fx: (s.x + s.width / 2 - c.x) / c.width, fy: (s.y + s.height / 2 - c.y) / c.height } : null];
+        }));
+      }, Object.keys(l.cues));
+      const bad = Object.entries(l.cues).filter(([t, okAt]) => !pos?.[t] || !okAt(pos[t])).map(([t]) => t);
+      ok = list?.[0]?.status === 'Active' && bad.length === 0;
+      detail = `status=${list?.[0]?.status} misplaced=${JSON.stringify(bad)} at=${JSON.stringify(pos)}`;
+    } else if (l.statuses) {
       const counts = {};
       for (const i of list ?? []) counts[i.status] = (counts[i.status] ?? 0) + 1;
       ok = Object.entries(l.statuses).every(([s, n]) => counts[s] === n);

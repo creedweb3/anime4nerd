@@ -26,6 +26,14 @@ const MIN_VIDEO_PX = 200; // ignore thumbnails / preview videos
 // cap live contexts (~16) and evict the oldest, so a page full of videos must not get one each.
 const MAX_ACTIVE_RENDERERS = 2;
 const STACK_CHECK_MS = 1000; // how often to check that the player's overlays still paint over the canvas
+// Redrawn subtitles (paintCues): the browser's default caption size is about 2.8% of the picture
+// height per text row (Chrome, 1080p fullscreen: rows 37 px apart).
+const CUE_FONT_SHARE = 0.0275;
+const CUE_LINE_HEIGHT = 1.25; // em per text row
+const CUE_MIN_PX = 12;
+const CUE_EDGE_PCT = 4; // gap between the picture edge and the first/last row
+const CUE_MAX_LINES = 12; // a line setting further out than this would land off the picture
+const CUE_MIN_SIZE_PCT = 20;
 
 declare global { interface Window { __a4kLoaded?: boolean } }
 let nextId = 1;
@@ -514,14 +522,23 @@ class VideoUpscaler {
     }
     if (box.previousElementSibling !== c) c.insertAdjacentElement('afterend', box);
     for (const k of ['left', 'top', 'width', 'height', 'clipPath', 'zIndex'] as const) box.style[k] = c.style[k];
-    box.style.fontSize = `${Math.max(12, parseFloat(c.style.height) * 0.05)}px`;
-    box.replaceChildren(...active.map((cue) => {
-      const line = document.createElement('span');
+    box.style.fontSize = `${Math.max(CUE_MIN_PX, parseFloat(c.style.height) * CUE_FONT_SHARE)}px`;
+    // Cues with their own placement go where they ask; the rest stack at the bottom centre.
+    const stack = document.createElement('div');
+    stack.className = 'a4k-stack';
+    const placed: HTMLElement[] = [];
+    for (const cue of active) {
+      const el = document.createElement('div');
+      el.className = 'a4k-cue';
+      const text = document.createElement('span');
       // getCueAsHTML keeps WebVTT's own <i>/<b>/<u> markup; it builds nodes, never runs page markup.
-      if ('getCueAsHTML' in cue) line.append((cue as VTTCue).getCueAsHTML());
-      else line.textContent = (cue as { text?: string }).text ?? '';
-      return line;
-    }));
+      if ('getCueAsHTML' in cue) text.append((cue as VTTCue).getCueAsHTML());
+      else text.textContent = (cue as { text?: string }).text ?? '';
+      el.append(text);
+      const at = cuePlacement(cue);
+      if (at) { Object.assign(el.style, at); placed.push(el); } else stack.append(el);
+    }
+    box.replaceChildren(stack, ...placed);
     box.hidden = false;
   }
 
@@ -629,6 +646,49 @@ class VideoUpscaler {
     }
     this.paintCues(); // follow size and position changes
   }
+}
+
+/**
+ * Where a cue asks to be drawn, from its WebVTT settings (line, position, size, align), as styles
+ * for an absolutely placed box in the picture area. Null means "use the default": bottom centre.
+ * Settings that would put the text off the picture, or that we don't draw (vertical text), fall
+ * back to the default rather than being followed.
+ */
+function cuePlacement(cue: TextTrackCue): Partial<CSSStyleDeclaration> | null {
+  if (typeof VTTCue === 'undefined' || !(cue instanceof VTTCue) || cue.vertical) return null;
+  const { line } = cue;
+  if (line === 'auto' && cue.position === 'auto' && cue.size >= 100 && cue.align === 'center') return null;
+  const s: Partial<CSSStyleDeclaration> = {};
+  // Vertical: a line number counts text rows from the top (0, 1, …) or bottom (-1, -2, …);
+  // a percentage is a point on the picture's height.
+  if (line === 'auto') {
+    s.bottom = `${CUE_EDGE_PCT}%`;
+  } else if (cue.snapToLines) {
+    if (Math.abs(line) > CUE_MAX_LINES) return null;
+    if (line >= 0) s.top = `calc(${line * CUE_LINE_HEIGHT}em + ${CUE_EDGE_PCT}%)`;
+    else s.bottom = `calc(${(-line - 1) * CUE_LINE_HEIGHT}em + ${CUE_EDGE_PCT}%)`;
+  } else {
+    if (line < 0 || line > 100) return null;
+    if (cue.lineAlign === 'end') s.bottom = `${100 - line}%`;
+    else {
+      s.top = `${line}%`;
+      if (cue.lineAlign === 'center') s.transform = 'translateY(-50%)';
+    }
+  }
+  // Horizontal: a box `size`% wide, anchored at `position`% by positionAlign; text aligned by align.
+  const align = cue.align === 'left' || cue.align === 'start' ? 'start' : cue.align === 'right' || cue.align === 'end' ? 'end' : 'center';
+  const size = Math.min(100, Math.max(CUE_MIN_SIZE_PCT, cue.size)); // too narrow: widen instead of one word per row
+  let pos = cue.position === 'auto' ? { start: 0, center: 50, end: 100 }[align] : cue.position;
+  if (pos < 0 || pos > 100) pos = 50;
+  // Chrome's VTTCue has no positionAlign/lineAlign properties at all: treat missing as 'auto'/'start'.
+  const anchor = !cue.positionAlign || cue.positionAlign === 'auto'
+    ? { start: 'line-left', center: 'center', end: 'line-right' }[align]
+    : cue.positionAlign;
+  const left = anchor === 'line-left' ? pos : anchor === 'line-right' ? pos - size : pos - size / 2;
+  s.left = `${Math.min(100 - size, Math.max(0, left))}%`;
+  s.width = `${size}%`;
+  s.textAlign = { start: 'left', center: 'center', end: 'right' }[align];
+  return s;
 }
 
 /** Nearest positioned ancestor below <body>, or null. */

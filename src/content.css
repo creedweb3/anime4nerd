@@ -15,15 +15,7 @@
   position: absolute;
   pointer-events: none;
   box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 0.15em;
-  padding: 0 4% 4.5%;
-  text-align: center;
-  white-space: pre-line;
-  font: 400 1em/1.3 system-ui, sans-serif;
+  font: 400 1em/1.25 system-ui, sans-serif;
   color: #fff;
 }
 
@@ -31,9 +23,30 @@
   display: none;
 }
 
-.a4k-cues > span {
+/* Cues without their own placement: stacked at the bottom centre, newest last. */
+.a4k-cues .a4k-stack {
+  position: absolute;
+  left: 4%;
+  right: 4%;
+  bottom: 4%;
+  text-align: center;
+}
+
+.a4k-cues .a4k-cue {
+  white-space: pre-line;
+}
+
+/* Cues placed by their WebVTT settings get position/size inline. */
+.a4k-cues > .a4k-cue {
+  position: absolute;
+}
+
+/* A black strip behind each text row, like the browser's own captions. */
+.a4k-cues .a4k-cue > span {
   background: rgba(0, 0, 0, 0.8);
-  padding: 0.05em 0.35em;
+  padding: 0 0.25em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 
 /* A <video> fullscreen request redirected to its parent (src/fullscreen-redirect.ts): make the
