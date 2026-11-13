@@ -74,11 +74,19 @@ test('stores a valid report with screenshots, never the IP', async () => {
   assert.deepEqual(body, { ok: true });
   const keys = [...e.FEEDBACK.store.keys()];
   const rec = JSON.parse(e.FEEDBACK.store.get(keys.find((k) => k.startsWith('report:'))).value);
-  assert.deepEqual({ ...rec, at: 0 }, { kind: 'report', reasons: ['slow'], note: 'stutters on site x', v: '1.2.4', b: 'chrome', shots: 2, at: 0 });
+  assert.deepEqual({ ...rec, at: 0 }, { kind: 'report', reasons: ['slow'], note: 'stutters on site x', v: '1.2.4', b: 'chrome', type: 'bug', shots: 2, at: 0 });
   assert.equal(keys.filter((k) => k.startsWith('shot:')).length, 2);
   for (const [k, { value }] of e.FEEDBACK.store) {
     assert.ok(!k.includes('203.0.113.7') && !String(value).includes('203.0.113.7'), 'raw IP stored');
   }
+});
+
+test('stores an idea from the report form, with its own reasons', async () => {
+  const { status, env: e } = await send(report({ type: 'idea', reasons: ['feature', 'browser'], note: 'add a sharpness slider' }));
+  assert.equal(status, 200);
+  const rec = JSON.parse([...e.FEEDBACK.store].find(([k]) => k.startsWith('report:'))[1].value);
+  assert.equal(rec.type, 'idea');
+  assert.deepEqual(rec.reasons, ['feature', 'browser']);
 });
 
 test('stores a valid uninstall answer', async () => {
@@ -164,6 +172,12 @@ test('rejects bad fields without writing anything', async () => {
     [report({ shots: [Buffer.from('\xff\xd8\xff<html><script>alert(1)</script>\xff\xd9', 'latin1').toString('base64')] }), 'bad_shot'],
     [report({ shots: [Buffer.from('\x89PNG\r\n\x1a\n0000', 'latin1').toString('base64')] }), 'bad_shot'],
     [report({ reasons: ['trying'] }), 'bad_reasons'],
+    [report({ type: 'idea', reasons: ['slow'] }), 'bad_reasons'],
+    [report({ type: 'bug', reasons: ['feature'] }), 'bad_reasons'],
+    [report({ type: 'wish' }), 'bad_type'],
+    [report({ type: ['idea'] }), 'bad_type'],
+    [report({ type: 'idea', reasons: ['feature'], note: '' }), 'note_required'],
+    [uninstall({ type: 'idea' }), 'unknown_field'],
     [report({ reasons: ['slow', 'slow'] }), 'bad_reasons'],
     [report({ reasons: 'slow' }), 'bad_reasons'],
     [report({ note: '' }), 'note_required'],

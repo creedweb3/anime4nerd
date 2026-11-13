@@ -70,7 +70,7 @@ Delete the test keys from KV afterwards.
 ## Reading answers
 
 - Answers: keys `uninstall:<time>-<id>` and `report:<time>-<id>`, each a JSON value with
-  `kind`, `reasons`, `note`, `v`, `b` (report only), `at` (cut to the minute), `shots` (count) and,
+  `kind`, `reasons`, `note`, `v`, `b` and `type` (report only: `bug` or `idea`), `at` (cut to the minute), `shots` (count) and,
   when the daily screenshot ceiling dropped some, `shotsDropped`. Treat every value as
   untrusted text: never paste it into HTML or run it.
 - Screenshots: keys `shot:<same time-id>:1` to `:3`, raw JPEG bytes, deleted automatically after

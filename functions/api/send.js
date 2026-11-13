@@ -39,8 +39,14 @@ const KINDS = {
   report: {
     reasons: ['controls', 'slow', 'site', 'look', 'menu', 'other'],
     noteMax: 1000,
-    fields: ['kind', 'reasons', 'note', 'v', 'b', 'token', 'shots'],
+    fields: ['kind', 'type', 'reasons', 'note', 'v', 'b', 'token', 'shots'],
   },
+};
+// The report form sends either a bug or an idea; each has its own reasons. A report without a
+// type (pages from before ideas existed) is a bug.
+const REPORT_TYPES = {
+  bug: KINDS.report.reasons,
+  idea: ['feature', 'picture', 'site', 'menu', 'browser', 'other'],
 };
 
 const VERSION = /^\d+\.\d+\.\d+$/;
@@ -196,9 +202,12 @@ export function validate(input) {
   const spec = KINDS[input.kind];
   for (const key of Object.keys(input)) if (!spec.fields.includes(key)) reject(400, 'unknown_field');
 
+  const type = input.kind === 'report' ? input.type ?? 'bug' : null;
+  if (type !== null && (typeof type !== 'string' || !Object.hasOwn(REPORT_TYPES, type))) reject(400, 'bad_type');
+  const allowed = type ? REPORT_TYPES[type] : spec.reasons;
   const reasons = input.reasons ?? [];
-  if (!Array.isArray(reasons) || reasons.length > spec.reasons.length) reject(400, 'bad_reasons');
-  for (const r of reasons) if (typeof r !== 'string' || !spec.reasons.includes(r)) reject(400, 'bad_reasons');
+  if (!Array.isArray(reasons) || reasons.length > allowed.length) reject(400, 'bad_reasons');
+  for (const r of reasons) if (typeof r !== 'string' || !allowed.includes(r)) reject(400, 'bad_reasons');
   if (new Set(reasons).size !== reasons.length) reject(400, 'bad_reasons');
 
   const note = cleanText(input.note, spec.noteMax);
@@ -216,7 +225,7 @@ export function validate(input) {
   if (!Array.isArray(shots) || shots.length > MAX_SHOTS) reject(400, 'bad_shot');
   shots.forEach(checkShotShape);
 
-  const record = { kind: input.kind, reasons, note, v, ...(input.kind === 'report' ? { b } : {}) };
+  const record = { kind: input.kind, reasons, note, v, ...(type ? { b, type } : {}) };
   return { record, shots, token: input.token };
 }
 

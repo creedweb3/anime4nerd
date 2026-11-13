@@ -23,11 +23,20 @@
 
   /* Numbered steps, like the "pass 01" strip on the home page. */
   .step { display: flex; align-items: center; gap: 10px; margin: 26px 0 12px; }
-  form > .step:first-child { margin-top: 10px; }
+  form > .kind + .step { margin-top: 22px; }
   .step i { font-style: normal; font-size: 10px; color: var(--dim); border: 1px solid var(--line2); padding: 1px 6px; }
   .step b { color: var(--fg); font-size: 13px; font-weight: 600; }
   .step span { margin-left: auto; color: var(--faint); font-size: 10px; text-transform: uppercase; letter-spacing: .14em; }
 
+  /* Bug or idea: two big toggles above step 01. */
+  .kind { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0 4px; }
+  .kind button { display: grid; gap: 3px; text-align: left; border: 1px solid var(--line); background: var(--bg); padding: 12px 14px; cursor: pointer; font: 13px/1.3 var(--mono); color: var(--dim); transition: border-color .12s, background-color .12s; }
+  .kind button b { color: var(--fg); font-weight: 600; }
+  .kind button small { font-size: 11px; color: var(--faint); }
+  .kind button[aria-checked="false"]:hover { border-color: var(--line2); }
+  .kind button[aria-checked="true"] { border-color: rgba(var(--g), .7); background: linear-gradient(135deg, rgba(var(--g), .16), transparent 60%) var(--bg); }
+  .kind button[aria-checked="true"] small { color: var(--ok); }
+  .why[hidden], [data-for][hidden] { display: none; }
   .why { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .why button { text-align: left; display: grid; gap: 3px; border: 1px solid var(--line); background: var(--bg); padding: 11px 12px; cursor: pointer; font: 12px/1.3 var(--mono); color: var(--fg); transition: border-color .12s, background-color .12s; }
   .why button i { font-style: normal; font-size: 10px; color: var(--faint); }
@@ -97,14 +106,15 @@
   <section class="sec long" style="border-top:0">
     <div class="rail">
       <div class="phead"><span>support · report</span></div>
-      <h2>Report a problem.</h2>
-      <p class="intro">Something broken or odd? Tell us here. No account, no sign-in: every report is read, and fixes ship in the next version.</p>
+      <h2 id="title">Report a problem.</h2>
+      <p class="intro" data-for="bug">Something broken or odd? Tell us here. No account, no sign-in: every report is read, and fixes ship in the next version.</p>
+      <p class="intro" data-for="idea" hidden>Something you'd like Anime4Nerd to do? Tell us here. No account, no sign-in: every idea is read, and the ones that ship are listed under what's new.</p>
       <ul class="facts">
         <li>Sends only what you write here.</li>
         <li>Plus the version and browser it was opened from.</li>
         <li>No browsing history, no sites unless you name them.</li>
       </ul>
-      <div class="first">
+      <div class="first" data-for="bug">
         <div class="phead"><span>try first</span></div>
         <p><b>Stutters?</b> Pick Mode C or upscale 2× in the popup.</p>
         <p><b>Black or frozen picture?</b> Reload the page and switch the video on again.</p>
@@ -116,8 +126,12 @@
       <div class="panel">
         <div class="phead"><span>report · no account</span><span>1 min</span></div>
         <form id="form">
-          <div class="step"><i>01</i><b>What went wrong?</b><span>pick any</span></div>
-          <div class="why" role="group" aria-label="Reasons">
+          <div class="kind" role="radiogroup" aria-label="Report type">
+            <button type="button" role="radio" data-t="bug" aria-checked="true"><b>Report a bug</b><small>something broken or odd</small></button>
+            <button type="button" role="radio" data-t="idea" aria-checked="false"><b>Share an idea</b><small>a feature or change you'd like</small></button>
+          </div>
+          <div class="step"><i>01</i><b id="q1">What went wrong?</b><span>pick any</span></div>
+          <div class="why" data-t="bug" role="group" aria-label="Reasons">
             <button type="button" data-r="controls" aria-pressed="false"><i>01 · player</i><em>controls or subs hidden</em></button>
             <button type="button" data-r="slow" aria-pressed="false"><i>02 · speed</i><em>slow or stuttering</em></button>
             <button type="button" data-r="site" aria-pressed="false"><i>03 · website</i><em>doesn't work on a site</em></button>
@@ -125,7 +139,15 @@
             <button type="button" data-r="menu" aria-pressed="false"><i>05 · popup</i><em>popup or menu issue</em></button>
             <button type="button" data-r="other" aria-pressed="false"><i>06 · other</i><em>something else</em></button>
           </div>
-          <label class="step" for="note"><i>02</i><b>What happened?</b><span><span id="n">0</span> / 1000</span></label>
+          <div class="why" data-t="idea" role="group" aria-label="Topics" hidden>
+            <button type="button" data-r="feature" aria-pressed="false"><i>01 · feature</i><em>a new feature or option</em></button>
+            <button type="button" data-r="picture" aria-pressed="false"><i>02 · picture</i><em>presets or picture quality</em></button>
+            <button type="button" data-r="site" aria-pressed="false"><i>03 · website</i><em>better support for a site</em></button>
+            <button type="button" data-r="menu" aria-pressed="false"><i>04 · popup</i><em>popup or menu</em></button>
+            <button type="button" data-r="browser" aria-pressed="false"><i>05 · browser</i><em>another browser or device</em></button>
+            <button type="button" data-r="other" aria-pressed="false"><i>06 · other</i><em>something else</em></button>
+          </div>
+          <label class="step" for="note"><i>02</i><b id="q2">What happened?</b><span><span id="n">0</span> / 1000</span></label>
           <textarea id="note" maxlength="1000" placeholder="What did you do, what did you expect, what happened? Name the site if it's about one."></textarea>
           <div class="step"><i>03</i><b>Screenshots</b><span>optional · up to 3</span></div>
           <label class="drop" id="drop"><input type="file" id="shots" accept="image/png,image/jpeg,image/webp" multiple><b>+ add screenshots</b><small>or drop images here · png, jpg, webp · crop out anything private</small></label>
@@ -138,8 +160,8 @@
           <p class="err" id="err" hidden>Couldn't send right now. Please try again in a moment.</p>
         </form>
         <div class="thanks">
-          <b>Thanks, report received.</b>
-          <p>Fixes are listed under <a href="./#changes">what's new</a> as they ship.</p>
+          <b id="thx">Thanks, report received.</b>
+          <p><span id="thx2">Fixes</span> are listed under <a href="./#changes">what's new</a> as they ship.</p>
         </div>
       </div>
 
@@ -159,18 +181,43 @@
     var v = window.a4nEnv.v;
     var br = window.a4nEnv.b;
     document.getElementById('env').textContent = 'anime4nerd ' + (v || 'version unknown') + (br ? ' · ' + br : '');
-    var picked = {};
+    var picked = { bug: {}, idea: {} };
     var sending = false;
     var note = document.getElementById('note');
     var go = document.getElementById('go');
+    // Bug or idea: swaps the reasons, headings and wording. ?t=idea opens the page on ideas.
+    var TEXT = {
+      bug: { title: 'Report a problem.', q1: 'What went wrong?', q2: 'What happened?', go: 'send report', thx: 'Thanks, report received.', thx2: 'Fixes',
+        hint: "What did you do, what did you expect, what happened? Name the site if it's about one." },
+      idea: { title: 'Share an idea.', q1: "What's it about?", q2: "What's your idea?", go: 'send idea', thx: 'Thanks, idea received.', thx2: 'New features',
+        hint: 'What would you like Anime4Nerd to do, and when would you use it?' },
+    };
+    var type = new URLSearchParams(location.search).get('t') === 'idea' ? 'idea' : 'bug';
+    var setType = function (t) {
+      if (sending) return;
+      type = t;
+      var x = TEXT[t];
+      ['title', 'q1', 'q2', 'thx', 'thx2'].forEach(function (k) { document.getElementById(k).textContent = x[k]; });
+      document.title = x.title.slice(0, -1) + ' · Anime4Nerd';
+      note.placeholder = x.hint;
+      go.textContent = x.go;
+      document.querySelectorAll('.kind button').forEach(function (b) { b.setAttribute('aria-checked', String(b.dataset.t === t)); });
+      document.querySelectorAll('.why').forEach(function (g) { g.hidden = g.dataset.t !== t; });
+      document.querySelectorAll('[data-for]').forEach(function (el) { el.hidden = el.dataset.for !== t; });
+    };
+    document.querySelectorAll('.kind button').forEach(function (b) {
+      b.addEventListener('click', function () { setType(b.dataset.t); });
+    });
+    setType(type);
     var update = function () {
       if (sending) return;
       go.disabled = !note.value.trim();
     };
     document.querySelectorAll('.why button').forEach(function (b) {
+      var set = picked[b.parentNode.dataset.t];
       b.addEventListener('click', function () {
-        picked[b.dataset.r] = !picked[b.dataset.r];
-        b.setAttribute('aria-pressed', String(picked[b.dataset.r]));
+        set[b.dataset.r] = !set[b.dataset.r];
+        b.setAttribute('aria-pressed', String(set[b.dataset.r]));
         update();
       });
     });
@@ -262,7 +309,8 @@
       go.disabled = true;
       go.textContent = 'sending…';
       // What is sent is what was on screen when send was pressed.
-      var reasons = Object.keys(picked).filter(function (k) { return picked[k]; });
+      var sentType = type;
+      var reasons = Object.keys(picked[type]).filter(function (k) { return picked[type][k]; });
       var text = note.value;
       var chosen = files.slice();
       chosen.reduce(function (prev, file, i) {
@@ -270,6 +318,7 @@
       }, Promise.resolve([])).then(function (shots) {
         return window.a4nSend({
           kind: 'report',
+          type: sentType,
           reasons: reasons,
           note: text,
           v: v,
@@ -283,7 +332,7 @@
         // The server refused a screenshot: drop them all so the text can still be sent.
         if (x.message === 'bad_shot') { files = []; draw(); }
         window.a4nError(x, err);
-        go.textContent = 'send report';
+        go.textContent = TEXT[type].go;
         update();
       });
     });
