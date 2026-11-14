@@ -10,7 +10,7 @@
 // redone only when the preset changes. Black-and-white pages are kept grey (the shaders add a
 // slight colour cast to grey input). Alt+M flips back to the originals.
 
-import type { Settings } from './settings';
+import { chainKey, type Settings } from './settings';
 import type { RenderSource } from './gpu';
 import { MANGA_PROTOCOL, loadMangaSites, onMangaSitesChanged } from './manga-sites';
 import {
@@ -136,7 +136,7 @@ export function startManga(getSettings: () => Settings, loadGpu: () => Promise<G
     }
   }, { rootMargin: LOOKAHEAD });
 
-  const settingsTag = () => { const s = getSettings(); return `${s.preset}|${s.darkenLines}|${s.thinLines}`; };
+  const settingsTag = () => chainKey(getSettings());
 
   // ---- detection -------------------------------------------------------------------------
 

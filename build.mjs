@@ -58,6 +58,8 @@ function copyStatic() {
     cpSync(f, `${outdir}/${f.split('/').pop()}`);
   }
   cpSync('src/shaders/LICENSE', `${outdir}/LICENSE.anime4k`);
+  // Other engines' shaders and their licenses, fetched by gpu.js only when picked (see engines.ts).
+  cpSync('src/shaders/engines', `${outdir}/shaders`, { recursive: true });
   cpSync('icons', `${outdir}/icons`, { recursive: true });
 }
 

@@ -130,7 +130,7 @@ async function upscale(video: HTMLVideoElement, preset: Preset): Promise<Result>
   const label = PRESETS.find((p) => p.value === preset)!.label;
   const out = document.createElement('canvas');
   const errors: string[] = [];
-  const r = await createAnime4kRenderer(video, out, { preset, darkenLines: false, thinLines: false, upscale: '2x' }, (m) => errors.push(m), SCALE);
+  const r = await createAnime4kRenderer(video, out, { engine: 'anime4k', variants: {}, preset, darkenLines: false, thinLines: false, upscale: '2x' }, (m) => errors.push(m), SCALE);
   try {
     const copy = document.createElement('canvas'); copy.width = out.width; copy.height = out.height;
     const cg = copy.getContext('2d', { willReadFrequently: false })!;

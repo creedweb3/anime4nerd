@@ -7,11 +7,12 @@
 </head>
 <body>
   <header class="bar">
-    <span class="chip">anime4k</span>
+    <button type="button" class="chip engine" id="engine" aria-haspopup="menu" aria-expanded="false" aria-controls="engine-menu" title="Upscaling engine">anime4k</button>
     <span class="chip" id="hint">off</span>
     <span class="chip grow" id="gpuchip">gpu —</span>
     <span class="chip" id="clock"></span>
   </header>
+  <div class="engine-menu" id="engine-menu" role="menu" aria-label="Upscaling engine" hidden></div>
 
   <a class="update-note" id="whatsnew" href="https://anime4nerd.pages.dev/#changes" target="_blank" rel="noopener" hidden>
     <span><span class="update-label">updated</span><span class="update-dot">●</span> v<b id="whatsnew-ver"></b></span><span class="update-link">what's new →</span>
@@ -59,6 +60,7 @@
 
   <section class="panel">
     <div class="panel-head"><span>preset</span><span id="presetName"></span></div>
+    <div class="engine-note" id="engine-note"></div>
     <div class="grid" id="presets"></div>
     <div class="pills" id="effects">
       <button type="button" class="pill" data-field="darkenLines" role="menuitemcheckbox">darken lines</button>

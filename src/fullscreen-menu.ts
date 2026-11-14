@@ -100,7 +100,8 @@ export class FullscreenMenu {
 
     this.panel.append(
       head, this.meta, this.perf, this.graph,
-      this.group('preset', PRESETS.map((p) => [p.value, p.label]), (v) => ({ preset: v as Settings['preset'] }), 'preset'),
+      // Anime4K modes; picking one here also switches the engine back to Anime4K.
+      this.group('preset', PRESETS.map((p) => [p.value, p.label]), (v) => ({ engine: 'anime4k', preset: v as Settings['preset'] }), 'preset'),
       this.effects(),
       this.group('upscale', UPSCALES, (v) => ({ upscale: v as Upscale }), 'upscale'),
     );
@@ -191,7 +192,7 @@ export class FullscreenMenu {
     this.meta.textContent = !t ? '' : st
       ? `${t.height}p → ${st.outputWidth}×${st.outputHeight} (${scale}×)${capNote(s.upscale, scale)}`
       : `${t.height}p · ${t.status.toLowerCase()}`;
-    for (const b of this.panel.querySelectorAll<HTMLButtonElement>('[data-preset]')) b.setAttribute('aria-checked', String(b.dataset.preset === s.preset));
+    for (const b of this.panel.querySelectorAll<HTMLButtonElement>('[data-preset]')) b.setAttribute('aria-checked', String(s.engine === 'anime4k' && b.dataset.preset === s.preset));
     for (const b of this.panel.querySelectorAll<HTMLButtonElement>('[data-upscale]')) b.setAttribute('aria-checked', String(b.dataset.upscale === s.upscale));
     for (const b of this.panel.querySelectorAll<HTMLButtonElement>('[data-field]')) {
       b.setAttribute('aria-checked', String(s[b.dataset.field as 'darkenLines' | 'thinLines']));

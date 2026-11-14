@@ -1,0 +1,27 @@
+Engine shaders, copied verbatim from upstream (not modified). Shipped as separate files under
+shaders/ in the extension and fetched only when the engine is picked.
+
+Anime4K GAN (MIT, see ../LICENSE)
+  https://github.com/bloc97/Anime4K commit 7684e9586f8dcc738af08a1cdceb024cc184f426
+  glsl/Upscale/Anime4K_Upscale_GAN_x2_S.glsl, Anime4K_Upscale_GAN_x2_M.glsl
+  glsl/Restore/Anime4K_Restore_GAN_UL.glsl
+
+ArtCNN (MIT, LICENSE.ArtCNN)
+  https://github.com/Artoriuz/ArtCNN tag v1.4.2 (commit c03df46816b54d82a0b36757d2fff09e2da401b7)
+  Legacy/ArtCNN_C4F16_RGB.glsl, ArtCNN_C4F32_RGB.glsl,
+  Legacy/ArtCNN_C4F16_DS_YCbCr.glsl, ArtCNN_C4F32_DS_YCbCr.glsl
+  (the fragment-shader builds; later releases use compute shaders, which WebGL2 lacks)
+
+FSRCNNX (LGPL-3.0, LICENSE.LGPL-3.0 + LICENSE.GPL-3.0), Copyright (C) 2017-2021 igv
+  https://github.com/igv/FSRCNN-TensorFlow release 1.1
+  FSRCNNX_x2_8-0-4-1.glsl, FSRCNNX_x2_16-0-4-1.glsl
+
+RAVU and NNEDI3 (LGPL-3.0, LICENSE.LGPL-3.0 + LICENSE.GPL-3.0), by bjin
+  https://github.com/bjin/mpv-prescalers commit b3f0a59d68f33b7162051ea5970a5169558f0ea2
+  ravu-lite-ar-r2.hook, ravu-lite-ar-r3.hook, ravu-lite-ar-r4.hook,
+  nnedi3-nns16-win8x4.hook, nnedi3-nns32-win8x4.hook, nnedi3-nns64-win8x4.hook
+
+AMD FidelityFX FSR 1 and CAS, mpv ports by agyild (MIT, license text in each file header)
+  https://gist.github.com/agyild/82219c545228d70c5604f865ce0b0ce5 commit 2623d743b9c23f500ba086f05b385dcb1557e15d (FSR.glsl)
+  https://gist.github.com/agyild/bbb4e58298b2f86aa24da3032a0d2ee6 commit 10e4ca1b6ef173b64391ce2c81b9a95fcd095931 (CAS-scaled.glsl)
+  The sharpness #define is set at load time (engines.ts applyDefines); the files on disk are unchanged.

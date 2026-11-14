@@ -1,0 +1,136 @@
+// End-to-end check of every upscaling engine in a real Chromium browser with the built extension:
+// each engine/variant builds, reaches Active on a playing video, and reports GPU time. Also
+// screenshots the popup's engine menu.
+//
+// Needs ffmpeg on PATH, Playwright (global or local), Brave/Edge/Chrome, and a fresh `npm run build`.
+//
+//   node test/engines-e2e.mjs "C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe" [screenshot dir]
+
+import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
+import fs from 'node:fs';
+import http from 'node:http';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const dist = path.join(root, 'dist');
+const [exe, shots] = process.argv.slice(2);
+if (!exe) { console.error('usage: node test/engines-e2e.mjs <path to Brave/Edge/Chrome> [screenshot dir]'); process.exit(2); }
+
+function loadPlaywright() {
+  for (const base of [root, path.join(process.env.APPDATA ?? '', 'npm/node_modules/')]) {
+    try { return createRequire(path.join(base, 'x.js'))('playwright'); } catch { /* try next */ }
+  }
+  throw new Error('Playwright not found (npm i -g playwright)');
+}
+const { chromium } = loadPlaywright();
+
+const ENGINES = [
+  ['anime4k', ''], ['anime4k-gan', 'S'], ['anime4k-gan', 'M'], ['anime4k-gan', 'RM'],
+  ['artcnn', 'C4F16'], ['artcnn', 'C4F32'], ['artcnn', 'C4F16_DS'], ['artcnn', 'C4F32_DS'],
+  ['fsrcnnx', '8'], ['fsrcnnx', '16'], ['ravu', 'r2'], ['ravu', 'r3'], ['ravu', 'r4'],
+  ['nnedi3', '16'], ['nnedi3', '32'], ['nnedi3', '64'],
+  ['fsr', 'soft'], ['fsr', 'normal'], ['fsr', 'crisp'], ['cas', 'low'], ['cas', 'mid'], ['cas', 'high'],
+];
+
+const work = fs.mkdtempSync(path.join(os.tmpdir(), 'a4k-eng-'));
+// 960x540 source so 2x lands at 1080p, like a typical 540p/720p stream upscaled.
+execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=960x540:rate=24:duration=30',
+  '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-an', '-movflags', '+faststart', path.join(work, 'v.mp4')]);
+fs.writeFileSync(path.join(work, 'index.html'), '<video src="v.mp4" muted autoplay loop playsinline style="width:1920px;height:1080px"></video>');
+const server = http.createServer((req, res) => {
+  const file = path.join(work, req.url === '/' ? 'index.html' : path.basename(req.url));
+  if (!fs.existsSync(file)) { res.writeHead(404).end(); return; }
+  res.writeHead(200, { 'Content-Type': file.endsWith('.mp4') ? 'video/mp4' : 'text/html' });
+  fs.createReadStream(file).pipe(res);
+}).listen(0, '127.0.0.1');
+await new Promise((r) => server.once('listening', r));
+const host = `127.0.0.1:${server.address().port}`;
+
+const results = [];
+const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ` (${detail})` : ''}`); };
+
+const ctx = await chromium.launchPersistentContext(fs.mkdtempSync(path.join(os.tmpdir(), 'a4k-eng-prof-')), {
+  headless: false,
+  executablePath: exe,
+  viewport: { width: 1280, height: 720 },
+  // A real window (real GPU), parked off-screen so it does not pop up; A4K_SHOW=1 shows it.
+  args: [...(process.env.A4K_SHOW ? [] : ['--window-position=-32000,-32000']), `--disable-extensions-except=${dist}`, `--load-extension=${dist}`, '--autoplay-policy=no-user-gesture-required'],
+});
+try {
+  const sw = ctx.serviceWorkers()[0] ?? await ctx.waitForEvent('serviceworker', { timeout: 10000 });
+  const extId = new URL(sw.url()).host;
+  await sw.evaluate(async (key) => { await chrome.storage.local.set({ 'anime4k-sources': { [key]: true } }); }, `${host}::${host}`);
+  const page = await ctx.newPage();
+  await page.goto(`http://${host}/`);
+  await page.waitForSelector('canvas.a4k-canvas:not([hidden])', { timeout: 30000 });
+
+  // The content script's view of its videos, asked from the service worker.
+  const list = () => sw.evaluate(async (url) => {
+    const [tab] = await chrome.tabs.query({ url });
+    return tab ? chrome.tabs.sendMessage(tab.id, { type: 'a4k-list' }, { frameId: 0 }) : null;
+  }, `http://${host}/*`);
+
+  for (const [engine, variant] of ENGINES) {
+    await sw.evaluate(async ([e, v]) => {
+      const cur = (await chrome.storage.sync.get('anime4k')).anime4k ?? {};
+      await chrome.storage.sync.set({ anime4k: { ...cur, engine: e, variants: v ? { [e]: v } : {}, upscale: '2x' } });
+    }, [engine, variant]);
+    let v = null;
+    for (let i = 0; i < 40; i++) {
+      await page.waitForTimeout(250);
+      const l = await list();
+      v = Array.isArray(l) ? l[0] : null;
+      if (v && (v.status === 'Active' || v.status === 'Unavailable') && v.stats?.gpuMs != null) break;
+      if (v?.status === 'Unavailable') break;
+    }
+    await page.waitForTimeout(1500); // let timings settle
+    v = (await list())?.[0] ?? v;
+    const st = v?.stats;
+    const ms = st?.samples?.length ? st.samples.reduce((a, b) => a + b, 0) / st.samples.length : st?.gpuMs;
+    check(`${engine}${variant ? ` ${variant}` : ''} renders`, v?.status === 'Active' && st?.outputWidth === 1920,
+      v?.status === 'Active' ? `${st.outputWidth}x${st.outputHeight}, ${st.passes} passes, GPU ${ms?.toFixed(2)} ms` : `${v?.status}: ${v?.message}`);
+  }
+
+  // Popup: engine menu.
+  const popup = await ctx.newPage();
+  await popup.setViewportSize({ width: 380, height: 700 });
+  await popup.goto(`chrome-extension://${extId}/popup.html`);
+  await popup.waitForTimeout(400);
+  await popup.click('#engine');
+  await popup.waitForTimeout(200);
+  const items = await popup.$$eval('#engine-menu .eng', (els) => els.map((e) => e.dataset.engine));
+  check('engine menu lists all engines', items.length === 8, items.join(','));
+  if (shots) await popup.screenshot({ path: path.join(shots, 'popup-engine-menu.png') });
+  const focused = () => popup.evaluate(() => document.activeElement?.dataset?.engine ?? null);
+  const first = await focused();
+  await popup.keyboard.press('ArrowDown');
+  const second = await focused();
+  await popup.keyboard.press('End');
+  const last = await focused();
+  await popup.keyboard.press('Tab');
+  const closed = await popup.evaluate(() => document.querySelector('#engine-menu').hidden);
+  check('menu keyboard: focus on current, arrows/End move, Tab closes', first !== null && second !== first && last === 'cas' && closed, `${first} -> ${second}, End -> ${last}, closed ${closed}`);
+  await popup.click('#engine');
+  await popup.waitForTimeout(200);
+  await popup.click('#engine-menu .eng[data-engine="artcnn"]');
+  await popup.waitForTimeout(400);
+  const after = await popup.evaluate(() => ({
+    chip: document.querySelector('#engine').textContent,
+    menuHidden: document.querySelector('#engine-menu').hidden,
+    tiles: [...document.querySelectorAll('#presets .tile b')].map((b) => b.textContent),
+    effectsHidden: document.querySelector('#effects').hidden,
+  }));
+  check('picking an engine updates chip, tiles and effects', after.chip === 'artcnn' && after.menuHidden && after.tiles.length === 4 && after.effectsHidden, JSON.stringify(after));
+  if (shots) await popup.screenshot({ path: path.join(shots, 'popup-artcnn.png') });
+  const stored = await sw.evaluate(async () => (await chrome.storage.sync.get('anime4k')).anime4k);
+  check('engine choice is stored', stored.engine === 'artcnn');
+} finally {
+  await ctx.close();
+  server.close();
+}
+const failed = results.filter((r) => !r).length;
+console.log(`${results.length - failed}/${results.length} passed`);
+process.exit(failed ? 1 : 0);

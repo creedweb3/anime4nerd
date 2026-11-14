@@ -5,7 +5,7 @@
 // rebuild on resize, fall back to plain video on any GPU error.
 
 import {
-  Message, Settings, Sources, Status, VideoInfo,
+  Message, Settings, Sources, Status, VideoInfo, chainKey,
   loadSettings, loadSources, onSettingsChanged, onSourcesChanged, requestedScale, sourceKey,
 } from './settings';
 import type { Anime4kRenderer } from './gpu';
@@ -178,9 +178,7 @@ class VideoUpscaler {
   }
 
   configure(s: Settings) {
-    const chainChanged = s.preset !== this.settings.preset
-      || s.darkenLines !== this.settings.darkenLines || s.thinLines !== this.settings.thinLines
-      || s.upscale !== this.settings.upscale;
+    const chainChanged = chainKey(s) !== chainKey(this.settings) || s.upscale !== this.settings.upscale;
     this.settings = s;
     if (chainChanged) this.teardown();
     this.sync();

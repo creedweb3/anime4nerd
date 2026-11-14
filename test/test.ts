@@ -1,6 +1,7 @@
 // Local harness: draws an animated anime-ish line test pattern into a canvas,
 // captures it as a MediaStream into a <video>, and runs the renderer on it.
-import { createAnime4kRenderer } from '../src/gpu';
+import { createAnime4kRenderer, setShaderBase } from '../src/gpu';
+import type { Engine } from '../src/engines';
 import type { Settings } from '../src/settings';
 
 const v = document.getElementById('v') as HTMLVideoElement;
@@ -10,6 +11,12 @@ const info = document.getElementById('info') as HTMLSpanElement;
 
 // Synthetic low-res source: thin dark lines, flat fills, soft gradients, slight noise.
 const params = new URLSearchParams(location.search);
+// #engine=ravu&variant=r3 runs another engine (a hash, since the dev server drops query strings
+// on its clean-URL redirect). Its shader files are copied to test/shaders/ (gitignored).
+const hash = new URLSearchParams(location.hash.slice(1));
+const ENGINE = (hash.get('engine') ?? 'anime4k') as Engine;
+const VARIANT = hash.get('variant');
+setShaderBase(new URL('shaders/', location.href).href);
 const SW = Number(params.get('w')) || 320;
 const SH = Number(params.get('h')) || 180;
 const src = document.createElement('canvas');
@@ -51,6 +58,8 @@ async function run() {
   renderer?.destroy();
   renderer = null;
   const settings: Settings = {
+    engine: ENGINE,
+    variants: VARIANT ? { [ENGINE]: VARIANT } : {},
     preset: (document.getElementById('preset') as HTMLSelectElement).value as Settings['preset'],
     darkenLines: (document.getElementById('darken') as HTMLInputElement).checked,
     thinLines: (document.getElementById('thin') as HTMLInputElement).checked,
@@ -80,11 +89,25 @@ async function run() {
 document.getElementById('run')!.addEventListener('click', run);
 (window as any).a4kRun = run;
 
+// Engine comparison: freezes the pattern and renders one frame per engine into a copy canvas.
+(window as any).a4kSnap = async (engine: Engine, variant: string): Promise<HTMLCanvasElement> => {
+  freeze = true;
+  const c = document.createElement('canvas');
+  const r = await createAnime4kRenderer(v, c, {
+    engine, variants: { [engine]: variant }, preset: 'A', darkenLines: false, thinLines: false, upscale: 'auto',
+  }, () => {}, 2);
+  r.render();
+  const copy = document.createElement('canvas'); copy.width = c.width; copy.height = c.height;
+  copy.getContext('2d')!.drawImage(c, 0, 0);
+  r.destroy();
+  return copy;
+};
+
 
 // --- A vs A+A comparison sheet -------------------------------------------------
 async function renderOnce(preset: Settings['preset']): Promise<HTMLCanvasElement> {
   const c = document.createElement('canvas');
-  const r = await createAnime4kRenderer(v, c, { preset, darkenLines: false, thinLines: false, upscale: 'auto' }, () => {});
+  const r = await createAnime4kRenderer(v, c, { engine: 'anime4k', variants: {}, preset, darkenLines: false, thinLines: false, upscale: 'auto' }, () => {});
   r.render();
   const copy = document.createElement('canvas'); copy.width = c.width; copy.height = c.height;
   copy.getContext('2d')!.drawImage(c, 0, 0);

@@ -1,4 +1,7 @@
 import type { RateAction } from './rate-prompt';
+import {
+  ENGINES, ENGINE_IDS, Engine, engineInfo,
+} from './engines';
 
 export type Preset = 'A' | 'B' | 'C' | 'AA' | 'BB' | 'CA';
 
@@ -32,10 +35,26 @@ export function capNote(u: Upscale, actualScale: number): string {
 
 /** Global rendering settings (apply to every enabled source). */
 export interface Settings {
-  preset: Preset;
-  darkenLines: boolean;
-  thinLines: boolean;
+  engine: Engine;
+  preset: Preset; // Anime4K's mode
+  variants: Partial<Record<Engine, string>>; // chosen variant of each other engine
+  darkenLines: boolean; // Anime4K only
+  thinLines: boolean; // Anime4K only
   upscale: Upscale;
+}
+
+/** The chosen variant of the active engine (its default if none was picked). */
+export function engineVariant(s: Settings): string {
+  const info = engineInfo(s.engine);
+  const v = s.variants[s.engine];
+  return v && info.variants.some((x) => x.value === v) ? v : info.defaultVariant;
+}
+
+/** Everything that changes the shader chain; a renderer is rebuilt when this changes. */
+export function chainKey(s: Settings): string {
+  return s.engine === 'anime4k'
+    ? `anime4k|${s.preset}|${s.darkenLines}|${s.thinLines}`
+    : `${s.engine}|${engineVariant(s)}`;
 }
 
 export const PRESETS: { value: Preset; label: string; description: string }[] = [
@@ -52,8 +71,17 @@ const SOURCES_KEY = 'anime4k-sources';
 
 export function normalize(raw: unknown): Settings {
   const t = (raw && typeof raw === 'object' ? raw : {}) as Partial<Settings>;
+  const variants: Partial<Record<Engine, string>> = {};
+  if (t.variants && typeof t.variants === 'object') {
+    for (const e of ENGINES) {
+      const v = (t.variants as Record<string, unknown>)[e.id];
+      if (typeof v === 'string' && e.variants.some((x) => x.value === v)) variants[e.id] = v;
+    }
+  }
   return {
+    engine: ENGINE_IDS.includes(t.engine as Engine) ? (t.engine as Engine) : 'anime4k',
     preset: PRESETS.some((p) => p.value === t.preset) ? (t.preset as Preset) : 'A',
+    variants,
     darkenLines: t.darkenLines === true,
     thinLines: t.thinLines === true,
     upscale: UPSCALES.includes(t.upscale as Upscale) ? (t.upscale as Upscale) : 'auto',
