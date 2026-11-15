@@ -2,7 +2,7 @@
 // Anime4K (CNN) is bundled into gpu.js; the other engines' shaders ship as separate files
 // under shaders/ and are fetched only when chosen (see gpu.ts).
 
-export type Engine = 'anime4k' | 'anime4k-gan' | 'artcnn' | 'fsrcnnx' | 'ravu' | 'nnedi3' | 'fsr' | 'cas';
+export type Engine = 'anime4k' | 'anime4k-gan' | 'artcnn' | 'artcnn16' | 'fsrcnnx' | 'ravu' | 'nnedi3' | 'fsr' | 'cas';
 
 /**
  * Which planes a chain works on:
@@ -26,6 +26,8 @@ export interface EngineInfo {
   cost: 1 | 2 | 3 | 4 | 5; // rough GPU cost at 1080p -> 4K, for the picker's meter
   variants: EngineVariant[]; // empty for Anime4K, whose modes are Settings.preset
   defaultVariant: string;
+  /** Uses compute shaders, so it always runs on WebGPU (WebGL2 has no compute). */
+  webgpuOnly?: boolean;
 }
 
 export const ENGINES: EngineInfo[] = [
@@ -51,6 +53,17 @@ export const ENGINES: EngineInfo[] = [
       { value: 'C4F32_DS', label: 'C4F32 DS', description: 'denoise, heavy' },
     ],
     defaultVariant: 'C4F16',
+  },
+  {
+    id: 'artcnn16', name: 'ArtCNN 1.6', group: 'trained on anime', blurb: 'newest weights, compute shaders', cost: 3,
+    variants: [
+      { value: 'C4F16', label: 'C4F16', description: 'balanced' },
+      { value: 'C4F32', label: 'C4F32', description: 'best, heavy' },
+      { value: 'C4F16_DS', label: 'C4F16 DS', description: 'denoise+sharpen' },
+      { value: 'C4F32_DS', label: 'C4F32 DS', description: 'denoise, heavy' },
+    ],
+    defaultVariant: 'C4F16',
+    webgpuOnly: true,
   },
   {
     id: 'fsrcnnx', name: 'FSRCNNX', group: 'trained on anime', blurb: 'soft, no oil-paint look', cost: 2,
@@ -109,7 +122,7 @@ export function engineInfo(id: Engine): EngineInfo {
  * the passes whose DESC contains `only`), or a small built-in pass given inline.
  */
 export type ShaderRef =
-  | { file: string; defines?: Record<string, string>; only?: string }
+  | { file: string; defines?: Record<string, string>; only?: string; f16?: boolean }
   | { inline: string; name: string };
 
 export interface EngineChain {
@@ -158,6 +171,12 @@ export function engineChain(engine: Exclude<Engine, 'anime4k'>, variant: string)
       return ds
         ? { plane: 'ycbcr', pre: [], step: [{ file: `ArtCNN_${size}_DS_YCbCr.glsl` }] }
         : { plane: 'rgb', pre: [], step: [{ file: `ArtCNN_${size}_RGB.glsl` }] };
+    }
+    case 'artcnn16': {
+      // ArtCNN v1.6.2: luma-only compute passes (shared-memory convolutions).
+      const v = ['C4F16', 'C4F32', 'C4F16_DS', 'C4F32_DS'].includes(variant) ? variant : 'C4F16';
+      // f16: a half-precision WGSL build exists too, used when the GPU has shader-f16.
+      return { plane: 'luma', pre: [], step: [{ file: `ArtCNN-1.6.2_${v}.glsl`, f16: true }] };
     }
     case 'fsrcnnx':
       return { plane: 'luma', pre: [], step: [{ file: variant === '16' ? 'FSRCNNX_x2_16-0-4-1.glsl' : 'FSRCNNX_x2_8-0-4-1.glsl' }] };

@@ -36,6 +36,7 @@ const EXPECT_API = BACKEND === 'webgl2' ? 'webgl2' : 'webgpu';
 const ENGINES = [
   ['anime4k', ''], ['anime4k-gan', 'S'], ['anime4k-gan', 'M'], ['anime4k-gan', 'RM'],
   ['artcnn', 'C4F16'], ['artcnn', 'C4F32'], ['artcnn', 'C4F16_DS'], ['artcnn', 'C4F32_DS'],
+  ['artcnn16', 'C4F16'], ['artcnn16', 'C4F32'], ['artcnn16', 'C4F16_DS'], ['artcnn16', 'C4F32_DS'],
   ['fsrcnnx', '8'], ['fsrcnnx', '16'], ['ravu', 'r2'], ['ravu', 'r3'], ['ravu', 'r4'],
   ['nnedi3', '16'], ['nnedi3', '32'], ['nnedi3', '64'],
   ['fsr', 'soft'], ['fsr', 'normal'], ['fsr', 'crisp'], ['cas', 'low'], ['cas', 'mid'], ['cas', 'high'],
@@ -96,9 +97,19 @@ try {
     v = (await list())?.[0] ?? v;
     const st = v?.stats;
     const ms = st?.samples?.length ? st.samples.reduce((a, b) => a + b, 0) / st.samples.length : st?.gpuMs;
-    check(`${engine}${variant ? ` ${variant}` : ''} renders`, v?.status === 'Active' && st?.outputWidth === 960 * parseInt(UPSCALE, 10) && st?.backend === EXPECT_API,
+    check(`${engine}${variant ? ` ${variant}` : ''} renders`, v?.status === 'Active' && st?.outputWidth === 960 * parseInt(UPSCALE, 10) && st?.backend === (engine === 'artcnn16' ? 'webgpu' : EXPECT_API),
       v?.status === 'Active' ? `${st.outputWidth}x${st.outputHeight}, ${st.passes} passes, GPU ${ms?.toFixed(2)} ms, CPU ${st.cpuMs.toFixed(2)} ms, ${(st.textureBytes / 1048576).toFixed(0)} MB, ${st.backend}` : `${v?.status}: ${v?.message}`);
   }
+
+  // Scrolled out of view: drawing stops, and resumes when the video is back.
+  const status = async () => (await list())?.[0]?.status;
+  await page.evaluate(() => { document.body.style.paddingTop = '3000px'; });
+  await page.waitForTimeout(800);
+  const away = await status();
+  await page.evaluate(() => { document.body.style.paddingTop = ''; });
+  await page.waitForTimeout(800);
+  const back = await status();
+  check('out of view pauses drawing, back in view resumes', away === 'Suspended' && back === 'Active', `${away} -> ${back}`);
 
   // Popup: engine menu.
   const popup = await ctx.newPage();
@@ -108,7 +119,7 @@ try {
   await popup.click('#engine');
   await popup.waitForTimeout(200);
   const items = await popup.$$eval('#engine-menu .eng', (els) => els.map((e) => e.dataset.engine));
-  check('engine menu lists all engines', items.length === 8, items.join(','));
+  check('engine menu lists all engines', items.length === 9, items.join(','));
   if (shots) await popup.screenshot({ path: path.join(shots, 'popup-engine-menu.png') });
   const focused = () => popup.evaluate(() => document.activeElement?.dataset?.engine ?? null);
   const first = await focused();

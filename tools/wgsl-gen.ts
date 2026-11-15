@@ -12,14 +12,21 @@ import { buildVulkanSource, parseShaderFile } from '../src/mpv-hooks';
 import { ENGINES, ShaderRef, applyDefines, engineChain } from '../src/engines';
 import { ANIME4K_SHADERS, HOOK_OF, WgslPass, wgslFileName } from '../src/chain';
 
-function translate(source: string, hook: string, label: string): WgslPass[] {
+function translate(source: string, hook: string, label: string, f16 = false): WgslPass[] {
   const file = parseShaderFile(source);
   const lookups = new Map(file.textures.map((t) => [t.name, { linear: t.linear }]));
   return file.passes.map((p) => {
-    const { source: glsl, textures } = buildVulkanSource(p, hook, lookups);
+    const { source: glsl, textures } = buildVulkanSource(p, hook, lookups, { f16 });
     try {
-      const module = parseGlsl(glsl, { stage: 'fragment' });
-      return { code: writeWgsl(module, validate(module)), textures };
+      const module = parseGlsl(glsl, { stage: p.compute ? 'compute' : 'fragment' });
+      let code = writeWgsl(module, validate(module));
+      // naga turns GLSL barrier() into workgroupBarrier() plus subgroupBarrier(), which core WGSL
+      // lacks (it needs the subgroups extension). Shared memory needs only the workgroup barrier.
+      if (code.includes('subgroupBarrier()')) {
+        if (!code.includes('workgroupBarrier()')) throw new Error('subgroupBarrier without workgroupBarrier');
+        code = code.replace(/^\s*subgroupBarrier\(\);\s*\n/gm, '');
+      }
+      return { code, textures };
     } catch (e) {
       const msg = (e as { formatted?: string }).formatted ?? String(e);
       throw new Error(`WGSL translation failed for ${label} / ${p.desc}:\n${msg}`);
@@ -41,6 +48,10 @@ export function generateWgsl(srcDir: string, outDir: string): number {
       for (const r of [...ec.pre, ...ec.step, ...(ec.last ?? [])] as ShaderRef[]) {
         const out = wgslFileName(r);
         if (jobs.has(out)) continue;
+        if ('file' in r && r.f16) {
+          const file = r.file;
+          jobs.set(wgslFileName(r, true), () => translate(applyDefines(readFileSync(path.join(srcDir, file), 'utf8'), r.defines), hook, `${file} (f16)`, true));
+        }
         jobs.set(out, () => ('inline' in r
           ? translate(r.inline, hook, r.name)
           : translate(applyDefines(readFileSync(path.join(srcDir, r.file), 'utf8'), r.defines), hook, r.file)));

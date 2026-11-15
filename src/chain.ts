@@ -39,6 +39,8 @@ export type Backend = 'webgl2' | 'webgpu';
 export interface Anime4kRenderer {
   /** Draws the source's current frame, or `frame` instead: a still of the same size (manga pages reuse one renderer). */
   render(frame?: RenderSource): void;
+  /** True while the GPU has not finished the last frame; a live video skips a frame rather than queue one. */
+  busy(): boolean;
   destroy(): void;
   stats(): RenderStats;
 }
@@ -116,11 +118,11 @@ function fetchShader(file: string): Promise<string> {
 export interface WgslPass { code: string; textures: string[] }
 
 /** File name of a shader's translated passes. */
-export function wgslFileName(ref: ShaderRef): string {
+export function wgslFileName(ref: ShaderRef, f16 = false): string {
   const base = 'inline' in ref
     ? `inline-${ref.name}`
     : ref.file + Object.entries(ref.defines ?? {}).map(([k, v]) => `.${k}-${v}`).join('');
-  return `${base.replace(/[^\w.-]+/g, '-')}.wgsl.json`;
+  return `${base.replace(/[^\w.-]+/g, '-')}${f16 ? '.f16' : ''}.wgsl.json`;
 }
 
 const wgslOf = new WeakMap<HookPass, WgslPass>();
@@ -158,7 +160,7 @@ export interface LoadedChain {
 }
 
 /** Loads a chain's shader files; with `wgsl`, also each pass's WGSL translation (WebGPU). */
-export async function loadChain(s: Settings, opts: { wgsl?: boolean } = {}): Promise<LoadedChain> {
+export async function loadChain(s: Settings, opts: { wgsl?: boolean; f16?: boolean } = {}): Promise<LoadedChain> {
   if (s.engine === 'anime4k') {
     const parseA4k = (name: string) => parseCached(name, () => ANIME4K_SHADERS[name]);
     if (opts.wgsl) {
@@ -176,7 +178,9 @@ export async function loadChain(s: Settings, opts: { wgsl?: boolean } = {}): Pro
     ? parseCached(`inline|${r.name}`, () => r.inline)
     : parseCached(`${r.file}|${JSON.stringify(r.defines ?? {})}`, () => applyDefines(texts.get(r.file)!, r.defines)));
   if (opts.wgsl) {
-    await Promise.all(refs.map(async (r) => attachWgsl(parseWhole(r), await fetchWgsl(wgslFileName(r)), wgslFileName(r))));
+    // Half-precision builds where one exists and the GPU can run it (opts.f16).
+    const name = (r: ShaderRef) => wgslFileName(r, !!opts.f16 && 'file' in r && !!r.f16);
+    await Promise.all(refs.map(async (r) => attachWgsl(parseWhole(r), await fetchWgsl(name(r)), name(r))));
   }
   const parse = (r: ShaderRef): ShaderFile => {
     const f = parseWhole(r);
@@ -194,7 +198,7 @@ export async function loadChain(s: Settings, opts: { wgsl?: boolean } = {}): Pro
 }
 
 /** The chain's hook passes in run order, plus the lookup tables they use. */
-export function orderedPasses(chain: LoadedChain, scale: number): { passes: HookPass[]; textures: UserTexture[] } {
+export function orderedPasses(chain: LoadedChain, scale: number, allowCompute = false): { passes: HookPass[]; textures: UserTexture[] } {
   const hook = HOOK_OF[chain.plane];
   const passes: HookPass[] = [];
   const deferred: HookPass[] = []; // PREKERNEL hooks run after all MAIN hooks (as in mpv)
@@ -202,7 +206,7 @@ export function orderedPasses(chain: LoadedChain, scale: number): { passes: Hook
   for (const file of chain.files(scale)) {
     for (const t of file.textures) textures.set(t.name, t);
     for (const p of file.passes) {
-      if (p.compute) throw new Error(`Pass "${p.desc}" needs compute shaders, which WebGL2 lacks.`);
+      if (p.compute && !allowCompute) throw new Error(`Pass "${p.desc}" needs compute shaders (WebGPU); WebGL2 has none.`);
       if (p.hook === hook) passes.push(p);
       else if (p.hook === 'PREKERNEL' && chain.plane === 'rgb') deferred.push(p);
       // other hook points (CHROMA, OUTPUT...) have no texture in this pipeline

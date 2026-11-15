@@ -12,6 +12,11 @@ ArtCNN (MIT, LICENSE.ArtCNN)
   Legacy/ArtCNN_C4F16_DS_YCbCr.glsl, ArtCNN_C4F32_DS_YCbCr.glsl
   (the fragment-shader builds; later releases use compute shaders, which WebGL2 lacks)
 
+ArtCNN 1.6 (MIT, LICENSE.ArtCNN) -- compute shaders, WebGPU only
+  https://github.com/Artoriuz/ArtCNN tag v1.6.2 (commit f606e1f0ba7e6f0ab55049f33dac4d854819b00b)
+  GLSL/ArtCNN_C4F16.glsl, ArtCNN_C4F32.glsl, ArtCNN_C4F16_DS.glsl, ArtCNN_C4F32_DS.glsl,
+  saved as ArtCNN-1.6.2_<name>.glsl
+
 FSRCNNX (LGPL-3.0, LICENSE.LGPL-3.0 + LICENSE.GPL-3.0), Copyright (C) 2017-2021 igv
   https://github.com/igv/FSRCNN-TensorFlow release 1.1
   FSRCNNX_x2_8-0-4-1.glsl, FSRCNNX_x2_16-0-4-1.glsl

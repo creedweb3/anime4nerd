@@ -76,6 +76,7 @@ body { position: relative; }
 .eng[aria-checked="true"] { background: #1a1a1a; }
 .eng[aria-checked="true"] b::before { content: "▸ "; }
 .engine-menu .pills.api { margin: 4px 10px 2px; }
+.eng .api-tag { margin-left: 6px; padding: 0 4px; border: 1px solid var(--line2); color: var(--dim); font-size: 9px; font-weight: 400; vertical-align: 1px; }
 .engine-note { color: var(--faint); font-size: 10px; margin: -2px 0 8px; }
 
 /* what's new banner (after an update) -------------------------------------- */

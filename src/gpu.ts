@@ -10,6 +10,7 @@ import {
 } from './chain';
 import { decodedSize, uploadSize } from './video-size';
 import { createWebGpuRenderer, webgpuAvailable } from './gpu-webgpu';
+import { engineInfo } from './engines';
 
 export type { Anime4kRenderer, Backend, RenderSource, RenderStats } from './chain';
 export { SourceSizeChanged, setShaderBase } from './chain';
@@ -155,12 +156,18 @@ export async function createAnime4kRenderer(
   if (!w || !h) throw new Error('Waiting for video dimensions.');
   // WebGPU first when asked (or on auto, unless it already failed on this page); on auto any
   // failure falls back to WebGL2 on the same canvas, which WebGPU leaves untouched until it succeeds.
-  const tryGpu = settings.backend === 'webgpu' || (settings.backend === 'auto' && webgpuFailure === null && webgpuAvailable());
+  // Engines built on compute shaders (ArtCNN 1.6) run on WebGPU whatever the setting says.
+  const info = engineInfo(settings.engine);
+  const mustGpu = settings.backend === 'webgpu' || !!info.webgpuOnly;
+  const tryGpu = mustGpu || (settings.backend === 'auto' && webgpuFailure === null && webgpuAvailable());
   if (tryGpu) {
     try {
-      return await createWebGpuRenderer(video, canvas, await loadChain(settings, { wgsl: true }), onError, wantScale, w, h);
+      return await createWebGpuRenderer(video, canvas, (f16) => loadChain(settings, { wgsl: true, f16 }), onError, wantScale, w, h);
     } catch (e) {
-      if (settings.backend === 'webgpu' || (e instanceof DOMException && e.name === 'SecurityError')) throw e;
+      if (info.webgpuOnly && !(e instanceof DOMException)) {
+        throw new Error(`${info.name} needs WebGPU (compute shaders), which is not available here: ${e instanceof Error ? e.message : String(e)}`);
+      }
+      if (mustGpu || (e instanceof DOMException && e.name === 'SecurityError')) throw e;
       webgpuFailure = e instanceof Error ? e.message : String(e);
     }
   }
@@ -363,6 +370,15 @@ async function buildRenderer(
   let lastCpuMs = 0;
   const frameTimes: number[] = [];
   let lastHealthCheck = -Infinity;
+  let lastFence: WebGLSync | null = null; // signalled when the GPU has finished the last frame
+
+  function busy(): boolean {
+    if (!lastFence || destroyed || gl!.isContextLost()) return false;
+    if (gl!.getSyncParameter(lastFence, gl!.SYNC_STATUS) !== gl!.SIGNALED) return true;
+    gl!.deleteSync(lastFence);
+    lastFence = null;
+    return false;
+  }
 
   function pollQueries() {
     if (!timerExt) return;
@@ -404,6 +420,7 @@ async function buildRenderer(
     destroyed = true;
     for (const q of pendingQueries) gl!.deleteQuery(q);
     pendingQueries.length = 0;
+    if (lastFence) gl!.deleteSync(lastFence);
     canvas.removeEventListener('webglcontextlost', onLost);
     for (const c of compiled) { gl!.deleteProgram(c.program); if (c.fbo) gl!.deleteFramebuffer(c.fbo); }
     for (const t of allTex) gl!.deleteTexture(t.tex);
@@ -464,9 +481,12 @@ async function buildRenderer(
     }
 
     if (query) { gl!.endQuery(timerExt!.TIME_ELAPSED_EXT); pendingQueries.push(query); }
+    if (lastFence) gl!.deleteSync(lastFence);
+    lastFence = gl!.fenceSync(gl!.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    gl!.flush();
     lastCpuMs = performance.now() - t0;
     frameTimes.push(t0);
   }
 
-  return { render, destroy, stats };
+  return { render, busy, destroy, stats };
 }

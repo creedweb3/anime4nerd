@@ -125,6 +125,13 @@ function buildEngineMenu() {
     b.setAttribute('role', 'menuitemradio');
     const name = document.createElement('b');
     name.textContent = e.name;
+    if (e.webgpuOnly) {
+      const api = document.createElement('span');
+      api.className = 'api-tag';
+      api.textContent = 'webgpu';
+      api.title = 'Uses compute shaders: always runs on WebGPU';
+      name.append(api);
+    }
     const blurb = document.createElement('small');
     blurb.textContent = e.blurb;
     b.append(name, blurb, costMeter(e.cost));

@@ -86,6 +86,11 @@ class VideoUpscaler {
 
   private resizeObs: ResizeObserver;
 
+  // Scrolled out of view (or zero size): nothing would be seen, so nothing is drawn.
+  private offscreen = false;
+
+  private readonly viewObs: IntersectionObserver;
+
   private readonly docSync: () => void;
 
   // Set by destroy(); a dead upscaler must never start a renderer again.
@@ -132,6 +137,13 @@ class VideoUpscaler {
     for (const [n, f] of this.listeners) video.addEventListener(n, f);
     this.resizeObs = new ResizeObserver(() => this.layout());
     this.resizeObs.observe(video);
+    this.viewObs = new IntersectionObserver((entries) => {
+      const off = !entries[entries.length - 1].isIntersecting;
+      if (off === this.offscreen) return;
+      this.offscreen = off;
+      this.sync();
+    });
+    this.viewObs.observe(video);
     this.docSync = sync;
     document.addEventListener('visibilitychange', sync);
     document.addEventListener('fullscreenchange', sync);
@@ -200,6 +212,7 @@ class VideoUpscaler {
     this.highlight(false);
     for (const [n, f] of this.listeners) this.video.removeEventListener(n, f);
     this.resizeObs.disconnect();
+    this.viewObs.disconnect();
   }
 
   private setStatus(status: Status, message = '') {
@@ -214,6 +227,7 @@ class VideoUpscaler {
     // Inside a shadow root, document.* is retargeted to the host, so ask the video's own root.
     const root = v.getRootNode() as Document | ShadowRoot;
     return document.hidden
+      || this.offscreen
       || root.pictureInPictureElement === v
       || root.fullscreenElement === v; // native fullscreen on the video itself: canvas can't overlay it
   }
@@ -247,7 +261,9 @@ class VideoUpscaler {
     if (this.suspended()) {
       this.stopLoop();
       if (this.canvas) this.canvas.hidden = true;
-      this.setStatus('Suspended', 'Normal video is used in picture-in-picture, native fullscreen and hidden tabs.');
+      this.setStatus('Suspended', this.offscreen && !document.hidden
+        ? 'Paused while the video is out of view; it resumes when you scroll back.'
+        : 'Normal video is used in picture-in-picture, native fullscreen and hidden tabs.');
       return;
     }
     if (v.readyState < 2 || !v.videoWidth || !v.videoHeight) {
@@ -328,6 +344,13 @@ class VideoUpscaler {
     const r = this.renderer;
     if (!v || !r || v.seeking || v.readyState < 2 || this.suspended()) return;
     if (v.videoWidth !== this.width || v.videoHeight !== this.height) { this.teardown(); this.sync(); return; }
+    if (r.busy()) {
+      // The GPU is still on the last frame: queueing another only adds lag and load. Draw
+      // whatever frame is current once it is done (skipping frames it had no time for).
+      this.usesVfc = false;
+      this.frameHandle = requestAnimationFrame(() => { this.frameHandle = null; this.frame(); });
+      return;
+    }
     const gen = this.generation;
     this.rendering = true;
     try {

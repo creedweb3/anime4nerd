@@ -11,7 +11,7 @@ import {
   Anime4kRenderer, LoadedChain, MAX_OUTPUT_PX, MAX_TEXTURE_BYTES, RenderSource, RenderStats, SourceSizeChanged,
   estimateBytes, orderedPasses, passWgsl, planChain, poolTextures,
 } from './chain';
-import { MAX_PASS_TEXTURES } from './mpv-hooks';
+import { COMPUTE_OUT_BINDING, MAX_PASS_TEXTURES } from './mpv-hooks';
 import type { Plane } from './engines';
 import { decodedSize } from './video-size';
 
@@ -71,16 +71,16 @@ const PRESENT_FRAG = (plane: Plane) => /* wgsl */ `${UNIFORMS}
 }`;
 
 /** Bind group layout entries for the @group(0) bindings a WGSL module declares. */
-function layoutEntries(code: string): GPUBindGroupLayoutEntry[] {
+function layoutEntries(code: string, visibility: number = GPUShaderStage.FRAGMENT): GPUBindGroupLayoutEntry[] {
   const out: GPUBindGroupLayoutEntry[] = [];
   const re = /@group\(0\)\s*@binding\((\d+)\)\s*var(<[^>]*>)?\s+\w+\s*:\s*([^;]+);/g;
   for (let m = re.exec(code); m; m = re.exec(code)) {
     const binding = Number(m[1]);
     const type = m[3].trim();
-    const visibility = GPUShaderStage.FRAGMENT;
     if (m[2]?.includes('uniform')) out.push({ binding, visibility, buffer: { type: 'uniform' } });
     else if (type === 'sampler') out.push({ binding, visibility, sampler: { type: 'filtering' } });
     else if (type === 'texture_external') out.push({ binding, visibility, externalTexture: {} });
+    else if (type.startsWith('texture_storage_2d')) out.push({ binding, visibility, storageTexture: { access: 'write-only', format: FORMAT } });
     else if (type.startsWith('texture_2d')) out.push({ binding, visibility, texture: { sampleType: 'float' } });
     else throw new Error(`Unsupported WGSL binding ${binding}: ${type}`);
   }
@@ -103,16 +103,22 @@ export function webgpuAvailable(): boolean {
   return typeof navigator !== 'undefined' && 'gpu' in navigator && !!navigator.gpu;
 }
 
-interface Pass {
+type Pass = {
+  kind: 'render';
   pipeline: GPURenderPipeline;
   bindGroup: GPUBindGroup | null; // null: built per frame (the copy pass, which imports the frame)
   target: GPUTextureView | null; // null: the canvas
-}
+} | {
+  kind: 'compute';
+  pipeline: GPUComputePipeline;
+  bindGroup: GPUBindGroup;
+  groups: [number, number]; // workgroups to dispatch
+};
 
 export async function createWebGpuRenderer(
   video: RenderSource,
   canvas: HTMLCanvasElement,
-  chain: LoadedChain,
+  loadChainFor: (f16: boolean) => Promise<LoadedChain>,
   onError: (msg: string) => void,
   wantScale: number,
   w: number,
@@ -122,7 +128,16 @@ export async function createWebGpuRenderer(
   const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
   if (!adapter) throw new Error('No WebGPU adapter.');
   const timestamps = adapter.features.has('timestamp-query');
-  const device = await adapter.requestDevice({ requiredFeatures: timestamps ? ['timestamp-query'] : [] });
+  // Half-precision arithmetic (ArtCNN 1.6's compute passes have an f16 build): about twice the
+  // maths rate on most recent GPUs.
+  const f16 = adapter.features.has('shader-f16');
+  const chain = await loadChainFor(f16);
+  const device = await adapter.requestDevice({
+    requiredFeatures: [...(timestamps ? ['timestamp-query' as const] : []), ...(f16 ? ['shader-f16' as const] : [])],
+    // ArtCNN C4F32's compute passes keep 32 KB of float32 tiles in workgroup memory; the
+    // default limit is 16 KB, most desktop GPUs allow 32 KB.
+    requiredLimits: { maxComputeWorkgroupStorageSize: adapter.limits.maxComputeWorkgroupStorageSize },
+  });
   let destroyed = false;
   let ready = false;
   device.lost.then((info) => {
@@ -133,10 +148,10 @@ export async function createWebGpuRenderer(
     const maxTex = device.limits.maxTextureDimension2D;
     if (w * 2 > maxTex || h * 2 > maxTex) throw new Error("The upscaled video exceeds this GPU's texture limit.");
     let scale = wantScale;
-    let { passes, textures } = orderedPasses(chain, scale);
+    let { passes, textures } = orderedPasses(chain, scale, true);
     const tooBig = () => w * scale > maxTex || h * scale > maxTex || w * h * scale * scale > MAX_OUTPUT_PX
       || estimateBytes(passes, textures, chain.plane, w, h, scale) > MAX_TEXTURE_BYTES;
-    while (scale > 2 && tooBig()) { scale /= 2; ({ passes, textures } = orderedPasses(chain, scale)); }
+    while (scale > 2 && tooBig()) { scale /= 2; ({ passes, textures } = orderedPasses(chain, scale, true)); }
     for (const p of passes) if (!passWgsl(p)) throw new Error(`No WGSL for pass "${p.desc}".`);
 
     device.pushErrorScope('validation');
@@ -146,10 +161,14 @@ export async function createWebGpuRenderer(
     const plan = planChain(passes, new Set(textures.map((t) => t.name)), chain.plane, w, h, scale);
     const { slotOf, slots } = poolTextures(plan);
     const usage = GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT;
+    // Compute passes write their output as a storage image (rgba16float only; texture 0 is never written by one).
+    const hasCompute = plan.steps.some((s) => s.pass?.compute);
     const allTex: GPUTexture[] = [];
     let textureBytes = 0;
     const slotTex = slots.map((s, i) => {
-      const t = device.createTexture({ size: [s.w, s.h], format: i === 0 ? 'rgba8unorm' : FORMAT, usage });
+      const t = device.createTexture({ size: [s.w, s.h], format: i === 0 ? 'rgba8unorm' : FORMAT,
+        usage: usage | (i > 0 && hasCompute ? GPUTextureUsage.STORAGE_BINDING : 0),
+      });
       allTex.push(t);
       textureBytes += s.w * s.h * (i === 0 ? 4 : 8);
       return t;
@@ -190,11 +209,25 @@ export async function createWebGpuRenderer(
       return { pipeline, layout };
     }
 
-    function bindGroupFor(layout: GPUBindGroupLayout, code: string, texs: GPUTexture[], offset: [number, number]) {
+    async function computePipelineFor(code: string, label: string) {
+      const module = device.createShaderModule({ code, label });
+      const layout = device.createBindGroupLayout({ entries: layoutEntries(code, GPUShaderStage.COMPUTE) });
+      const pipeline = await device.createComputePipelineAsync({
+        label,
+        layout: device.createPipelineLayout({ bindGroupLayouts: [layout] }),
+        compute: { module, entryPoint: 'main' },
+      });
+      return { pipeline, layout };
+    }
+
+    /** `offset`: u_offset (x, y = plane shift for present; z, w = output size for compute passes). */
+    function bindGroupFor(layout: GPUBindGroupLayout, code: string, texs: GPUTexture[], offset: [number, number, number?, number?], out?: GPUTexture) {
       const u = new Float32Array(UNIFORM_BYTES / 4);
       texs.forEach((t, i) => { u[i * 4] = t.width; u[i * 4 + 1] = t.height; });
       u[MAX_PASS_TEXTURES * 4] = offset[0];
       u[MAX_PASS_TEXTURES * 4 + 1] = offset[1];
+      u[MAX_PASS_TEXTURES * 4 + 2] = offset[2] ?? 0;
+      u[MAX_PASS_TEXTURES * 4 + 3] = offset[3] ?? 0;
       const buf = device.createBuffer({ size: UNIFORM_BYTES, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
       device.queue.writeBuffer(buf, 0, u);
       buffers.push(buf);
@@ -202,6 +235,7 @@ export async function createWebGpuRenderer(
         if (e.binding === 0) return { binding: 0, resource: { buffer: buf } };
         if (e.binding === 1) return { binding: 1, resource: sLin };
         if (e.binding === 2) return { binding: 2, resource: sNear };
+        if (e.binding === COMPUTE_OUT_BINDING) return { binding: e.binding, resource: out!.createView() };
         return { binding: e.binding, resource: texs[e.binding - 3].createView() };
       });
       return device.createBindGroup({ layout, entries });
@@ -209,10 +243,11 @@ export async function createWebGpuRenderer(
 
     // --- pipelines ------------------------------------------------------------------
     const copy = await pipelineFor(COPY_FRAG, 'rgba8unorm', 'copy video');
-    const steps: Pass[] = [{ pipeline: copy.pipeline, bindGroup: null, target: texOf(0).createView() }];
+    const steps: Pass[] = [{ kind: 'render', pipeline: copy.pipeline, bindGroup: null, target: texOf(0).createView() }];
     const built = await Promise.all(plan.steps.map(async (s) => {
       const code = s.kind === 'to-plane' ? TO_PLANE_FRAG(chain.plane) : passWgsl(s.pass!)!.code;
-      return { pl: await pipelineFor(code, FORMAT, s.pass?.desc ?? 'to plane'), code, s };
+      const label = s.pass?.desc ?? 'to plane';
+      return { pl: s.pass?.compute ? await computePipelineFor(code, label) : await pipelineFor(code, FORMAT, label), code, s };
     }));
     for (const { pl, code, s } of built) {
       // Texture order: what the WGSL binds at 3, 4, ... (the translation's own list).
@@ -222,11 +257,23 @@ export async function createWebGpuRenderer(
         if (!inp) throw new Error(`Pass binds ${n}, which the plan does not provide.`);
         return typeof inp.ref === 'string' ? lookup.get(inp.ref)! : texOf(inp.ref);
       });
-      steps.push({ pipeline: pl.pipeline, bindGroup: bindGroupFor(pl.layout, code, texs, [0, 0]), target: texOf(s.out).createView() });
+      const out = texOf(s.out);
+      const cs = s.pass?.computeSize;
+      if (cs) {
+        steps.push({
+          kind: 'compute',
+          pipeline: pl.pipeline as GPUComputePipeline,
+          bindGroup: bindGroupFor(pl.layout, code, texs, [0, 0, out.width, out.height], out),
+          groups: [Math.ceil(out.width / cs[0]), Math.ceil(out.height / cs[1])],
+        });
+      } else {
+        steps.push({ kind: 'render', pipeline: pl.pipeline as GPURenderPipeline, bindGroup: bindGroupFor(pl.layout, code, texs, [0, 0]), target: out.createView() });
+      }
     }
     const presentCode = PRESENT_FRAG(chain.plane);
     const present = await pipelineFor(presentCode, canvasFormat, 'present');
     steps.push({
+      kind: 'render',
       pipeline: present.pipeline,
       bindGroup: bindGroupFor(present.layout, presentCode, [texOf(plan.final), texOf(0)], plan.offset),
       target: null,
@@ -245,6 +292,7 @@ export async function createWebGpuRenderer(
     let lastCpuMs = 0;
     const frameTimes: number[] = [];
     let lastHealthCheck = -Infinity;
+    let inFlight = 0; // submitted frames the GPU has not finished
 
     // Only now take the canvas: past this point a failure can no longer fall back on it.
     canvas.width = finalSize.w;
@@ -305,6 +353,15 @@ export async function createWebGpuRenderer(
         const canvasView = ctx!.getCurrentTexture().createView();
         const lastIdx = steps.length - 1;
         steps.forEach((p, i) => {
+          if (p.kind === 'compute') {
+            const cp = enc.beginComputePass();
+            cp.setPipeline(p.pipeline);
+            cp.setBindGroup(0, p.bindGroup);
+            cp.dispatchWorkgroups(p.groups[0], p.groups[1]);
+            cp.end();
+            return;
+          }
+          // The first (copy) and last (present) passes are render passes, so they bracket the timing.
           const tw: GPURenderPassTimestampWrites | undefined = querySet && (i === 0 || i === lastIdx)
             ? { querySet, ...(i === 0 ? { beginningOfPassWriteIndex: 0 } : {}), ...(i === lastIdx ? { endOfPassWriteIndex: 1 } : {}) }
             : undefined;
@@ -324,6 +381,8 @@ export async function createWebGpuRenderer(
           enc.copyBufferToBuffer(resolveBuf, 0, readBuf, 0, 16);
         }
         device.queue.submit([enc.finish()]);
+        inFlight += 1;
+        device.queue.onSubmittedWorkDone().then(() => { inFlight -= 1; }, () => { /* device gone */ });
         if (readBuf) {
           const rb = readBuf;
           rb.mapAsync(GPUMapMode.READ).then(() => {
@@ -342,7 +401,7 @@ export async function createWebGpuRenderer(
       frameTimes.push(t0);
     }
 
-    return { render, destroy, stats };
+    return { render, busy: () => !destroyed && inFlight > 0, destroy, stats };
   } catch (e) {
     destroyed = true;
     device.destroy();

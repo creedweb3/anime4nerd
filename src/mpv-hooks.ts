@@ -14,6 +14,8 @@ export interface HookPass {
   offset: [number, number] | null; // pixel shift this pass introduces, in its output's pixels
   components: number;
   compute: boolean; // //!COMPUTE passes need compute shaders, which WebGL2 lacks
+  /** //!COMPUTE bw bh [tw th]: output block per workgroup, then threads per workgroup (default = block). */
+  computeSize: [number, number, number, number] | null;
   body: string;
 }
 
@@ -41,7 +43,7 @@ function hexBytes(hex: string): Uint8Array {
 function newPass(): HookPass {
   return {
     desc: '', hook: 'MAIN', binds: [], save: null, width: null, height: null, when: null,
-    offset: null, components: 4, compute: false, body: '',
+    offset: null, components: 4, compute: false, computeSize: null, body: '',
   };
 }
 
@@ -86,7 +88,12 @@ export function parseShaderFile(source: string): ShaderFile {
       case 'HEIGHT': cur.height = val.split(/\s+/); break;
       case 'WHEN': cur.when = val.split(/\s+/); break;
       case 'COMPONENTS': cur.components = parseInt(val, 10) || 4; break;
-      case 'COMPUTE': cur.compute = true; break;
+      case 'COMPUTE': {
+        const [bw, bh, tw, th] = val.split(/\s+/).map(Number);
+        cur.compute = true;
+        cur.computeSize = [bw, bh, tw || bw, th || bh];
+        break;
+      }
       case 'OFFSET': {
         const [x, y] = val.split(/\s+/).map(Number);
         if (Number.isFinite(x) && Number.isFinite(y)) cur.offset = [x, y]; // "ALIGN" keeps the alignment: no shift
@@ -180,6 +187,7 @@ export function buildVulkanSource(
   pass: HookPass,
   hookedName: string,
   userTextures: ReadonlyMap<string, { linear: boolean }> = new Map(),
+  opts: { f16?: boolean } = {},
 ): { source: string; textures: string[] } {
   const names = new Set<string>();
   for (const b of pass.binds) names.add(b === 'HOOKED' ? hookedName : b);
@@ -189,11 +197,22 @@ export function buildVulkanSource(
   const textures = [...names];
   if (textures.length > MAX_PASS_TEXTURES) throw new Error(`Pass "${pass.desc}" binds ${textures.length} textures; WebGPU allows ${MAX_PASS_TEXTURES}.`);
 
+  const cs = pass.computeSize;
   let src = '#version 450\n';
   // No texture has mipmaps, so sampling level 0 is identical, and unlike texture() it is legal in
   // non-uniform control flow (WGSL rejects textureSample inside a branch, e.g. NNEDI3).
   src += '#define texture(s, p) textureLod(s, p, 0.0)\n';
-  src += 'layout(location = 0) in vec2 v_uv;\nlayout(location = 0) out vec4 fragColor;\n';
+  if (cs) {
+    // Compute: the output image at COMPUTE_OUT_BINDING, its size in u_offset.zw; NAME_pos is
+    // this invocation's output pixel, as in mpv.
+    src += `layout(local_size_x = ${cs[2]}, local_size_y = ${cs[3]}) in;\n`
+      // naga does not fold gl_WorkGroupSize into constants; the shaders size shared arrays with it.
+      + `#define gl_WorkGroupSize uvec3(${cs[2]}u, ${cs[3]}u, 1u)\n`
+      + `layout(set = 0, binding = ${COMPUTE_OUT_BINDING}, rgba16f) uniform writeonly image2D out_image;\n`;
+  } else {
+    src += 'layout(location = 0) in vec2 v_uv;\nlayout(location = 0) out vec4 fragColor;\n';
+  }
+  const pos = cs ? '((vec2(gl_GlobalInvocationID.xy) + 0.5) / u_offset.zw)' : 'v_uv';
   src += `layout(set = 0, binding = 0) uniform P { vec4 u_size[${MAX_PASS_TEXTURES}]; vec4 u_offset; };\n`;
   src += 'layout(set = 0, binding = 1) uniform sampler s_lin;\nlayout(set = 0, binding = 2) uniform sampler s_near;\n';
   textures.forEach((n, i) => {
@@ -207,7 +226,7 @@ export function buildVulkanSource(
     src += `#define ${n}_raw sampler2D(${n}_t, s_lin)\n`
       + `#define ${n}_size (u_size[${i}].xy)\n`
       + `#define ${n}_pt (1.0 / ${n}_size)\n`
-      + `#define ${n}_pos v_uv\n`
+      + `#define ${n}_pos ${pos}\n`
       + `#define ${n}_mul 1.0\n`
       + `#define ${n}_tex(pos) texture(${n}_raw, (pos))\n`
       + `#define ${n}_texOff(off) ${n}_tex(${n}_pos + ${n}_pt * vec2(off))\n`;
@@ -217,6 +236,29 @@ export function buildVulkanSource(
       src += `#define HOOKED_${suf} ${hookedName}_${suf}\n`;
     }
   }
-  src += `${pass.body}\nvoid main() { fragColor = hook(); }\n`;
+  if (cs) {
+    let body = pass.body;
+    if (opts.f16) {
+      // Half precision (WGSL shader-f16): naga ignores the #extension, so define its macro to take
+      // the shaders' float16 path. naga lacks max() on f16 vectors and imageStore() of them, which
+      // ArtCNN uses only when writing results, so those two run in float32.
+      src += '#define GL_EXT_shader_explicit_arithmetic_types_float16 1\n';
+      body = body
+        .replace(/max\((\w+), V4\(0\.0\)\)/g, 'max(vec4($1), vec4(0.0))')
+        .replace(/imageStore\(out_image, ([^;]*?), (\w+)\);/g, 'imageStore(out_image, $1, vec4($2));');
+    }
+    // Without f16 the float16 extension is dropped, so ArtCNN takes its float32 path (#ifdef fallback).
+    // naga writes multi-dimensional GLSL arrays with the dimensions reversed (shared F inp[1][18][14]
+    // becomes array<array<array<f32, 1>, 18>, 14>), so declare them reversed to come out right.
+    body = body
+      .replace(/^#extension[^\n]*$/gm, '')
+      .replace(/^(\s*shared\s+\w+\s+\w+)((?:\[[^\]]+\]){2,})\s*;/gm, (_m, head: string, dims: string) => `${head}${(dims.match(/\[[^\]]+\]/g) ?? []).reverse().join('')};`);
+    src += `${body}\nvoid main() { hook(); }\n`;
+  } else {
+    src += `${pass.body}\nvoid main() { fragColor = hook(); }\n`;
+  }
   return { source: src, textures };
 }
+
+/** Binding of a compute pass's output image, after the texture bindings 3..18. */
+export const COMPUTE_OUT_BINDING = 3 + MAX_PASS_TEXTURES;

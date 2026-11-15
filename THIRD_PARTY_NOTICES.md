@@ -25,6 +25,8 @@ are in `src/shaders/engines/SOURCE.txt`.
 - **ArtCNN**: https://github.com/Artoriuz/ArtCNN, tag v1.4.2, `Legacy/`
   fragment-shader builds. MIT, Copyright (c) 2024 João Chrisóstomo
   (`shaders/LICENSE.ArtCNN`).
+- **ArtCNN 1.6**: https://github.com/Artoriuz/ArtCNN, tag v1.6.2, `GLSL/`
+  compute-shader builds (WebGPU only), same license.
 - **FSRCNNX**: https://github.com/igv/FSRCNN-TensorFlow, release 1.1.
   LGPL-3.0, Copyright (C) 2017-2021 igv (`shaders/LICENSE.LGPL-3.0`,
   `shaders/LICENSE.GPL-3.0`).
