@@ -69,6 +69,12 @@ Delete the test keys from KV afterwards.
 
 ## Reading answers
 
+`npm run feedback` prints every answer in the terminal, newest first, with the screenshot keys
+for each. It reads KV through Wrangler, so log Wrangler in once (`npx wrangler login`) with the
+Cloudflare account that hosts the site; check which one with `npx wrangler whoami`. The script
+strips escape sequences and invisible characters from every value before printing it, so a
+note cannot recolour or rewrite the terminal.
+
 - Answers: keys `uninstall:<time>-<id>` and `report:<time>-<id>`, each a JSON value with
   `kind`, `reasons`, `note`, `v`, `b` and `type` (report only: `bug` or `idea`), `at` (cut to the minute), `shots` (count) and,
   when the daily screenshot ceiling dropped some, `shotsDropped`. Treat every value as
