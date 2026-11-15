@@ -41,7 +41,12 @@ export interface Settings {
   darkenLines: boolean; // Anime4K only
   thinLines: boolean; // Anime4K only
   upscale: Upscale;
+  /** GPU API: auto = WebGPU when it works, else WebGL2. Default webgl2 (same speed today, fewer surprises). */
+  backend: BackendChoice;
 }
+
+export type BackendChoice = 'auto' | 'webgl2' | 'webgpu';
+const BACKENDS: BackendChoice[] = ['auto', 'webgl2', 'webgpu'];
 
 /** The chosen variant of the active engine (its default if none was picked). */
 export function engineVariant(s: Settings): string {
@@ -52,9 +57,10 @@ export function engineVariant(s: Settings): string {
 
 /** Everything that changes the shader chain; a renderer is rebuilt when this changes. */
 export function chainKey(s: Settings): string {
-  return s.engine === 'anime4k'
+  const chain = s.engine === 'anime4k'
     ? `anime4k|${s.preset}|${s.darkenLines}|${s.thinLines}`
     : `${s.engine}|${engineVariant(s)}`;
+  return `${chain}|${s.backend}`;
 }
 
 export const PRESETS: { value: Preset; label: string; description: string }[] = [
@@ -85,6 +91,7 @@ export function normalize(raw: unknown): Settings {
     darkenLines: t.darkenLines === true,
     thinLines: t.thinLines === true,
     upscale: UPSCALES.includes(t.upscale as Upscale) ? (t.upscale as Upscale) : 'auto',
+    backend: BACKENDS.includes(t.backend as BackendChoice) ? (t.backend as BackendChoice) : 'webgl2', // WebGPU is opt-in until it is faster
   };
 }
 
@@ -180,6 +187,7 @@ export interface VideoInfo {
   stats: {
     gpuMs: number | null; samples: number[]; cpuMs: number; fps: number; passes: number;
     textureBytes: number; outputWidth: number; outputHeight: number; timerSupported: boolean;
+    backend: 'webgl2' | 'webgpu';
     sourceFps: number | null; // the video's own frame rate, from requestVideoFrameCallback metadata
   } | null;
   /** Media Session metadata set by the player in this video's frame, if any. */

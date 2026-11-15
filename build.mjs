@@ -1,5 +1,7 @@
 import { build, context } from 'esbuild';
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const watch = process.argv.includes('--watch');
 // --firefox builds dist-firefox/ from the same sources, with a Firefox manifest (see firefoxManifest).
@@ -72,3 +74,15 @@ if (watch) {
   await Promise.all(configs.map((c) => build(c)));
   copyStatic();
 }
+
+// WGSL for the WebGPU backend: bundle the generator for Node, run it, drop the bundle.
+// (naga-wasm runs here only; it is not part of the extension.)
+const gen = `${outdir}/.wgsl-gen.mjs`;
+await build({
+  entryPoints: ['tools/wgsl-gen.ts'], bundle: true, platform: 'node', format: 'esm', outfile: gen,
+  loader: { '.glsl': 'text' }, external: ['naga-wasm'], logLevel: 'warning',
+  define: { __FIREFOX__: 'false' },
+});
+const { generateWgsl } = await import(pathToFileURL(path.resolve(gen)).href);
+console.log(`wgsl: ${generateWgsl('src/shaders/engines', `${outdir}/shaders`)} files`);
+rmSync(gen);

@@ -165,3 +165,58 @@ export function buildFragmentSource(pass: HookPass, hookedName: string, userText
   src += `#line 1\n${pass.body}\nvoid main() { fragColor = hook(); }\n`;
   return src;
 }
+
+/** Most textures one pass may bind (WebGPU's default maxSampledTexturesPerShaderStage). */
+export const MAX_PASS_TEXTURES = 16;
+
+/**
+ * The same pass as Vulkan-style GLSL 4.50, for translating to WGSL (WebGPU). Bindings:
+ *   0: uniform block P { vec4 u_size[16]; vec4 u_offset; }  (u_size[i].xy = size of texture i)
+ *   1: linear sampler, 2: nearest sampler
+ *   3 + i: texture i, in the order of `textures`
+ * `NAME_raw` stays usable with texture() and texelFetch(), as a combined sampler expression.
+ */
+export function buildVulkanSource(
+  pass: HookPass,
+  hookedName: string,
+  userTextures: ReadonlyMap<string, { linear: boolean }> = new Map(),
+): { source: string; textures: string[] } {
+  const names = new Set<string>();
+  for (const b of pass.binds) names.add(b === 'HOOKED' ? hookedName : b);
+  // The hooked texture only when the body reads it: an unused binding would push ArtCNN C4F32
+  // one over WebGPU's limit of 16 (WebGL drops unused samplers at link time instead).
+  if (new RegExp(`\\b(HOOKED|${hookedName})_`).test(pass.body)) names.add(hookedName);
+  const textures = [...names];
+  if (textures.length > MAX_PASS_TEXTURES) throw new Error(`Pass "${pass.desc}" binds ${textures.length} textures; WebGPU allows ${MAX_PASS_TEXTURES}.`);
+
+  let src = '#version 450\n';
+  // No texture has mipmaps, so sampling level 0 is identical, and unlike texture() it is legal in
+  // non-uniform control flow (WGSL rejects textureSample inside a branch, e.g. NNEDI3).
+  src += '#define texture(s, p) textureLod(s, p, 0.0)\n';
+  src += 'layout(location = 0) in vec2 v_uv;\nlayout(location = 0) out vec4 fragColor;\n';
+  src += `layout(set = 0, binding = 0) uniform P { vec4 u_size[${MAX_PASS_TEXTURES}]; vec4 u_offset; };\n`;
+  src += 'layout(set = 0, binding = 1) uniform sampler s_lin;\nlayout(set = 0, binding = 2) uniform sampler s_near;\n';
+  textures.forEach((n, i) => {
+    src += `layout(set = 0, binding = ${3 + i}) uniform texture2D ${n}_t;\n`;
+    const ut = userTextures.get(n);
+    if (ut) {
+      src += `#define ${n} sampler2D(${n}_t, ${ut.linear ? 's_lin' : 's_near'})\n`
+        + `#define ${n}_size (u_size[${i}].xy)\n#define ${n}_pt (1.0 / ${n}_size)\n`;
+      return;
+    }
+    src += `#define ${n}_raw sampler2D(${n}_t, s_lin)\n`
+      + `#define ${n}_size (u_size[${i}].xy)\n`
+      + `#define ${n}_pt (1.0 / ${n}_size)\n`
+      + `#define ${n}_pos v_uv\n`
+      + `#define ${n}_mul 1.0\n`
+      + `#define ${n}_tex(pos) texture(${n}_raw, (pos))\n`
+      + `#define ${n}_texOff(off) ${n}_tex(${n}_pos + ${n}_pt * vec2(off))\n`;
+  });
+  if (hookedName !== 'HOOKED') {
+    for (const suf of ['raw', 'size', 'pt', 'pos', 'mul', 'tex', 'texOff']) {
+      src += `#define HOOKED_${suf} ${hookedName}_${suf}\n`;
+    }
+  }
+  src += `${pass.body}\nvoid main() { fragColor = hook(); }\n`;
+  return { source: src, textures };
+}

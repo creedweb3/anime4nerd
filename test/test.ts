@@ -11,14 +11,15 @@ const info = document.getElementById('info') as HTMLSpanElement;
 
 // Synthetic low-res source: thin dark lines, flat fills, soft gradients, slight noise.
 const params = new URLSearchParams(location.search);
+const hash = new URLSearchParams(location.hash.slice(1));
 // #engine=ravu&variant=r3 runs another engine (a hash, since the dev server drops query strings
 // on its clean-URL redirect). Its shader files are copied to test/shaders/ (gitignored).
-const hash = new URLSearchParams(location.hash.slice(1));
 const ENGINE = (hash.get('engine') ?? 'anime4k') as Engine;
 const VARIANT = hash.get('variant');
+const BACKEND = (hash.get('backend') ?? 'webgl2') as Settings['backend'];
 setShaderBase(new URL('shaders/', location.href).href);
-const SW = Number(params.get('w')) || 320;
-const SH = Number(params.get('h')) || 180;
+const SW = Number(params.get('w') ?? hash.get('w')) || 320;
+const SH = Number(params.get('h') ?? hash.get('h')) || 180;
 const src = document.createElement('canvas');
 src.width = SW; src.height = SH;
 const g = src.getContext('2d', { willReadFrequently: true })!;
@@ -60,6 +61,7 @@ async function run() {
   const settings: Settings = {
     engine: ENGINE,
     variants: VARIANT ? { [ENGINE]: VARIANT } : {},
+    backend: BACKEND,
     preset: (document.getElementById('preset') as HTMLSelectElement).value as Settings['preset'],
     darkenLines: (document.getElementById('darken') as HTMLInputElement).checked,
     thinLines: (document.getElementById('thin') as HTMLInputElement).checked,
@@ -89,14 +91,36 @@ async function run() {
 document.getElementById('run')!.addEventListener('click', run);
 (window as any).a4kRun = run;
 
+// Benchmark: median GPU ms over `frames` frames of one engine on one backend (the pattern keeps moving).
+(window as any).a4kBench = async (engine: Engine, variant: string, backend: Settings['backend'], frames = 180): Promise<{ gpu: number | null; cpu: number; api: string }> => {
+  freeze = false;
+  const c = document.createElement('canvas');
+  document.body.append(c);
+  const r = await createAnime4kRenderer(v, c, {
+    engine, variants: { [engine]: variant }, preset: 'A', darkenLines: false, thinLines: false, upscale: '2x', backend,
+  }, () => {}, 2);
+  const gpu: number[] = []; let cpu = 0;
+  for (let i = 0; i < frames; i++) {
+    await new Promise((res) => { requestAnimationFrame(res); });
+    r.render();
+    const st = r.stats();
+    cpu += st.cpuMs;
+    if (i > 30 && st.gpuMs !== null) gpu.push(st.gpuMs); // skip warm-up
+  }
+  const api = r.stats().backend;
+  r.destroy(); c.remove();
+  gpu.sort((a, b) => a - b);
+  return { gpu: gpu.length ? gpu[gpu.length >> 1] : null, cpu: cpu / frames, api };
+};
+
 // Engine comparison: freezes the pattern and renders one frame per engine into a copy canvas.
-(window as any).a4kSnap = async (engine: Engine, variant: string): Promise<HTMLCanvasElement> => {
+(window as any).a4kSnap = async (engine: Engine, variant: string, backend: Settings['backend'] = 'webgl2'): Promise<HTMLCanvasElement> => {
   freeze = true;
   const c = document.createElement('canvas');
   const r = await createAnime4kRenderer(v, c, {
-    engine, variants: { [engine]: variant }, preset: 'A', darkenLines: false, thinLines: false, upscale: 'auto',
+    engine, variants: { [engine]: variant }, preset: 'A', darkenLines: false, thinLines: false, upscale: 'auto', backend,
   }, () => {}, 2);
-  r.render();
+  r.render(); // copy in the same task: a WebGPU canvas is cleared once it has been composited
   const copy = document.createElement('canvas'); copy.width = c.width; copy.height = c.height;
   copy.getContext('2d')!.drawImage(c, 0, 0);
   r.destroy();
@@ -107,7 +131,7 @@ document.getElementById('run')!.addEventListener('click', run);
 // --- A vs A+A comparison sheet -------------------------------------------------
 async function renderOnce(preset: Settings['preset']): Promise<HTMLCanvasElement> {
   const c = document.createElement('canvas');
-  const r = await createAnime4kRenderer(v, c, { engine: 'anime4k', variants: {}, preset, darkenLines: false, thinLines: false, upscale: 'auto' }, () => {});
+  const r = await createAnime4kRenderer(v, c, { engine: 'anime4k', variants: {}, preset, darkenLines: false, thinLines: false, upscale: 'auto', backend: 'webgl2' }, () => {});
   r.render();
   const copy = document.createElement('canvas'); copy.width = c.width; copy.height = c.height;
   copy.getContext('2d')!.drawImage(c, 0, 0);

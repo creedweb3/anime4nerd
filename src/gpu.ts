@@ -1,258 +1,21 @@
-// WebGL2 runner for bloc97's original Anime4K mpv GLSL shaders.
+// WebGL2 runner for mpv-format GLSL shader chains (Anime4K and the other engines).
 // Loaded lazily by the content script via import(chrome.runtime.getURL('gpu.js')).
 
-import clampHighlights from './shaders/Anime4K_Clamp_Highlights.glsl';
-import restoreVL from './shaders/Anime4K_Restore_CNN_VL.glsl';
-import restoreSoftVL from './shaders/Anime4K_Restore_CNN_Soft_VL.glsl';
-import restoreM from './shaders/Anime4K_Restore_CNN_M.glsl';
-import restoreSoftM from './shaders/Anime4K_Restore_CNN_Soft_M.glsl';
-import upscaleVL from './shaders/Anime4K_Upscale_CNN_x2_VL.glsl';
-import upscaleDenoiseVL from './shaders/Anime4K_Upscale_Denoise_CNN_x2_VL.glsl';
-import upscaleM from './shaders/Anime4K_Upscale_CNN_x2_M.glsl';
-import darkenHQ from './shaders/Anime4K_Darken_HQ.glsl';
-import thinHQ from './shaders/Anime4K_Thin_HQ.glsl';
+import { buildFragmentSource } from './mpv-hooks';
+import type { Plane } from './engines';
+import type { Settings } from './settings';
 import {
-  HookPass, ShaderFile, UserTexture, buildFragmentSource, evalRpn, parseShaderFile,
-} from './mpv-hooks';
-import {
-  Plane, ShaderRef, applyDefines, engineChain,
-} from './engines';
-import { engineVariant, type Preset, type Settings } from './settings';
+  Anime4kRenderer, HOOK_OF, LoadedChain, MAX_OUTPUT_PX, MAX_TEXTURE_BYTES, RenderSource, RenderStats, SourceSizeChanged,
+  estimateBytes, loadChain, orderedPasses, planChain, poolTextures,
+} from './chain';
 import { decodedSize, uploadSize } from './video-size';
+import { createWebGpuRenderer, webgpuAvailable } from './gpu-webgpu';
 
-export interface RenderStats {
-  gpuMs: number | null; // GPU time of the last completed frame; null if timer queries are unsupported
-  samples: number[]; // GPU ms of frames completed in the last 2 s, oldest first
-  cpuMs: number; // JS time spent issuing the frame
-  fps: number; // rendered frames per second (rolling)
-  passes: number;
-  textureBytes: number; // GPU memory held by this renderer's textures
-  outputWidth: number;
-  outputHeight: number;
-  timerSupported: boolean;
-}
-
-export interface Anime4kRenderer {
-  /** Draws the source's current frame, or `frame` instead: a still of the same size (manga pages reuse one renderer). */
-  render(frame?: RenderSource): void;
-  destroy(): void;
-  stats(): RenderStats;
-}
-
-/** Thrown by render() when the decoded frame size no longer matches the textures; rebuild, don't fail. */
-export class SourceSizeChanged extends Error {
-  constructor() { super('Source frame size changed.'); this.name = 'SourceSizeChanged'; }
-}
+export type { Anime4kRenderer, Backend, RenderSource, RenderStats } from './chain';
+export { SourceSizeChanged, setShaderBase } from './chain';
 
 /** How often render() re-checks the frame size and GL error state (each check stalls the GPU briefly). */
 const HEALTH_CHECK_MS = 1000;
-
-/** Largest final output, in pixels (8K UHD); bigger frames risk exhausting GPU memory. */
-const MAX_OUTPUT_PX = 7680 * 4320;
-
-/** Standard Anime4K mpv preset chains: one x2 step, plus an extra (M) x2 step per doubling beyond 2x. */
-function anime4kFiles(s: Settings, scale: number): string[] {
-  const p: Preset = s.preset;
-  const files = [clampHighlights];
-  if (p === 'A' || p === 'AA') files.push(restoreVL);
-  if (p === 'B' || p === 'BB') files.push(restoreSoftVL);
-  files.push(p === 'C' || p === 'CA' ? upscaleDenoiseVL : upscaleVL);
-  if (p === 'AA' || p === 'CA') files.push(restoreM);
-  if (p === 'BB') files.push(restoreSoftM);
-  for (let k = scale; k > 2; k /= 2) files.push(upscaleM);
-  if (s.darkenLines) files.push(darkenHQ);
-  if (s.thinLines) files.push(thinHQ);
-  return files;
-}
-
-/** GPU memory budget for one renderer's textures; above it the scale halves (never below 2x). */
-const MAX_TEXTURE_BYTES = 2 * 1024 ** 3;
-
-/** The texture name each plane's passes hook. */
-const HOOK_OF: Record<Plane, string> = { rgb: 'MAIN', luma: 'LUMA', ycbcr: 'NATIVE' };
-
-// --- shader files ---------------------------------------------------------------
-// Engines other than Anime4K ship as files under shaders/ and are fetched on first use.
-
-let shaderBase: string | null = null;
-/** Where shader files are fetched from (the test pages serve them without an extension). */
-export function setShaderBase(url: string): void { shaderBase = url; }
-
-const sourceCache = new Map<string, Promise<string>>();
-function fetchShader(file: string): Promise<string> {
-  let p = sourceCache.get(file);
-  if (!p) {
-    const url = (shaderBase ?? chrome.runtime.getURL('shaders/')) + file;
-    p = fetch(url).then((r) => {
-      if (!r.ok) throw new Error(`Could not load shader ${file} (${r.status}).`);
-      return r.text();
-    });
-    p.catch(() => sourceCache.delete(file)); // retry on the next build
-    sourceCache.set(file, p);
-  }
-  return p;
-}
-
-const parsedCache = new Map<string, ShaderFile>();
-function parseCached(key: string, source: () => string): ShaderFile {
-  let f = parsedCache.get(key);
-  if (!f) { f = parseShaderFile(source()); parsedCache.set(key, f); }
-  return f;
-}
-
-/** A chain whose files are loaded: give it a scale and it lists the shader files to run. */
-interface LoadedChain {
-  plane: Plane;
-  files(scale: number): ShaderFile[];
-}
-
-export async function loadChain(s: Settings): Promise<LoadedChain> {
-  if (s.engine === 'anime4k') {
-    return { plane: 'rgb', files: (scale) => anime4kFiles(s, scale).map((src) => parseCached(src, () => src)) };
-  }
-  const ec = engineChain(s.engine, engineVariant(s));
-  const last = ec.last ?? ec.step;
-  const refs = [...ec.pre, ...ec.step, ...last];
-  const texts = new Map<string, string>();
-  await Promise.all(refs.map(async (r) => { if ('file' in r) texts.set(r.file, await fetchShader(r.file)); }));
-  const parse = (r: ShaderRef): ShaderFile => {
-    if ('inline' in r) return parseCached(`inline|${r.name}`, () => r.inline);
-    const f = parseCached(`${r.file}|${JSON.stringify(r.defines ?? {})}`, () => applyDefines(texts.get(r.file)!, r.defines));
-    return r.only ? { ...f, passes: f.passes.filter((p) => p.desc.includes(r.only!)) } : f;
-  };
-  return {
-    plane: ec.plane,
-    files: (scale) => {
-      const out = ec.pre.map(parse);
-      for (let k = scale; k > 2; k /= 2) out.push(...ec.step.map(parse));
-      out.push(...last.map(parse));
-      return out;
-    },
-  };
-}
-
-/** The chain's hook passes in run order, plus the lookup tables they use. */
-function orderedPasses(chain: LoadedChain, scale: number): { passes: HookPass[]; textures: UserTexture[] } {
-  const hook = HOOK_OF[chain.plane];
-  const passes: HookPass[] = [];
-  const deferred: HookPass[] = []; // PREKERNEL hooks run after all MAIN hooks (as in mpv)
-  const textures = new Map<string, UserTexture>();
-  for (const file of chain.files(scale)) {
-    for (const t of file.textures) textures.set(t.name, t);
-    for (const p of file.passes) {
-      if (p.compute) throw new Error(`Pass "${p.desc}" needs compute shaders, which WebGL2 lacks.`);
-      if (p.hook === hook) passes.push(p);
-      else if (p.hook === 'PREKERNEL' && chain.plane === 'rgb') deferred.push(p);
-      // other hook points (CHROMA, OUTPUT...) have no texture in this pipeline
-    }
-  }
-  return { passes: [...passes, ...deferred], textures: [...textures.values()] };
-}
-
-type Size = { w: number; h: number };
-
-/** Resolves mpv size references like "MAIN.w", "HOOKED.h" or "OUTPUT.h" for a w x h source at `scale`. */
-function sizeResolver(get: (name: string) => Size | undefined, hook: string, w: number, h: number, scale: number) {
-  return (ref: string): number => {
-    const [name, dim] = ref.split('.');
-    if (name === 'OUTPUT') return dim === 'w' ? w * scale : h * scale;
-    const t = get(name === 'HOOKED' ? hook : name);
-    if (t) return dim === 'w' ? t.w : t.h;
-    if (name === 'NATIVE' || name === 'MAIN' || name === 'LUMA') return dim === 'w' ? w : h;
-    throw new Error(`Unknown texture in size expression: ${ref}`);
-  };
-}
-
-/**
- * A chain laid out for one source size, before any GL object exists: which passes run, the
- * size of every texture they write, and what each pass reads. Texture 0 is the video frame.
- * Both the memory estimate and the real build use it, so they cannot disagree.
- */
-interface PlanStep {
-  kind: 'hook' | 'to-plane';
-  pass: HookPass | null; // null for the conversion to the plane
-  out: number; // texture id written
-  inputs: { name: string; ref: number | string }[]; // ref: texture id, or a lookup table's name
-}
-interface Plan {
-  sizes: Size[]; // by texture id
-  steps: PlanStep[];
-  final: number; // texture id the present pass reads
-  offset: [number, number]; // accumulated //!OFFSET of the final plane, in its pixels
-}
-
-function planChain(passes: HookPass[], lookupNames: ReadonlySet<string>, plane: Plane, w: number, h: number, scale: number): Plan {
-  const hook = HOOK_OF[plane];
-  const sizes: Size[] = [{ w, h }];
-  const steps: PlanStep[] = [];
-  const named = new Map<string, number>();
-  const add = (s: Size) => { sizes.push(s); return sizes.length - 1; };
-  if (plane === 'rgb') named.set(hook, 0);
-  else {
-    const out = add({ w, h });
-    steps.push({ kind: 'to-plane', pass: null, out, inputs: [{ name: 'SRC', ref: 0 }] });
-    named.set(hook, out);
-  }
-  const sizeOf = sizeResolver((n) => { const id = named.get(n); return id === undefined ? undefined : sizes[id]; }, hook, w, h, scale);
-  let offset: [number, number] = [0, 0];
-  for (const p of passes) {
-    if (p.when && evalRpn(p.when, sizeOf) === 0) continue;
-    const hooked = sizes[named.get(hook)!];
-    const outW = p.width ? Math.round(evalRpn(p.width, sizeOf)) : hooked.w;
-    const outH = p.height ? Math.round(evalRpn(p.height, sizeOf)) : hooked.h;
-    const bindNames = Array.from(new Set([...p.binds.map((b) => (b === 'HOOKED' ? hook : b)), hook]));
-    const inputs = bindNames.map((n) => {
-      if (lookupNames.has(n)) return { name: n, ref: n };
-      const id = named.get(n);
-      if (id === undefined) throw new Error(`Pass "${p.desc}" binds unknown texture ${n}`);
-      return { name: n, ref: id };
-    });
-    const out = add({ w: outW, h: outH });
-    steps.push({ kind: 'hook', pass: p, out, inputs });
-    const target = p.save ?? hook;
-    if (target === hook) {
-      offset = [offset[0] * outW / hooked.w, offset[1] * outH / hooked.h];
-      if (p.offset) offset = [offset[0] + p.offset[0], offset[1] + p.offset[1]];
-    }
-    named.set(target, out);
-  }
-  return { sizes, steps, final: named.get(hook)!, offset };
-}
-
-/**
- * Assigns pass outputs to shared textures: a texture is reused, at the same size, once every
- * pass that reads the previous owner has run. Returns the physical slot of every texture id
- * (0 = the video frame, which is never shared) and the slots' sizes.
- */
-function poolTextures(plan: Plan): { slotOf: number[]; slots: Size[] } {
-  const lastRead = plan.sizes.map(() => -1);
-  plan.steps.forEach((s, i) => { for (const inp of s.inputs) if (typeof inp.ref === 'number') lastRead[inp.ref] = i; });
-  lastRead[plan.final] = plan.steps.length; // read by the present pass
-  const slotOf = plan.sizes.map(() => -1);
-  const slots: Size[] = [{ ...plan.sizes[0] }];
-  slotOf[0] = 0;
-  const free: number[] = [];
-  const live: number[] = []; // texture ids holding a slot
-  plan.steps.forEach((s, i) => {
-    // Free outputs no later step reads. Inputs of this step have lastRead >= i, so a pass
-    // never writes into a texture it samples.
-    for (let k = live.length - 1; k >= 0; k--) {
-      if (lastRead[live[k]] < i) { free.push(slotOf[live[k]]); live.splice(k, 1); }
-    }
-    const size = plan.sizes[s.out];
-    const reuse = free.findIndex((sl) => slots[sl].w === size.w && slots[sl].h === size.h);
-    if (reuse >= 0) { slotOf[s.out] = free[reuse]; free.splice(reuse, 1); } else { slots.push({ ...size }); slotOf[s.out] = slots.length - 1; }
-    live.push(s.out);
-  });
-  return { slotOf, slots };
-}
-
-/** Texture bytes a chain will allocate: the video frame (RGBA8) plus the pooled RGBA16F slots. */
-function estimateBytes(passes: HookPass[], lookups: UserTexture[], plane: Plane, w: number, h: number, scale: number): number {
-  const plan = planChain(passes, new Set(lookups.map((t) => t.name)), plane, w, h, scale);
-  const { slots } = poolTextures(plan);
-  return w * h * 4 + slots.slice(1).reduce((n, s) => n + s.w * s.h * 8, 0) + lookups.reduce((n, t) => n + t.data.byteLength, 0);
-}
 
 // Full-range BT.709 conversions, for chains that work on Y or YCbCr (chroma centred at 0.5).
 const TO_PLANE_FRAG = (plane: Plane) => `#version 300 es
@@ -333,6 +96,8 @@ async function finishPrograms(
   if (ext) {
     let pending = items.slice();
     while (pending.length && !aborted()) {
+      // A lost context never reports completion, so this would otherwise poll forever.
+      if (gl.isContextLost()) throw new Error('The GPU connection was lost while compiling shaders.');
       pending = pending.filter((it) => !gl.getProgramParameter(it.prog, ext.COMPLETION_STATUS_KHR));
       if (pending.length) await new Promise((r) => { setTimeout(r, 16); });
     }
@@ -375,8 +140,9 @@ function compile(gl: WebGL2RenderingContext, type: number, src: string, label: s
   return sh;
 }
 
-/** A playing video, or a still image (manga pages) that render() uploads the same way. */
-export type RenderSource = HTMLVideoElement | ImageBitmap;
+/** Why WebGPU failed on this page (auto then stays on WebGL2); null while it has not failed. */
+let webgpuFailure: string | null = null;
+export function webgpuFailureReason(): string | null { return webgpuFailure; }
 
 export async function createAnime4kRenderer(
   video: RenderSource,
@@ -387,6 +153,17 @@ export async function createAnime4kRenderer(
 ): Promise<Anime4kRenderer> {
   const { w, h } = video instanceof ImageBitmap ? { w: video.width, h: video.height } : uploadSize(video);
   if (!w || !h) throw new Error('Waiting for video dimensions.');
+  // WebGPU first when asked (or on auto, unless it already failed on this page); on auto any
+  // failure falls back to WebGL2 on the same canvas, which WebGPU leaves untouched until it succeeds.
+  const tryGpu = settings.backend === 'webgpu' || (settings.backend === 'auto' && webgpuFailure === null && webgpuAvailable());
+  if (tryGpu) {
+    try {
+      return await createWebGpuRenderer(video, canvas, await loadChain(settings, { wgsl: true }), onError, wantScale, w, h);
+    } catch (e) {
+      if (settings.backend === 'webgpu' || (e instanceof DOMException && e.name === 'SecurityError')) throw e;
+      webgpuFailure = e instanceof Error ? e.message : String(e);
+    }
+  }
   const chain = await loadChain(settings);
   try {
     return await buildRenderer(video, canvas, chain, onError, wantScale, w, h);
@@ -618,6 +395,7 @@ async function buildRenderer(
       outputWidth: canvas.width,
       outputHeight: canvas.height,
       timerSupported: !!timerExt,
+      backend: 'webgl2',
     };
   }
 

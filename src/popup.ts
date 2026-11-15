@@ -20,6 +20,7 @@ const emptyEl = $('#empty');
 const presetsEl = $('#presets');
 const engineChip = $<HTMLButtonElement>('#engine');
 const engineMenu = $('#engine-menu');
+const engineList = $('#engine-list');
 const engineNoteEl = $('#engine-note');
 const effectsEl = $('#effects');
 const perf = {
@@ -134,12 +135,15 @@ function buildEngineMenu() {
     });
     box.append(b);
   }
-  engineMenu.replaceChildren(...groups);
+  engineList.replaceChildren(...groups);
 }
 
 function setEngineMenu(open: boolean) {
   engineMenu.hidden = !open;
   engineChip.setAttribute('aria-expanded', String(open));
+  // The menu overlays the panels; on a short popup (nothing playing) grow it so the menu fits
+  // instead of scrolling the GPU API switch out of view.
+  document.body.style.minHeight = open ? `${engineMenu.offsetTop + engineMenu.offsetHeight + 8}px` : '';
   if (open) {
     const items = [...engineMenu.querySelectorAll<HTMLButtonElement>('.eng')];
     (items.find((b) => b.getAttribute('aria-checked') === 'true') ?? items[0])?.focus();
@@ -155,7 +159,11 @@ engineMenu.addEventListener('keydown', (e) => {
   else if (e.key === 'ArrowUp') go(i - 1);
   else if (e.key === 'Home') go(0);
   else if (e.key === 'End') go(items.length - 1);
-  else if (e.key === 'Tab') setEngineMenu(false); // leaving the menu closes it
+});
+// Leaving the menu with the keyboard closes it (Tab still reaches the GPU API switch inside it).
+engineMenu.addEventListener('focusout', (e) => {
+  const to = e.relatedTarget as Node | null;
+  if (to && !engineMenu.contains(to) && to !== engineChip) setEngineMenu(false);
 });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !engineMenu.hidden) { e.preventDefault(); setEngineMenu(false); engineChip.focus(); }
@@ -172,6 +180,9 @@ for (const b of document.querySelectorAll<HTMLButtonElement>('[data-field]')) {
 }
 for (const b of document.querySelectorAll<HTMLButtonElement>('[data-upscale]')) {
   b.addEventListener('click', () => { void saveSettings({ upscale: b.dataset.upscale as Settings['upscale'] }); });
+}
+for (const b of document.querySelectorAll<HTMLButtonElement>('[data-backend]')) {
+  b.addEventListener('click', () => { void saveSettings({ backend: b.dataset.backend as Settings['backend'] }); });
 }
 function paintSettings(s: Settings) {
   settings = s;
@@ -193,6 +204,9 @@ function paintSettings(s: Settings) {
   }
   for (const b of document.querySelectorAll<HTMLButtonElement>('[data-upscale]')) {
     b.setAttribute('aria-checked', String(b.dataset.upscale === s.upscale));
+  }
+  for (const b of document.querySelectorAll<HTMLButtonElement>('[data-backend]')) {
+    b.setAttribute('aria-checked', String(b.dataset.backend === s.backend));
   }
 }
 
@@ -300,7 +314,8 @@ function patchCard(c: Card, v: VideoInfo) {
   const out = v.stats ? `${v.stats.outputWidth}×${v.stats.outputHeight}` : pLabel(outH);
   const scale = v.height ? Math.round(outH / v.height) : 0;
   const capped = v.stats && settings ? capNote(settings.upscale, scale) : '';
-  const res = v.height ? ` · ${pLabel(v.height)} → ${out} (${scale}×)${capped}` : '';
+  const api = v.stats?.backend ? ` · ${v.stats.backend}` : ''; // the API actually drawing (auto may fall back)
+  const res = v.height ? ` · ${pLabel(v.height)} → ${out} (${scale}×)${capped}${api}` : '';
   setText(c.meta, `${tabHost || v.frameHost}${res}`);
   c.meta.title = v.frameHost !== tabHost ? `player frame: ${v.frameHost} · stream: ${v.mediaHost}` : `stream: ${v.mediaHost}`;
   const st = cardState(v);

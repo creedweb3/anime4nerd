@@ -75,6 +75,7 @@ body { position: relative; }
 .eng .cost i.f.hot { background: var(--warn); }
 .eng[aria-checked="true"] { background: #1a1a1a; }
 .eng[aria-checked="true"] b::before { content: "▸ "; }
+.engine-menu .pills.api { margin: 4px 10px 2px; }
 .engine-note { color: var(--faint); font-size: 10px; margin: -2px 0 8px; }
 
 /* what's new banner (after an update) -------------------------------------- */

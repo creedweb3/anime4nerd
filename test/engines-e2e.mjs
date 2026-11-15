@@ -29,6 +29,9 @@ const { chromium } = loadPlaywright();
 
 // A4K_UPSCALE=4x runs every engine at 4x instead of 2x.
 const UPSCALE = process.env.A4K_UPSCALE ?? '2x';
+// A4K_BACKEND=webgpu|webgl2|auto picks the GPU API (default webgl2); auto must land on WebGPU here.
+const BACKEND = process.env.A4K_BACKEND ?? 'webgl2';
+const EXPECT_API = BACKEND === 'webgl2' ? 'webgl2' : 'webgpu';
 
 const ENGINES = [
   ['anime4k', ''], ['anime4k-gan', 'S'], ['anime4k-gan', 'M'], ['anime4k-gan', 'RM'],
@@ -77,10 +80,10 @@ try {
   }, `http://${host}/*`);
 
   for (const [engine, variant] of ENGINES) {
-    await sw.evaluate(async ([e, v, up]) => {
+    await sw.evaluate(async ([e, v, up, be]) => {
       const cur = (await chrome.storage.sync.get('anime4k')).anime4k ?? {};
-      await chrome.storage.sync.set({ anime4k: { ...cur, engine: e, variants: v ? { [e]: v } : {}, upscale: up } });
-    }, [engine, variant, UPSCALE]);
+      await chrome.storage.sync.set({ anime4k: { ...cur, engine: e, variants: v ? { [e]: v } : {}, upscale: up, backend: be } });
+    }, [engine, variant, UPSCALE, BACKEND]);
     let v = null;
     for (let i = 0; i < 40; i++) {
       await page.waitForTimeout(250);
@@ -93,8 +96,8 @@ try {
     v = (await list())?.[0] ?? v;
     const st = v?.stats;
     const ms = st?.samples?.length ? st.samples.reduce((a, b) => a + b, 0) / st.samples.length : st?.gpuMs;
-    check(`${engine}${variant ? ` ${variant}` : ''} renders`, v?.status === 'Active' && st?.outputWidth === 960 * parseInt(UPSCALE, 10),
-      v?.status === 'Active' ? `${st.outputWidth}x${st.outputHeight}, ${st.passes} passes, GPU ${ms?.toFixed(2)} ms, ${(st.textureBytes / 1048576).toFixed(0)} MB` : `${v?.status}: ${v?.message}`);
+    check(`${engine}${variant ? ` ${variant}` : ''} renders`, v?.status === 'Active' && st?.outputWidth === 960 * parseInt(UPSCALE, 10) && st?.backend === EXPECT_API,
+      v?.status === 'Active' ? `${st.outputWidth}x${st.outputHeight}, ${st.passes} passes, GPU ${ms?.toFixed(2)} ms, CPU ${st.cpuMs.toFixed(2)} ms, ${(st.textureBytes / 1048576).toFixed(0)} MB, ${st.backend}` : `${v?.status}: ${v?.message}`);
   }
 
   // Popup: engine menu.
@@ -114,8 +117,10 @@ try {
   await popup.keyboard.press('End');
   const last = await focused();
   await popup.keyboard.press('Tab');
+  const api = await popup.evaluate(() => document.activeElement?.dataset?.backend ?? null);
+  await popup.keyboard.press('Escape');
   const closed = await popup.evaluate(() => document.querySelector('#engine-menu').hidden);
-  check('menu keyboard: focus on current, arrows/End move, Tab closes', first !== null && second !== first && last === 'cas' && closed, `${first} -> ${second}, End -> ${last}, closed ${closed}`);
+  check('menu keyboard: focus on current, arrows/End move, Tab reaches GPU API, Esc closes', first !== null && second !== first && last === 'cas' && api === 'auto' && closed, `${first} -> ${second}, End -> ${last}, Tab -> ${api}, closed ${closed}`);
   await popup.click('#engine');
   await popup.waitForTimeout(200);
   await popup.click('#engine-menu .eng[data-engine="artcnn"]');

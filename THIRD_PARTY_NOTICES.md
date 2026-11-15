@@ -39,6 +39,13 @@ The LGPL-3.0 shaders are the complete source of those components. You can
 replace any of them with a modified version by editing the file in the
 extension's `shaders/` folder.
 
+For the optional WebGPU backend, every shader above (Anime4K included) is also
+shipped as a machine translation to WGSL (`shaders/*.wgsl.json`), generated at
+build time by `tools/wgsl-gen.ts` with naga (https://github.com/gfx-rs/wgpu,
+MIT/Apache-2.0, via the `naga-wasm` package; build tool only, not shipped). The
+translations are derived from, and covered by the same licenses as, the shader
+files they are generated from; the original GLSL ships alongside them.
+
 ## Store screenshot artwork (not shipped in the extension)
 
 - Image: "A snapshot from the 2012 demo release from the Morevna Project"
