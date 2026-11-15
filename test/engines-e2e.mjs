@@ -27,6 +27,9 @@ function loadPlaywright() {
 }
 const { chromium } = loadPlaywright();
 
+// A4K_UPSCALE=4x runs every engine at 4x instead of 2x.
+const UPSCALE = process.env.A4K_UPSCALE ?? '2x';
+
 const ENGINES = [
   ['anime4k', ''], ['anime4k-gan', 'S'], ['anime4k-gan', 'M'], ['anime4k-gan', 'RM'],
   ['artcnn', 'C4F16'], ['artcnn', 'C4F32'], ['artcnn', 'C4F16_DS'], ['artcnn', 'C4F32_DS'],
@@ -74,10 +77,10 @@ try {
   }, `http://${host}/*`);
 
   for (const [engine, variant] of ENGINES) {
-    await sw.evaluate(async ([e, v]) => {
+    await sw.evaluate(async ([e, v, up]) => {
       const cur = (await chrome.storage.sync.get('anime4k')).anime4k ?? {};
-      await chrome.storage.sync.set({ anime4k: { ...cur, engine: e, variants: v ? { [e]: v } : {}, upscale: '2x' } });
-    }, [engine, variant]);
+      await chrome.storage.sync.set({ anime4k: { ...cur, engine: e, variants: v ? { [e]: v } : {}, upscale: up } });
+    }, [engine, variant, UPSCALE]);
     let v = null;
     for (let i = 0; i < 40; i++) {
       await page.waitForTimeout(250);
@@ -90,8 +93,8 @@ try {
     v = (await list())?.[0] ?? v;
     const st = v?.stats;
     const ms = st?.samples?.length ? st.samples.reduce((a, b) => a + b, 0) / st.samples.length : st?.gpuMs;
-    check(`${engine}${variant ? ` ${variant}` : ''} renders`, v?.status === 'Active' && st?.outputWidth === 1920,
-      v?.status === 'Active' ? `${st.outputWidth}x${st.outputHeight}, ${st.passes} passes, GPU ${ms?.toFixed(2)} ms` : `${v?.status}: ${v?.message}`);
+    check(`${engine}${variant ? ` ${variant}` : ''} renders`, v?.status === 'Active' && st?.outputWidth === 960 * parseInt(UPSCALE, 10),
+      v?.status === 'Active' ? `${st.outputWidth}x${st.outputHeight}, ${st.passes} passes, GPU ${ms?.toFixed(2)} ms, ${(st.textureBytes / 1048576).toFixed(0)} MB` : `${v?.status}: ${v?.message}`);
   }
 
   // Popup: engine menu.

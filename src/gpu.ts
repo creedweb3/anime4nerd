@@ -111,15 +111,21 @@ export async function loadChain(s: Settings): Promise<LoadedChain> {
     return { plane: 'rgb', files: (scale) => anime4kFiles(s, scale).map((src) => parseCached(src, () => src)) };
   }
   const ec = engineChain(s.engine, engineVariant(s));
-  const refs = [...ec.pre, ...ec.step];
+  const last = ec.last ?? ec.step;
+  const refs = [...ec.pre, ...ec.step, ...last];
   const texts = new Map<string, string>();
-  await Promise.all(refs.map(async (r) => { texts.set(r.file, await fetchShader(r.file)); }));
-  const parse = (r: ShaderRef) => parseCached(`${r.file}|${JSON.stringify(r.defines ?? {})}`, () => applyDefines(texts.get(r.file)!, r.defines));
+  await Promise.all(refs.map(async (r) => { if ('file' in r) texts.set(r.file, await fetchShader(r.file)); }));
+  const parse = (r: ShaderRef): ShaderFile => {
+    if ('inline' in r) return parseCached(`inline|${r.name}`, () => r.inline);
+    const f = parseCached(`${r.file}|${JSON.stringify(r.defines ?? {})}`, () => applyDefines(texts.get(r.file)!, r.defines));
+    return r.only ? { ...f, passes: f.passes.filter((p) => p.desc.includes(r.only!)) } : f;
+  };
   return {
     plane: ec.plane,
     files: (scale) => {
       const out = ec.pre.map(parse);
-      for (let k = scale; k >= 2; k /= 2) out.push(...ec.step.map(parse));
+      for (let k = scale; k > 2; k /= 2) out.push(...ec.step.map(parse));
+      out.push(...last.map(parse));
       return out;
     },
   };
@@ -157,25 +163,95 @@ function sizeResolver(get: (name: string) => Size | undefined, hook: string, w: 
   };
 }
 
-/** Texture bytes a chain will allocate, by the same size rules as the real build below. */
-function estimateBytes(passes: HookPass[], hook: string, plane: Plane, w: number, h: number, scale: number): number {
-  const sizes = new Map<string, Size>([[hook, { w, h }]]);
-  const sizeOf = sizeResolver((n) => sizes.get(n), hook, w, h, scale);
-  let bytes = w * h * 4; // RGBA8 video frame
-  if (plane !== 'rgb') bytes += w * h * 8; // plane conversion
+/**
+ * A chain laid out for one source size, before any GL object exists: which passes run, the
+ * size of every texture they write, and what each pass reads. Texture 0 is the video frame.
+ * Both the memory estimate and the real build use it, so they cannot disagree.
+ */
+interface PlanStep {
+  kind: 'hook' | 'to-plane';
+  pass: HookPass | null; // null for the conversion to the plane
+  out: number; // texture id written
+  inputs: { name: string; ref: number | string }[]; // ref: texture id, or a lookup table's name
+}
+interface Plan {
+  sizes: Size[]; // by texture id
+  steps: PlanStep[];
+  final: number; // texture id the present pass reads
+  offset: [number, number]; // accumulated //!OFFSET of the final plane, in its pixels
+}
+
+function planChain(passes: HookPass[], lookupNames: ReadonlySet<string>, plane: Plane, w: number, h: number, scale: number): Plan {
+  const hook = HOOK_OF[plane];
+  const sizes: Size[] = [{ w, h }];
+  const steps: PlanStep[] = [];
+  const named = new Map<string, number>();
+  const add = (s: Size) => { sizes.push(s); return sizes.length - 1; };
+  if (plane === 'rgb') named.set(hook, 0);
+  else {
+    const out = add({ w, h });
+    steps.push({ kind: 'to-plane', pass: null, out, inputs: [{ name: 'SRC', ref: 0 }] });
+    named.set(hook, out);
+  }
+  const sizeOf = sizeResolver((n) => { const id = named.get(n); return id === undefined ? undefined : sizes[id]; }, hook, w, h, scale);
+  let offset: [number, number] = [0, 0];
   for (const p of passes) {
     if (p.when && evalRpn(p.when, sizeOf) === 0) continue;
-    const hooked = sizes.get(hook)!;
-    const out = {
-      w: p.width ? Math.round(evalRpn(p.width, sizeOf)) : hooked.w,
-      h: p.height ? Math.round(evalRpn(p.height, sizeOf)) : hooked.h,
-    };
-    bytes += out.w * out.h * 8; // RGBA16F
-    sizes.set(p.save ?? hook, out);
+    const hooked = sizes[named.get(hook)!];
+    const outW = p.width ? Math.round(evalRpn(p.width, sizeOf)) : hooked.w;
+    const outH = p.height ? Math.round(evalRpn(p.height, sizeOf)) : hooked.h;
+    const bindNames = Array.from(new Set([...p.binds.map((b) => (b === 'HOOKED' ? hook : b)), hook]));
+    const inputs = bindNames.map((n) => {
+      if (lookupNames.has(n)) return { name: n, ref: n };
+      const id = named.get(n);
+      if (id === undefined) throw new Error(`Pass "${p.desc}" binds unknown texture ${n}`);
+      return { name: n, ref: id };
+    });
+    const out = add({ w: outW, h: outH });
+    steps.push({ kind: 'hook', pass: p, out, inputs });
+    const target = p.save ?? hook;
+    if (target === hook) {
+      offset = [offset[0] * outW / hooked.w, offset[1] * outH / hooked.h];
+      if (p.offset) offset = [offset[0] + p.offset[0], offset[1] + p.offset[1]];
+    }
+    named.set(target, out);
   }
-  const fin = sizes.get(hook)!;
-  if (plane !== 'rgb') bytes += fin.w * fin.h * 8; // conversion back to RGB
-  return bytes;
+  return { sizes, steps, final: named.get(hook)!, offset };
+}
+
+/**
+ * Assigns pass outputs to shared textures: a texture is reused, at the same size, once every
+ * pass that reads the previous owner has run. Returns the physical slot of every texture id
+ * (0 = the video frame, which is never shared) and the slots' sizes.
+ */
+function poolTextures(plan: Plan): { slotOf: number[]; slots: Size[] } {
+  const lastRead = plan.sizes.map(() => -1);
+  plan.steps.forEach((s, i) => { for (const inp of s.inputs) if (typeof inp.ref === 'number') lastRead[inp.ref] = i; });
+  lastRead[plan.final] = plan.steps.length; // read by the present pass
+  const slotOf = plan.sizes.map(() => -1);
+  const slots: Size[] = [{ ...plan.sizes[0] }];
+  slotOf[0] = 0;
+  const free: number[] = [];
+  const live: number[] = []; // texture ids holding a slot
+  plan.steps.forEach((s, i) => {
+    // Free outputs no later step reads. Inputs of this step have lastRead >= i, so a pass
+    // never writes into a texture it samples.
+    for (let k = live.length - 1; k >= 0; k--) {
+      if (lastRead[live[k]] < i) { free.push(slotOf[live[k]]); live.splice(k, 1); }
+    }
+    const size = plan.sizes[s.out];
+    const reuse = free.findIndex((sl) => slots[sl].w === size.w && slots[sl].h === size.h);
+    if (reuse >= 0) { slotOf[s.out] = free[reuse]; free.splice(reuse, 1); } else { slots.push({ ...size }); slotOf[s.out] = slots.length - 1; }
+    live.push(s.out);
+  });
+  return { slotOf, slots };
+}
+
+/** Texture bytes a chain will allocate: the video frame (RGBA8) plus the pooled RGBA16F slots. */
+function estimateBytes(passes: HookPass[], lookups: UserTexture[], plane: Plane, w: number, h: number, scale: number): number {
+  const plan = planChain(passes, new Set(lookups.map((t) => t.name)), plane, w, h, scale);
+  const { slots } = poolTextures(plan);
+  return w * h * 4 + slots.slice(1).reduce((n, s) => n + s.w * s.h * 8, 0) + lookups.reduce((n, t) => n + t.data.byteLength, 0);
 }
 
 // Full-range BT.709 conversions, for chains that work on Y or YCbCr (chroma centred at 0.5).
@@ -192,7 +268,16 @@ void main() {
     : 'fragColor = vec4(y, (c.b - y) / 1.8556 + 0.5, (c.r - y) / 1.5748 + 0.5, 1.0);'}
 }`;
 
-const FROM_PLANE_FRAG = (plane: Plane) => `#version 300 es
+/**
+ * The final draw to the canvas (flipped: textures are stored top row first). For Y / YCbCr
+ * chains it also converts back to RGB, so that costs no extra full-size pass.
+ */
+const PRESENT_FRAG = (plane: Plane) => (plane === 'rgb' ? `#version 300 es
+precision highp float;
+in vec2 v_uv;
+out vec4 fragColor;
+uniform sampler2D PLANE_raw;
+void main() { fragColor = vec4(texture(PLANE_raw, vec2(v_uv.x, 1.0 - v_uv.y)).rgb, 1.0); }` : `#version 300 es
 precision highp float;
 in vec2 v_uv;
 out vec4 fragColor;
@@ -201,11 +286,12 @@ uniform vec2 PLANE_size;
 uniform sampler2D SRC_raw;
 uniform vec2 u_offset; // accumulated pixel shift of the plane (mpv //!OFFSET)
 void main() {
-  vec4 p = texture(PLANE_raw, v_uv + u_offset / PLANE_size);
+  vec2 uv = vec2(v_uv.x, 1.0 - v_uv.y);
+  vec4 p = texture(PLANE_raw, uv + u_offset / PLANE_size);
   float y = p.x;
   vec2 cbcr;
   ${plane === 'luma'
-    ? `vec3 c = texture(SRC_raw, v_uv).rgb;
+    ? `vec3 c = texture(SRC_raw, uv).rgb;
   float sy = dot(c, vec3(0.2126, 0.7152, 0.0722));
   cbcr = vec2((c.b - sy) / 1.8556, (c.r - sy) / 1.5748);`
     : 'cbcr = p.yz - 0.5;'}
@@ -213,7 +299,7 @@ void main() {
   float b = y + 1.8556 * cbcr.x;
   float g = (y - 0.2126 * r - 0.0722 * b) / 0.7152;
   fragColor = vec4(clamp(vec3(r, g, b), 0.0, 1.0), 1.0);
-}`;
+}`);
 
 const VERT = `#version 300 es
 out vec2 v_uv;
@@ -224,13 +310,6 @@ void main() {
   gl_Position = vec4(p, 0.0, 1.0);
   v_uv = p * 0.5 + 0.5;
 }`;
-
-const PRESENT_FRAG = `#version 300 es
-precision highp float;
-in vec2 v_uv;
-out vec4 fragColor;
-uniform sampler2D u_tex;
-void main() { fragColor = vec4(texture(u_tex, vec2(v_uv.x, 1.0 - v_uv.y)).rgb, 1.0); }`;
 
 /** Compile+link without checking status; errors are collected later in `finishPrograms`. */
 function startProgram(gl: WebGL2RenderingContext, vs: WebGLShader, fsSrc: string): { prog: WebGLProgram; fs: WebGLShader } {
@@ -278,8 +357,8 @@ interface CompiledPass {
   desc: string;
   program: WebGLProgram;
   inputs: (PassInput & { loc: WebGLUniformLocation | null; sizeLoc: WebGLUniformLocation | null })[];
-  output: Tex;
-  fbo: WebGLFramebuffer;
+  output: Tex | null; // null: the canvas
+  fbo: WebGLFramebuffer | null;
   offset: [number, number] | null; // plane shift to undo (conversion back to RGB only)
   offsetLoc: WebGLUniformLocation | null;
 }
@@ -350,7 +429,7 @@ async function buildRenderer(
   let scale = wantScale;
   let { passes, textures } = orderedPasses(chain, scale);
   const tooBig = () => w * scale > maxTex || h * scale > maxTex || w * h * scale * scale > MAX_OUTPUT_PX
-    || estimateBytes(passes, hook, chain.plane, w, h, scale) > MAX_TEXTURE_BYTES;
+    || estimateBytes(passes, textures, chain.plane, w, h, scale) > MAX_TEXTURE_BYTES;
   while (scale > 2 && tooBig()) { scale /= 2; ({ passes, textures } = orderedPasses(chain, scale)); }
 
   canvas.width = w * scale;
@@ -416,21 +495,28 @@ async function buildRenderer(
   const videoTex = makeTex(w, h, false);
 
   // --- build pass list ------------------------------------------------------
+  // Pass outputs share textures once nothing reads them any more (see poolTextures): a long
+  // chain needs a handful of textures per size instead of one per pass.
+  const plan = planChain(passes, lookupNames, chain.plane, w, h, scale);
+  const { slotOf, slots } = poolTextures(plan);
+  const slotTex = slots.map((s, i) => (i === 0 ? videoTex : makeTex(s.w, s.h, true)));
+  const texOf = (id: number) => slotTex[slotOf[id]];
+
   const compiled: CompiledPass[] = [];
   const vs = compile(gl, gl.VERTEX_SHADER, VERT, 'vertex');
   const pendingPrograms: { prog: WebGLProgram; fs: WebGLShader; label: string }[] = [];
 
-  function addPass(desc: string, src: string, inputs: PassInput[], outW: number, outH: number): CompiledPass {
+  function addPass(desc: string, src: string, inputs: PassInput[], out: Tex | null): CompiledPass {
     const { prog, fs } = startProgram(gl!, vs, src);
     pendingPrograms.push({ prog, fs, label: desc });
-    // One half-float texture per pass output. (Could be pooled later; a VL chain at 1080p
-    // is roughly 40 textures x 8 bytes/px, well under typical GPU memory.)
-    const out = makeTex(outW, outH, true);
-    const fbo = gl!.createFramebuffer()!;
-    gl!.bindFramebuffer(gl!.FRAMEBUFFER, fbo);
-    gl!.framebufferTexture2D(gl!.FRAMEBUFFER, gl!.COLOR_ATTACHMENT0, gl!.TEXTURE_2D, out.tex, 0);
-    if (gl!.checkFramebufferStatus(gl!.FRAMEBUFFER) !== gl!.FRAMEBUFFER_COMPLETE) {
-      throw new Error('This GPU cannot render to half-float textures.');
+    let fbo: WebGLFramebuffer | null = null;
+    if (out) {
+      fbo = gl!.createFramebuffer()!;
+      gl!.bindFramebuffer(gl!.FRAMEBUFFER, fbo);
+      gl!.framebufferTexture2D(gl!.FRAMEBUFFER, gl!.COLOR_ATTACHMENT0, gl!.TEXTURE_2D, out.tex, 0);
+      if (gl!.checkFramebufferStatus(gl!.FRAMEBUFFER) !== gl!.FRAMEBUFFER_COMPLETE) {
+        throw new Error('This GPU cannot render to half-float textures.');
+      }
     }
     // Uniform locations are resolved after linking completes (see below).
     const c: CompiledPass = {
@@ -441,65 +527,30 @@ async function buildRenderer(
     return c;
   }
 
-  // Named textures visible to later passes. The hooked plane starts as the video frame
-  // (rgb) or its conversion to Y / YCbCr.
-  const named = new Map<string, Tex>();
-  if (chain.plane === 'rgb') named.set(hook, videoTex);
-  else {
-    const conv = addPass('to plane', TO_PLANE_FRAG(chain.plane), [{ name: 'SRC', uniform: 'SRC_raw', tex: videoTex }], w, h);
-    named.set(hook, conv.output);
-  }
-  const sizeOf = sizeResolver((n) => named.get(n), hook, w, h, scale);
-  let offset: [number, number] = [0, 0]; // accumulated //!OFFSET of the hooked plane, in its pixels
-
-  for (const p of passes) {
-    if (p.when && evalRpn(p.when, sizeOf) === 0) continue;
-    const hooked = named.get(hook)!;
-    const outW = p.width ? Math.round(evalRpn(p.width, sizeOf)) : hooked.w;
-    const outH = p.height ? Math.round(evalRpn(p.height, sizeOf)) : hooked.h;
-
-    const bindNames = Array.from(new Set([...p.binds.map((b) => (b === 'HOOKED' ? hook : b)), hook]));
-    const inputs = bindNames.map((n): PassInput => {
-      const ut = lookup.get(n);
-      if (ut) return { name: n, uniform: n, tex: ut };
-      const t = named.get(n);
-      if (!t) throw new Error(`Pass "${p.desc}" binds unknown texture ${n}`);
-      return { name: n, uniform: `${n}_raw`, tex: t };
-    });
-
-    const c = addPass(p.desc, buildFragmentSource(p, hook, lookupNames), inputs, outW, outH);
-    const target = p.save ?? hook;
-    if (target === hook) {
-      offset = [offset[0] * outW / hooked.w, offset[1] * outH / hooked.h];
-      if (p.offset) offset = [offset[0] + p.offset[0], offset[1] + p.offset[1]];
-    }
-    named.set(target, c.output);
+  for (const s of plan.steps) {
+    const inputs = s.inputs.map((inp): PassInput => (typeof inp.ref === 'string'
+      ? { name: inp.name, uniform: inp.name, tex: lookup.get(inp.ref)! }
+      : { name: inp.name, uniform: `${inp.name}_raw`, tex: texOf(inp.ref) }));
+    const src = s.kind === 'to-plane' ? TO_PLANE_FRAG(chain.plane) : buildFragmentSource(s.pass!, hook, lookupNames);
+    addPass(s.pass?.desc ?? 'to plane', src, inputs, texOf(s.out));
   }
 
-  if (chain.plane !== 'rgb') {
-    const plane = named.get(hook)!;
-    const back = addPass('from plane', FROM_PLANE_FRAG(chain.plane), [
-      { name: 'PLANE', uniform: 'PLANE_raw', tex: plane },
-      { name: 'SRC', uniform: 'SRC_raw', tex: videoTex },
-    ], plane.w, plane.h);
-    back.offset = offset;
-    named.set(hook, back.output);
-  }
-
-  const finalTex = named.get(hook)!;
-  if (finalTex.w !== w * scale || finalTex.h !== h * scale) {
+  const finalSize = plan.sizes[plan.final];
+  if (finalSize.w !== w * scale || finalSize.h !== h * scale) {
     // Can happen if an x2 WHEN condition failed; keep canvas in sync anyway.
-    canvas.width = finalTex.w;
-    canvas.height = finalTex.h;
+    canvas.width = finalSize.w;
+    canvas.height = finalSize.h;
   }
+  // The present pass draws to the canvas; for Y / YCbCr chains it also converts back to RGB.
+  const present = addPass('present', PRESENT_FRAG(chain.plane), [
+    { name: 'PLANE', uniform: 'PLANE_raw', tex: texOf(plan.final) },
+    { name: 'SRC', uniform: 'SRC_raw', tex: videoTex },
+  ], null);
+  if (chain.plane !== 'rgb') present.offset = plan.offset;
 
-  const present = startProgram(gl, vs, PRESENT_FRAG);
-  pendingPrograms.push({ ...present, label: 'present' });
   await finishPrograms(gl, pendingPrograms, () => destroyed);
   gl.deleteShader(vs);
   if (destroyed) throw new DOMException('Canceled', 'AbortError');
-  const presentProg = present.prog;
-  const presentLoc = gl.getUniformLocation(presentProg, 'u_tex');
   for (const c of compiled) {
     for (const inp of c.inputs) {
       inp.loc = gl.getUniformLocation(c.program, inp.uniform);
@@ -562,7 +613,7 @@ async function buildRenderer(
       samples: recent.map((r) => r.ms),
       cpuMs: lastCpuMs,
       fps: frameTimes.length / 2,
-      passes: compiled.length + 1,
+      passes: compiled.length,
       textureBytes,
       outputWidth: canvas.width,
       outputHeight: canvas.height,
@@ -576,8 +627,7 @@ async function buildRenderer(
     for (const q of pendingQueries) gl!.deleteQuery(q);
     pendingQueries.length = 0;
     canvas.removeEventListener('webglcontextlost', onLost);
-    for (const c of compiled) { gl!.deleteProgram(c.program); gl!.deleteFramebuffer(c.fbo); }
-    gl!.deleteProgram(presentProg);
+    for (const c of compiled) { gl!.deleteProgram(c.program); if (c.fbo) gl!.deleteFramebuffer(c.fbo); }
     for (const t of allTex) gl!.deleteTexture(t.tex);
     gl!.deleteVertexArray(vao);
     const lose = gl!.getExtension('WEBGL_lose_context');
@@ -619,7 +669,7 @@ async function buildRenderer(
 
     for (const c of compiled) {
       gl!.bindFramebuffer(gl!.FRAMEBUFFER, c.fbo);
-      gl!.viewport(0, 0, c.output.w, c.output.h);
+      gl!.viewport(0, 0, c.output ? c.output.w : canvas.width, c.output ? c.output.h : canvas.height);
       gl!.useProgram(c.program);
       let unit = 0;
       c.inputs.forEach((inp) => {
@@ -634,14 +684,6 @@ async function buildRenderer(
       if (c.offsetLoc && c.offset) gl!.uniform2f(c.offsetLoc, c.offset[0], c.offset[1]);
       gl!.drawArrays(gl!.TRIANGLES, 0, 3);
     }
-
-    gl!.bindFramebuffer(gl!.FRAMEBUFFER, null);
-    gl!.viewport(0, 0, canvas.width, canvas.height);
-    gl!.useProgram(presentProg);
-    gl!.activeTexture(gl!.TEXTURE0);
-    gl!.bindTexture(gl!.TEXTURE_2D, finalTex.tex);
-    gl!.uniform1i(presentLoc, 0);
-    gl!.drawArrays(gl!.TRIANGLES, 0, 3);
 
     if (query) { gl!.endQuery(timerExt!.TIME_ELAPSED_EXT); pendingQueries.push(query); }
     lastCpuMs = performance.now() - t0;

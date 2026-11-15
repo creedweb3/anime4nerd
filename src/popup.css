@@ -63,7 +63,7 @@ body { position: relative; }
 .engine-menu .grp { padding: 6px 10px 2px; color: var(--faint); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; }
 .eng {
   display: grid; grid-template-columns: 1fr auto; gap: 0 10px; width: 100%;
-  padding: 5px 10px; border: 0; border-left: 2px solid transparent; background: transparent;
+  padding: 5px 10px; border: 0; background: transparent;
   color: var(--dim); font: inherit; text-align: left; cursor: pointer;
 }
 .eng:hover, .eng:focus-visible { background: #181818; outline: none; }
@@ -73,7 +73,7 @@ body { position: relative; }
 .eng .cost i { width: 6px; height: 10px; background: var(--bar-dim); }
 .eng .cost i.f { background: var(--bar); }
 .eng .cost i.f.hot { background: var(--warn); }
-.eng[aria-checked="true"] { border-left-color: var(--on); background: #1a1a1a; }
+.eng[aria-checked="true"] { background: #1a1a1a; }
 .eng[aria-checked="true"] b::before { content: "▸ "; }
 .engine-note { color: var(--faint); font-size: 10px; margin: -2px 0 8px; }
 

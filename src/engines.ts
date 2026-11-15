@@ -104,19 +104,44 @@ export function engineInfo(id: Engine): EngineInfo {
   return ENGINES.find((e) => e.id === id) ?? ENGINES[0];
 }
 
-/** One shader file to fetch, with #define values to override (FSR/CAS sharpness). */
-export interface ShaderRef {
-  file: string;
-  defines?: Record<string, string>;
-}
+/**
+ * One shader to run: a file under shaders/ (with #define values to override, and optionally only
+ * the passes whose DESC contains `only`), or a small built-in pass given inline.
+ */
+export type ShaderRef =
+  | { file: string; defines?: Record<string, string>; only?: string }
+  | { inline: string; name: string };
 
 export interface EngineChain {
   plane: Plane;
   /** Run once, before the upscaling steps. */
   pre: ShaderRef[];
-  /** One x2 step (or one step toward OUTPUT); repeated per doubling. Passes skip themselves via WHEN once done. */
+  /** One x2 step (or one step toward OUTPUT); repeated per doubling except the last. Passes skip themselves via WHEN once done. */
   step: ShaderRef[];
+  /** The final step, when it differs from `step` (sharpeners: sharpen once, at the end). */
+  last?: ShaderRef[];
 }
+
+// Built-in helper passes for the sharpeners' intermediate steps, so they sharpen only once.
+/** FSR: keep EASU's upscale as the plane, without the RCAS sharpening pass. */
+const EASU_ONLY: ShaderRef[] = [
+  { file: 'FSR.glsl', only: '(EASU)' },
+  {
+    name: 'copy EASU',
+    inline: [
+      '//!DESC FSR EASU result (no sharpening)', '//!HOOK LUMA', '//!BIND EASUTEX', '//!WIDTH EASUTEX.w', '//!HEIGHT EASUTEX.h',
+      'vec4 hook() { return EASUTEX_tex(EASUTEX_pos); }',
+    ].join('\n'),
+  },
+];
+/** CAS: plain bilinear 2x; CAS itself upsamples and sharpens in one pass, so it runs only last. */
+const BILINEAR_X2: ShaderRef[] = [{
+  name: 'bilinear x2',
+  inline: [
+    '//!DESC bilinear x2', '//!HOOK LUMA', '//!BIND HOOKED', '//!WIDTH 2 HOOKED.w *', '//!HEIGHT 2 HOOKED.h *',
+    'vec4 hook() { return HOOKED_tex(HOOKED_pos); }',
+  ].join('\n'),
+}];
 
 /** The shader chain of a non-Anime4K engine (Anime4K's own chain is built in gpu.ts). */
 export function engineChain(engine: Exclude<Engine, 'anime4k'>, variant: string): EngineChain {
@@ -143,11 +168,11 @@ export function engineChain(engine: Exclude<Engine, 'anime4k'>, variant: string)
     case 'fsr': {
       // RCAS sharpness: 0 = strongest, each +1 halves it.
       const sharpness = variant === 'soft' ? '1.0' : variant === 'crisp' ? '0.0' : '0.2';
-      return { plane: 'luma', pre: [], step: [{ file: 'FSR.glsl', defines: { SHARPNESS: sharpness } }] };
+      return { plane: 'luma', pre: [], step: EASU_ONLY, last: [{ file: 'FSR.glsl', defines: { SHARPNESS: sharpness } }] };
     }
     case 'cas': {
       const sharpening = variant === 'low' ? '0.0' : variant === 'high' ? '1.0' : '0.5';
-      return { plane: 'luma', pre: [], step: [{ file: 'CAS-scaled.glsl', defines: { SHARPENING: sharpening } }] };
+      return { plane: 'luma', pre: [], step: BILINEAR_X2, last: [{ file: 'CAS-scaled.glsl', defines: { SHARPENING: sharpening } }] };
     }
     default: {
       const never: never = engine;
