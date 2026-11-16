@@ -1,0 +1,340 @@
+<title>Report a problem · Anime4Nerd</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Report a problem with Anime4Nerd. No account needed.">
+<link rel="icon" href="assets/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+<link rel="stylesheet" href="assets/scenes.css">
+
+<style>
+  .bye .sec { padding-block: clamp(32px, 6vw, 64px); }
+  .bye .rail h2 { font-size: clamp(1.8rem, 3.4vw, 2.6rem); }
+  .facts { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 6px; }
+  .facts li { display: flex; gap: 10px; color: var(--dim); font-size: 12px; }
+  .facts li::before { content: "✓"; color: var(--ok); }
+  /* Scene right under the text (other sections push theirs to the bottom), cropped to its content. */
+  .bye .rail .scene.gone { margin-top: 22px; }
+  .scene.gone .stage { aspect-ratio: 380 / 178; }
+  .scene.gone .it.out img { filter: grayscale(1); opacity: .45; }
+  .scene.gone .it.out span { color: var(--faint); text-decoration: line-through; }
+  .scene.gone .it.out em { font-style: normal; font-size: 8px; color: var(--bad); border: 1px solid rgba(var(--r), .5); padding: 0 5px; }
+
+  /* Numbered steps, like the "pass 01" strip on the home page. */
+  .step { display: flex; align-items: center; gap: 10px; margin: 26px 0 12px; }
+  form > .kind + .step { margin-top: 22px; }
+  .step i { font-style: normal; font-size: 10px; color: var(--dim); border: 1px solid var(--line2); padding: 1px 6px; }
+  .step b { color: var(--fg); font-size: 13px; font-weight: 600; }
+  .step span { margin-left: auto; color: var(--faint); font-size: 10px; text-transform: uppercase; letter-spacing: .14em; }
+
+  /* Bug or idea: two big toggles above step 01. */
+  .kind { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0 4px; }
+  .kind button { display: grid; gap: 3px; text-align: left; border: 1px solid var(--line); background: var(--bg); padding: 12px 14px; cursor: pointer; font: 13px/1.3 var(--mono); color: var(--dim); transition: border-color .12s, background-color .12s; }
+  .kind button b { color: var(--fg); font-weight: 600; }
+  .kind button small { font-size: 11px; color: var(--faint); }
+  .kind button[aria-checked="false"]:hover { border-color: var(--line2); }
+  .kind button[aria-checked="true"] { border-color: rgba(var(--g), .7); background: linear-gradient(135deg, rgba(var(--g), .16), transparent 60%) var(--bg); }
+  .kind button[aria-checked="true"] small { color: var(--ok); }
+  .why[hidden], [data-for][hidden] { display: none; }
+  .why { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .why button { text-align: left; display: grid; gap: 3px; border: 1px solid var(--line); background: var(--bg); padding: 11px 12px; cursor: pointer; font: 12px/1.3 var(--mono); color: var(--fg); transition: border-color .12s, background-color .12s; }
+  .why button i { font-style: normal; font-size: 10px; color: var(--faint); }
+  .why button em { font-style: normal; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .why button[aria-pressed="false"]:hover { border-color: var(--line2); }
+  .why button[aria-pressed="false"]:hover em { color: var(--fg); }
+  .why button[aria-pressed="true"] { border-color: rgba(var(--g), .7); background: linear-gradient(135deg, rgba(var(--g), .16), transparent 60%) var(--bg); }
+  .why button[aria-pressed="true"] i { color: var(--ok); }
+  .why button[aria-pressed="true"] em { color: var(--fg); }
+  .tips { display: grid; gap: 8px; margin-top: 16px; }
+  .tips:empty { display: none; }
+  .tips p { margin: 0; padding: 2px 0 2px 12px; line-height: 1.5; border-left: 2px solid var(--ok); color: var(--ok); font-size: 12px; }
+  .tips p b { color: var(--fg); font-weight: 600; }
+  textarea { display: block; width: 100%; height: 76px; padding: 9px 11px; background: var(--bg); border: 1px solid var(--line2); color: var(--fg); font: 13px/1.5 var(--mono); resize: vertical; }
+  textarea:focus { outline: none; border-color: var(--on); }
+  /* Step 03: the button centred under its heading, the note centred under the button. */
+  .send { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 24px; }
+  .send .btn { min-width: 220px; justify-content: center; }
+  .send small { color: var(--faint); font-size: 11px; text-align: center; }
+  .send button[disabled] { opacity: .45; cursor: default; }
+  .err { color: var(--bad); font-size: 12px; margin: 10px 0 0; text-align: center; }
+  .ts { display: flex; justify-content: center; }
+  .ts:not(:empty) { margin-top: 16px; }
+  .thanks { display: none; }
+  .sent .thanks { display: block; }
+  .sent form { display: none; }
+  .thanks b { display: block; font-size: clamp(1.3rem, 2.4vw, 1.7rem); color: var(--on); margin: 4px 0 8px; }
+  .thanks p { margin: 0; }
+
+  .first { margin-top: 22px; border: 1px solid var(--line); background: var(--panel); padding: 12px 14px; }
+  .first p { margin: 6px 0 0; color: var(--dim); font-size: 12px; }
+  .first p b { color: var(--fg); font-weight: 600; }
+  .drop { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px; border: 1px dashed var(--line2); background: var(--bg); cursor: pointer; transition: border-color .12s; }
+  .drop { position: relative; }
+  .drop:hover, .drop.over { border-color: var(--on); }
+  .drop:focus-within { border-color: var(--on); outline: 1px solid var(--on); }
+  /* Visually hidden but focusable, so the picker works from the keyboard. */
+  .drop input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; clip-path: inset(50%); }
+  .drop b { color: var(--fg); font-size: 12px; font-weight: 600; }
+  .drop small { color: var(--faint); font-size: 11px; }
+  .thumbs { display: flex; gap: 8px; margin-top: 10px; }
+  .thumbs:empty { display: none; }
+  .thumbs figure { position: relative; margin: 0; width: 96px; height: 60px; border: 1px solid var(--line2); background: center/cover no-repeat; }
+  .thumbs button { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border: 0; background: rgba(0,0,0,.75); color: var(--on); font: 11px/1 var(--mono); cursor: pointer; }
+  .send small b { color: var(--dim); font-weight: 500; }
+  /* Reinstall: one slim strip under the form. */
+  .body > .panel.again { display: flex; flex-direction: row; align-items: center; gap: 6px; flex-wrap: wrap; padding-block: 14px; }
+  .body > .panel.again .phead { margin: 0 auto 0 0; }
+  @media (max-width: 760px) { .why { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 520px) { .why { grid-template-columns: minmax(0, 1fr); } .send .btn { width: 100%; } }
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="./"><img src="assets/icon.png" alt="" width="24" height="24">anime4nerd</a>
+    <nav class="nav" aria-label="Site">
+      <a class="chip" href="./#compare">before / after</a>
+      <a class="chip" href="./#presets">presets</a>
+      <a class="chip" href="./#changes">what's new</a>
+      <a class="chip" href="privacy">privacy</a>
+    </nav>
+    <a class="btn primary" data-store href="https://chromewebstore.google.com/detail/anime4nerd/kblnmcdmlgeidaclnhjmcffefmkehkpm" rel="noopener">add to chrome</a>
+  </div>
+</header>
+
+<main class="wrap bye" id="top">
+  <section class="sec long" style="border-top:0">
+    <div class="rail">
+      <div class="phead"><span>support · report</span></div>
+      <h2 id="title">Report a problem.</h2>
+      <p class="intro" data-for="bug">Something broken or odd? Tell us here. No account, no sign-in: every report is read, and fixes ship in the next version.</p>
+      <p class="intro" data-for="idea" hidden>Something you'd like Anime4Nerd to do? Tell us here. No account, no sign-in: every idea is read, and the ones that ship are listed under what's new.</p>
+      <ul class="facts">
+        <li>Sends only what you write here.</li>
+        <li>Plus the version and browser it was opened from.</li>
+        <li>No browsing history, no sites unless you name them.</li>
+      </ul>
+      <div class="first" data-for="bug">
+        <div class="phead"><span>try first</span></div>
+        <p><b>Stutters?</b> Pick Mode C or upscale 2× in the popup.</p>
+        <p><b>Black or frozen picture?</b> Reload the page and switch the video on again.</p>
+        <p><b>"Does not allow upscaling"?</b> That site blocks it; nothing to fix on your side.</p>
+      </div>
+    </div>
+
+    <div class="body" id="page">
+      <div class="panel">
+        <div class="phead"><span>report · no account</span><span>1 min</span></div>
+        <form id="form">
+          <div class="kind" role="radiogroup" aria-label="Report type">
+            <button type="button" role="radio" data-t="bug" aria-checked="true"><b>Report a bug</b><small>something broken or odd</small></button>
+            <button type="button" role="radio" data-t="idea" aria-checked="false"><b>Share an idea</b><small>a feature or change you'd like</small></button>
+          </div>
+          <div class="step"><i>01</i><b id="q1">What went wrong?</b><span>pick any</span></div>
+          <div class="why" data-t="bug" role="group" aria-label="Reasons">
+            <button type="button" data-r="controls" aria-pressed="false"><i>01 · player</i><em>controls or subs hidden</em></button>
+            <button type="button" data-r="slow" aria-pressed="false"><i>02 · speed</i><em>slow or stuttering</em></button>
+            <button type="button" data-r="site" aria-pressed="false"><i>03 · website</i><em>doesn't work on a site</em></button>
+            <button type="button" data-r="look" aria-pressed="false"><i>04 · picture</i><em>looks wrong or black</em></button>
+            <button type="button" data-r="menu" aria-pressed="false"><i>05 · popup</i><em>popup or menu issue</em></button>
+            <button type="button" data-r="other" aria-pressed="false"><i>06 · other</i><em>something else</em></button>
+          </div>
+          <div class="why" data-t="idea" role="group" aria-label="Topics" hidden>
+            <button type="button" data-r="feature" aria-pressed="false"><i>01 · feature</i><em>a new feature or option</em></button>
+            <button type="button" data-r="picture" aria-pressed="false"><i>02 · picture</i><em>presets or picture quality</em></button>
+            <button type="button" data-r="site" aria-pressed="false"><i>03 · website</i><em>better support for a site</em></button>
+            <button type="button" data-r="menu" aria-pressed="false"><i>04 · popup</i><em>popup or menu</em></button>
+            <button type="button" data-r="browser" aria-pressed="false"><i>05 · browser</i><em>another browser or device</em></button>
+            <button type="button" data-r="other" aria-pressed="false"><i>06 · other</i><em>something else</em></button>
+          </div>
+          <label class="step" for="note"><i>02</i><b id="q2">What happened?</b><span><span id="n">0</span> / 1000</span></label>
+          <textarea id="note" maxlength="1000" placeholder="What did you do, what did you expect, what happened? Name the site if it's about one."></textarea>
+          <div class="step"><i>03</i><b>Screenshots</b><span>optional · up to 3</span></div>
+          <label class="drop" id="drop"><input type="file" id="shots" accept="image/png,image/jpeg,image/webp" multiple><b>+ add screenshots</b><small>or drop images here · png, jpg, webp · crop out anything private</small></label>
+          <div class="thumbs" id="thumbs"></div>
+          <div id="ts" class="ts" data-sitekey="__TURNSTILE_SITEKEY__" data-action="report"></div>
+          <div class="send">
+            <button class="btn primary" type="submit" id="go" disabled>send report</button>
+            <small>sent with <b id="env">anime4nerd · version unknown</b></small>
+          </div>
+          <p class="err" id="err" hidden>Couldn't send right now. Please try again in a moment.</p>
+        </form>
+        <div class="thanks">
+          <b id="thx">Thanks, report received.</b>
+          <p><span id="thx2">Fixes</span> are listed under <a href="./#changes">what's new</a> as they ship.</p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">
+  <span>anime4nerd · mit</span>
+  <span><a href="./#changes">changes</a> · <a href="privacy">privacy</a> · <a href="https://github.com/creedweb3/anime4nerd" rel="noopener">github</a></span>
+</footer>
+
+<script src="assets/send.js"></script>
+<script>
+  (function () {
+    // Version and browser come from the link the extension opens (?v=1.2.4&b=chrome).
+    var v = window.a4nEnv.v;
+    var br = window.a4nEnv.b;
+    document.getElementById('env').textContent = 'anime4nerd ' + (v || 'version unknown') + (br ? ' · ' + br : '');
+    var picked = { bug: {}, idea: {} };
+    var sending = false;
+    var note = document.getElementById('note');
+    var go = document.getElementById('go');
+    // Bug or idea: swaps the reasons, headings and wording. ?t=idea opens the page on ideas.
+    var TEXT = {
+      bug: { title: 'Report a problem.', q1: 'What went wrong?', q2: 'What happened?', go: 'send report', thx: 'Thanks, report received.', thx2: 'Fixes',
+        hint: "What did you do, what did you expect, what happened? Name the site if it's about one." },
+      idea: { title: 'Share an idea.', q1: "What's it about?", q2: "What's your idea?", go: 'send idea', thx: 'Thanks, idea received.', thx2: 'New features',
+        hint: 'What would you like Anime4Nerd to do, and when would you use it?' },
+    };
+    var type = new URLSearchParams(location.search).get('t') === 'idea' ? 'idea' : 'bug';
+    var setType = function (t) {
+      if (sending) return;
+      type = t;
+      var x = TEXT[t];
+      ['title', 'q1', 'q2', 'thx', 'thx2'].forEach(function (k) { document.getElementById(k).textContent = x[k]; });
+      document.title = x.title.slice(0, -1) + ' · Anime4Nerd';
+      note.placeholder = x.hint;
+      go.textContent = x.go;
+      document.querySelectorAll('.kind button').forEach(function (b) { b.setAttribute('aria-checked', String(b.dataset.t === t)); });
+      document.querySelectorAll('.why').forEach(function (g) { g.hidden = g.dataset.t !== t; });
+      document.querySelectorAll('[data-for]').forEach(function (el) { el.hidden = el.dataset.for !== t; });
+    };
+    document.querySelectorAll('.kind button').forEach(function (b) {
+      b.addEventListener('click', function () { setType(b.dataset.t); });
+    });
+    setType(type);
+    var update = function () {
+      if (sending) return;
+      go.disabled = !note.value.trim();
+    };
+    document.querySelectorAll('.why button').forEach(function (b) {
+      var set = picked[b.parentNode.dataset.t];
+      b.addEventListener('click', function () {
+        set[b.dataset.r] = !set[b.dataset.r];
+        b.setAttribute('aria-pressed', String(set[b.dataset.r]));
+        update();
+      });
+    });
+    // Screenshots: up to 3 images, shown as thumbnails; none is sent until "send".
+    var files = [];
+    var urls = new Map(); // file -> object URL of its thumbnail
+    var thumbs = document.getElementById('thumbs');
+    var drop = document.getElementById('drop');
+    var err = document.getElementById('err');
+    var draw = function () {
+      urls.forEach(function (url, file) { if (files.indexOf(file) < 0) { URL.revokeObjectURL(url); urls.delete(file); } });
+      thumbs.replaceChildren.apply(thumbs, files.map(function (file, i) {
+        if (!urls.has(file)) urls.set(file, URL.createObjectURL(file));
+        var fig = document.createElement('figure');
+        fig.style.backgroundImage = 'url("' + urls.get(file) + '")';
+        var x = document.createElement('button');
+        x.type = 'button'; x.textContent = '✕'; x.setAttribute('aria-label', 'Remove screenshot ' + (i + 1));
+        x.addEventListener('click', function (e) { e.preventDefault(); if (sending) return; files.splice(i, 1); draw(); });
+        fig.append(x);
+        return fig;
+      }));
+      drop.style.display = files.length >= 3 ? 'none' : '';
+    };
+    // Some systems give webp files no MIME type, so the file name counts too.
+    var isImage = function (file) {
+      return ['image/png', 'image/jpeg', 'image/webp'].indexOf(file.type) >= 0 || (!file.type && /\.(png|jpe?g|webp)$/i.test(file.name));
+    };
+    var add = function (list) {
+      if (sending) return;
+      var skipped = 0;
+      [].forEach.call(list, function (file) { if (files.length < 3 && isImage(file)) files.push(file); else skipped++; });
+      err.textContent = 'Up to 3 screenshots, as png, jpg or webp. ' + skipped + (skipped === 1 ? ' file was' : ' files were') + ' left out.';
+      err.hidden = !skipped;
+      draw();
+    };
+    document.getElementById('shots').addEventListener('change', function (e) { add(e.target.files); e.target.value = ''; });
+    drop.addEventListener('dragover', function (e) { e.preventDefault(); drop.classList.add('over'); });
+    drop.addEventListener('dragleave', function () { drop.classList.remove('over'); });
+    drop.addEventListener('drop', function (e) { e.preventDefault(); drop.classList.remove('over'); add(e.dataTransfer.files); });
+    note.addEventListener('input', function () { document.getElementById('n').textContent = note.value.length; update(); });
+    // Re-encodes a screenshot to JPEG of at most ~250 KB. Drawing through a canvas also drops EXIF
+    // and other metadata; the white fill keeps transparent PNG areas from turning black.
+    var LIMIT = 250000;
+    var MAX_SIDE = 1600;
+    var jpeg = function (bmp, scale, quality) {
+      var c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(bmp.width * scale));
+      c.height = Math.max(1, Math.round(bmp.height * scale));
+      var g = c.getContext('2d');
+      g.fillStyle = '#fff';
+      g.fillRect(0, 0, c.width, c.height);
+      g.drawImage(bmp, 0, 0, c.width, c.height);
+      return new Promise(function (ok) { c.toBlob(ok, 'image/jpeg', quality); });
+    };
+    var shrink = function (file) {
+      return createImageBitmap(file).then(function (bmp) {
+        var attempt = function (scale, quality) {
+          return jpeg(bmp, scale, quality).then(function (blob) {
+            if (blob && blob.size <= LIMIT) return blob;
+            if (scale < 0.1) throw new Error('image_too_big');
+            return quality > 0.5 ? attempt(scale, quality - 0.15) : attempt(scale * 0.75, 0.8);
+          });
+        };
+        var done = function () { bmp.close(); };
+        return attempt(Math.min(1, MAX_SIDE / bmp.width, MAX_SIDE / bmp.height), 0.8).finally(done);
+      });
+    };
+    var base64 = function (blob) {
+      return new Promise(function (ok, no) {
+        var r = new FileReader();
+        r.onload = function () { ok(String(r.result).split(',')[1]); };
+        r.onerror = function () { no(r.error); };
+        r.readAsDataURL(blob);
+      });
+    };
+    // A screenshot that can't be read is removed, so pressing send again works.
+    var encode = function (file, i) {
+      return shrink(file).then(base64).catch(function () {
+        files.splice(files.indexOf(file), 1);
+        draw();
+        throw new Error('shot_' + (i + 1));
+      });
+    };
+    document.getElementById('form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (sending || go.disabled) return;
+      sending = true;
+      err.hidden = true;
+      go.disabled = true;
+      go.textContent = 'sending…';
+      // What is sent is what was on screen when send was pressed.
+      var sentType = type;
+      var reasons = Object.keys(picked[type]).filter(function (k) { return picked[type][k]; });
+      var text = note.value;
+      var chosen = files.slice();
+      chosen.reduce(function (prev, file, i) {
+        return prev.then(function (out) { return encode(file, i).then(function (s) { return out.concat(s); }); });
+      }, Promise.resolve([])).then(function (shots) {
+        return window.a4nSend({
+          kind: 'report',
+          type: sentType,
+          reasons: reasons,
+          note: text,
+          v: v,
+          b: br,
+          shots: shots,
+        });
+      }).then(function () {
+        document.getElementById('page').classList.add('sent');
+      }, function (x) {
+        sending = false;
+        // The server refused a screenshot: drop them all so the text can still be sent.
+        if (x.message === 'bad_shot') { files = []; draw(); }
+        window.a4nError(x, err);
+        go.textContent = TEXT[type].go;
+        update();
+      });
+    });
+  })();
+</script>

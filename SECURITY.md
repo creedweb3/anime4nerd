@@ -1,14 +1,17 @@
 # Security
 
 This document describes what Anime4Nerd can and cannot do, how it is protected,
-what was reviewed, and how to use it safely. Last reviewed: 2026-11-08 (v1.2.0).
+what was reviewed, and how to use it safely. Last reviewed: 2026-11-12 (v1.2.5).
 
 ## Threat model in one paragraph
 
 The extension's only job is to read video frames on sites you enable and draw an
-upscaled copy over the player. It has no server, no network code, no accounts and
-no analytics. The things that could go wrong are: a page you enabled tricking the
-extension into doing something on another site, a page feeding it strings that
+upscaled copy over the player. It has no server, no network code of its own, no
+accounts and no analytics. It only opens two pages of the website (after removal,
+and from the popup's bug icon); their optional forms post to a Cloudflare Pages
+Function (`functions/api/send.js`) only when the visitor presses send. The things
+that could go wrong are: a page you enabled tricking the extension into doing
+something on another site, a page feeding it strings that
 break the popup, a page making it eat CPU/GPU, or the published package being
 tampered with. Each is addressed below.
 
@@ -21,7 +24,7 @@ tampered with. Each is addressed below.
   `<video>` elements; upscaling starts from your click in the popup. You can
   restrict the extension to chosen sites under extension settings → Site access.
 - Never stores video frames, page text or URLs. Only the preset, two line-effect
-  booleans, the upscale factor, a per-site on/off map and (Chrome build) two usage
+  booleans, the upscale factor, a per-site on/off map and two usage
   counters plus the rating card's state are stored, all in local extension storage.
 - Never executes code from a page. Shaders are bundled constants; page strings are
   only ever shown as text.
@@ -31,7 +34,7 @@ tampered with. Each is addressed below.
 | Risk | Protection |
 |---|---|
 | Popup HTML injection from page titles | All page-derived strings are inserted with `textContent`; the only `innerHTML` uses are constant templates. |
-| A page spoofing extension messages | No `externally_connectable`, so web pages cannot message the extension. In the Chrome build the background accepts only two message types, the usage report and the rating card answer, only from this extension's own scripts (`sender.id` check); counts are clamped per message and invalid answers are ignored. The Firefox background accepts no messages at all. |
+| A page spoofing extension messages | No `externally_connectable`, so web pages cannot message the extension. The background accepts only two message types, the usage report and the rating card answer, only from this extension's own scripts (`sender.id` check); counts are clamped per message and invalid answers are ignored. |
 | Broad site access | Required because players are embedded from arbitrary domains. The content script does no work beyond finding `<video>` elements until the user switches a video on. Users can narrow access per site in the browser. |
 | Regex denial of service from long page strings | Every page string is capped at 300 characters (URLs at 2048) before any pattern runs; overlapping quantifiers were removed. |
 | Deeply nested JSON-LD | Parser depth capped at 8 levels / 200 nodes; the handler is wrapped so a failure returns `null` instead of hanging the popup. |
@@ -82,6 +85,31 @@ files. Remaining low-severity notes: a page can tell the extension is installed
 from its takeover event and the page-world fullscreen flag, and the Firefox
 render loop checks for a new frame once per animation frame while a playing
 video stalls.
+
+A fifth pass (2026-11-12, v1.2.3) covered the overlay and subtitle changes. The
+subtitle copy builds its nodes only with the browser's `VTTCue.getCueAsHTML()`
+(WebVTT's own small tag set, no scripts or attributes) or `textContent`; it is
+`aria-hidden` and `pointer-events: none`. Page `::cue` rules are read from
+same-origin stylesheets only and applied as inline style properties, limited to
+the ones `::cue` allows; selectors run through `matches`/`querySelectorAll` in a
+try/catch. Hit-testing for covered overlays and the control bar only reads layout
+(`elementsFromPoint`) and toggles `pointer-events` on our own canvas. The Firefox
+build now has the rating card; its background accepts the same two message types
+with the same `sender.id` check and clamping as Chrome. No critical, high or medium
+issues; no new permissions; nothing is sent anywhere.
+
+A sixth pass (2026-11-12, v1.2.4) covered the uninstall page link, the popup's bug
+icon and the website forms behind them. The extension only calls
+`runtime.setUninstallURL` and sets a link `href`; both URLs carry only a validated
+`x.y.z` version (and the browser name), built with `URLSearchParams`. No new
+permissions, and the extension still sends nothing itself. The forms' Pages Function
+(`functions/api/send.js`) was reviewed over four rounds by security, code and
+TypeScript reviewers plus an independent review: strict allow-list validation,
+Turnstile verified server-side before any storage access, salted daily-rotating IP
+hashes for rate limits (raw IPs never stored), per-form and per-visitor daily caps on
+the Free plan, screenshots accepted only as canvas-style JPEGs without metadata, and
+per-page hash-pinned CSP. No critical or high issues; all medium and low findings
+were fixed.
 
 ## For people who install it
 

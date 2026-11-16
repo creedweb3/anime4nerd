@@ -1,6 +1,6 @@
 {
   "name": "anime4nerd",
-  "version": "1.2.2",
+  "version": "1.2.5",
   "description": "Anime4Nerd: real-time 2x–8x Anime4K upscaling for web video (browser extension).",
   "main": "index.js",
   "directories": {
@@ -12,7 +12,12 @@
     "typecheck": "tsc -p tsconfig.json",
     "pack": "node build.mjs && node pack.mjs",
     "build:firefox": "node build.mjs --firefox",
-    "pack:firefox": "node build.mjs --firefox && node pack.mjs --firefox"
+    "pack:firefox": "node build.mjs --firefox && node pack.mjs --firefox",
+    "test:links": "esbuild test/site-links-test.ts --bundle --platform=node --format=esm --define:__FIREFOX__=false --outfile=test/site-links-test.js --log-level=warning && node test/site-links-test.js && esbuild test/site-links-test.ts --bundle --platform=node --format=esm --define:__FIREFOX__=true --outfile=test/site-links-test.js --log-level=warning && node test/site-links-test.js",
+    "test:api": "node --test test/send-api.mjs",
+    "test:site": "node --test test/site-build.mjs",
+    "test:feedback": "node --test test/feedback-cli.mjs",
+    "feedback": "node scripts/feedback.mjs"
   },
   "keywords": [],
   "author": "",

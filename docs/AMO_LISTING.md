@@ -8,7 +8,7 @@ Companion to `docs/STORE_LISTING.md` (Chrome Web Store). Upload `Anime4Nerd fire
 **Add-on URL slug:** anime4nerd (the AMO link becomes https://addons.mozilla.org/firefox/addon/anime4nerd/ if the slug is free)
 
 **Summary (250 chars max):**
-Real-time 2x–8x Anime4K upscaling for any web video. Runs the original bloc97 shaders in WebGL2 on your GPU. No data collection, no network requests, nothing leaves your browser.
+Real-time 2x–8x Anime4K upscaling for any web video. Runs the original bloc97 shaders in WebGL2 on your GPU. No personal data collected automatically, no network requests; the video never leaves your browser.
 
 **Categories:** Photos, Music & Videos
 
@@ -35,7 +35,7 @@ Performance
 Speed is about the same as in Chrome: on an RTX 2060, 1080p60 → 4K with Mode A runs at about 57 fps in Firefox (55 in Chrome). Firefox does not offer GPU timer queries to WebGL, so the popup shows "GPU timing not available in this browser" where Chrome shows GPU milliseconds per frame; it still tells you whether upscaling keeps up with the video.
 
 Privacy
-No data collection, no network requests, no accounts. It only finds videos on the page and does nothing until you switch one on. Everything stays on your machine. Full policy: https://anime4nerd.pages.dev/privacy
+No personal data is collected automatically; no network requests, no accounts. It only finds videos on the page and does nothing until you switch one on, and the video stays on your machine. The popup's bug icon and the page shown after removal open optional forms on our website; they send only what you write (and any screenshots you attach), and only when you press send. Full policy: https://anime4nerd.pages.dev/privacy
 
 Requirements
 Firefox 140 or newer and a GPU with WebGL2. The video must be served with CORS (most players do this). DRM video (Widevine) cannot be read by any extension.
@@ -49,16 +49,16 @@ Not affiliated with bloc97 or any streaming site. Anime4K is MIT licensed. Sourc
 - Support email: leave empty (issues on GitHub), or add one if wanted.
 - License: MIT License
 - Privacy policy: paste the text of `PRIVACY.md` (AMO stores the policy text itself, not a link). The same policy is online at https://anime4nerd.pages.dev/privacy.
-- Data collection: the manifest declares `data_collection_permissions: { required: ["none"] }`, so AMO shows that the add-on collects no data.
+- Data collection: the manifest declares `data_collection_permissions: { required: ["none"] }`, so AMO shows that the add-on collects no data. The add-on itself sends nothing: `runtime.setUninstallURL` opens https://anime4nerd.pages.dev/uninstalled?v=<version> after removal, and the popup's bug icon opens https://anime4nerd.pages.dev/report?v=<version>&b=firefox in a tab. Both are website forms that send only when the user presses send (see `PRIVACY.md`). Mention this in the notes to reviewer.
 - "This add-on is experimental": no. "Requires payment": no.
-- Compatibility: Firefox desktop 140+. The manifest also sets Firefox for Android 142+ (`gecko_android`); only tick Android on upload once it has been tried on a phone (the smoke test covers desktop only).
+- Compatibility: Firefox desktop 140+ only. The manifest has no `gecko_android` key and Android must stay unticked on upload: the add-on has never been tested on a phone (the smoke test covers desktop only).
 
 ## Permission justifications
 
 AMO has no per-permission form; reviewers read the code and the notes to reviewer. Use these
 in the notes (they are also in `PRIVACY.md`):
 
-- `storage`: saves the preset, line effects and upscale factor (`storage.sync`, synced by Firefox Sync if the user has it on), the per-site on/off map (`storage.local`, key `anime4k-sources`) and a one-off "updated to x.y.z" flag for the What's new notice (`storage.local`). See `src/settings.ts` and `src/whats-new.ts`.
+- `storage`: saves the preset, line effects and upscale factor (`storage.sync`, synced by Firefox Sync if the user has it on), the per-site on/off map (`storage.local`, key `anime4k-sources`) and a one-off "updated to x.y.z" flag for the What's new notice (`storage.local`), and local usage counts (upscaled time and episodes, `storage.local` key `anime4k-rate`) that decide when the popup shows a "rate it" card linking to this add-on's reviews page; never synced or sent. See `src/settings.ts`, `src/whats-new.ts` and `src/rate-prompt.ts`.
 - `scripting`: on install or update, `src/background.ts` injects `content.css`, `content.js` and `fullscreen-redirect.js` into frames of tabs that were already open, so the user does not have to reload them. That is its only use.
 - `webNavigation`: `webNavigation.getAllFrames` lists the frames of a tab. The background uses it to inject frame by frame (one refused frame does not stop the rest), and the popup uses it to ask each frame for its videos, because players are usually in iframes.
 - Host permission `<all_urls>`: video players are embedded from many different domains (the page and the player's host differ), so the content script must run in every frame to find `<video>` elements, and must be able to read the frames of a video the user switches on. Until the user switches a video on in the popup, the content script only looks for `<video>` elements. Nothing is sent anywhere.
@@ -89,6 +89,13 @@ Anime4Nerd runs the Anime4K upscaling shaders over web <video> elements with Web
 network code, no remote code, no analytics and no accounts. The full source is attached and is
 also at https://github.com/creedweb3/anime4nerd (MIT).
 
+Website pages it opens (no data is sent by the add-on itself):
+- After removal, runtime.setUninstallURL opens https://anime4nerd.pages.dev/uninstalled?v=<version>.
+- The popup's bug icon opens https://anime4nerd.pages.dev/report?v=<version>&b=firefox in a tab.
+Both pages have optional feedback forms that send only what the user types (and, on /report, up
+to 3 screenshots they attach) when they press send; that content may contain personal data the
+user chooses to include. Policy: https://anime4nerd.pages.dev/privacy
+
 Build steps
 1. Node.js 24 (built with Node 24.15.0, npm 11.12.1). Any OS; no other tools needed.
 2. Unzip the source archive and, in its root folder, run:
@@ -107,12 +114,14 @@ What the build does (build.mjs)
   THIRD_PARTY_NOTICES.md). src/mpv-hooks.ts turns them into WebGL2 fragment shaders.
 - The manifest is manifest.json with Firefox changes (firefoxManifest() in build.mjs):
   background.scripts instead of a service worker, gecko id anime4nerd@creedweb3.github.io,
-  strict_min_version 140.0 (Android 142.0), data_collection_permissions none.
+  strict_min_version 140.0 (desktop only), data_collection_permissions none.
 - No runtime npm dependencies. Dev dependencies: esbuild, typescript, @types/chrome.
 
 Files in the package
-- background.js: on install/update, injects the content scripts into tabs already open.
-  Accepts no messages.
+- background.js: on install/update, injects the content scripts into tabs already open, and
+  sets the uninstall page URL (runtime.setUninstallURL, version only). It accepts only the
+  two "rate it" card messages from the add-on's own pages (sender.id is checked, values
+  clamped) and stores the counts locally.
 - content.js (+ content.css): runs in every frame, finds <video> elements, answers the
   popup, and draws the upscaled canvas over videos the user switched on.
 - gpu.js: the WebGL2 renderer and the bundled shaders. Loaded with
@@ -123,11 +132,12 @@ Files in the package
   element instead, because nothing can be drawn over a bare fullscreen video. It uses no
   extension APIs and sends nothing.
 - popup.html/js/css: the toolbar popup. Page-derived strings are set with textContent; the one
-  innerHTML use is a constant template without interpolation.
+  innerHTML use is a constant template without interpolation. Its bug icon is a plain link to
+  https://anime4nerd.pages.dev/report?v=<version>&b=firefox (target=_blank).
 
 Permissions
 - storage: preset, line effects and upscale factor (storage.sync); the per-site on/off map and
-  a "what's new" flag (storage.local).
+  a "what's new" flag and local usage counts for the "rate it" card (storage.local, never sent).
 - scripting: injection into already-open tabs on install/update (background.js only).
 - webNavigation: getAllFrames, to inject per frame and to let the popup query every frame,
   because video players are usually in iframes.
@@ -162,4 +172,4 @@ Screenshot captions (optional):
 2. Before / after: browser scaling vs Anime4K A+A with darken lines.
 3. The fullscreen menu.
 4. The six presets.
-5. Privacy: nothing leaves your browser.
+5. Privacy: the video never leaves your browser.

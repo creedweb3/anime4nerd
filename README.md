@@ -27,8 +27,8 @@ npm run pack:firefox    # also writes "Anime4Nerd firefox.zip"
 
 The Firefox build uses the same sources with a Firefox manifest
 (`firefoxManifest()` in `build.mjs`): `background.scripts` instead of a service
-worker, the add-on id `anime4nerd@creedweb3.github.io`, Firefox 140+ (Firefox
-for Android 142+), and `data_collection_permissions: none`. `pack` and
+worker, the add-on id `anime4nerd@creedweb3.github.io`, desktop Firefox 140+
+(not Firefox for Android), and `data_collection_permissions: none`. `pack` and
 `pack:firefox` write the zip with Windows' own `tar.exe` on Windows and with
 `zip` on Linux and macOS.
 
@@ -50,7 +50,9 @@ To limit it to certain sites, use the extension's "Site access" settings.
 
 ## Install (Firefox)
 
-From Firefox Add-ons: coming soon (Firefox 140 or newer).
+From Firefox Add-ons (desktop Firefox 140 or newer; Firefox for Android is not
+supported):
+https://addons.mozilla.org/firefox/addon/anime4nerd/
 
 From source, as a temporary add-on (removed when Firefox closes):
 
@@ -225,15 +227,15 @@ then `npx playwright install firefox`). It runs headless, installs
 and checks same-origin VP9 and H.264, a CORS source, a cross-origin iframe, the
 no-CORS message, a bare video file page and the fullscreen redirect.
 
-## Rating card (Chrome build)
+## Rating card
 
 At 3, 12, 48 and 200 upscaled episodes the popup shows one "rate it" card with the
 user's own totals (`src/rate-prompt.ts`). An episode is a video upscaled for at
 least 10 minutes; time counts only while frames are being drawn. The counts live in
 `chrome.storage.local` (`anime4k-rate`), are written only by the background, and
 never leave the device. ✕ hides the card until the next milestone, "rate it" opens
-the Web Store reviews page, and "✓ already rated" (offered after a click) stops it
-for good. The Firefox build has none of this.
+the store's reviews page (Chrome Web Store, or Firefox Add-ons in the Firefox build),
+and "✓ already rated" (offered after a click) stops it for good.
 
 ```bash
 npx esbuild test/rate-test.ts --bundle --platform=node --format=esm --outfile=test/rate-test.js && node test/rate-test.js
@@ -252,7 +254,7 @@ every state.
 
 - Extension code: MIT (`LICENSE`).
 - Anime4K shaders: MIT, bloc97 (`src/shaders/LICENSE`, `THIRD_PARTY_NOTICES.md`).
-- Privacy: `PRIVACY.md`. No data leaves the browser.
+- Privacy: `PRIVACY.md`. The extension sends no data. The popup's bug icon and the page shown after removal open optional forms on the website, which send only what you write, when you press send.
 - Security model and user safety guide: `SECURITY.md`.
 - Store listing draft: `docs/STORE_LISTING.md`; Firefox Add-ons listing and
   reviewer notes: `docs/AMO_LISTING.md`.

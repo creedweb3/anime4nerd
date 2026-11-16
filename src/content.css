@@ -9,6 +9,47 @@
   display: none;
 }
 
+/* The video's own subtitle tracks, redrawn over the canvas (src/content.ts paintCues). Looks like
+   the browser's default captions; geometry, z-index and font size are set inline. */
+.a4k-cues {
+  position: absolute;
+  pointer-events: none;
+  box-sizing: border-box;
+  /* The browsers' own caption font and row height: the black strips of two rows just touch. */
+  font: 400 1em/1.2 sans-serif;
+  color: #fff;
+}
+
+.a4k-cues[hidden] {
+  display: none;
+}
+
+/* Cues without their own placement: stacked at the bottom centre, newest last. */
+.a4k-cues .a4k-stack {
+  position: absolute;
+  left: 4%;
+  right: 4%;
+  bottom: 0.5%;
+  text-align: center;
+}
+
+.a4k-cues .a4k-cue {
+  white-space: pre-line;
+}
+
+/* Cues placed by their WebVTT settings get position/size inline. */
+.a4k-cues > .a4k-cue {
+  position: absolute;
+}
+
+/* A black strip behind each text row, like the browser's own captions. */
+.a4k-cues .a4k-cue > span {
+  background: rgba(0, 0, 0, 0.8);
+  padding: 0 0.25em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
 /* A <video> fullscreen request redirected to its parent (src/fullscreen-redirect.ts): make the
    video fill the screen as it would have on its own. */
 [data-a4k-fs]:fullscreen {

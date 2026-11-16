@@ -23,9 +23,20 @@ function loadGpu(): Promise<GpuModule> {
 }
 
 const MIN_VIDEO_PX = 200; // ignore thumbnails / preview videos
+const BUSY_RETRY_MS = 8; // wait before retrying a frame skipped because the GPU was still busy
 // Each renderer holds a WebGL context, compiled shaders and large float textures; browsers
 // cap live contexts (~16) and evict the oldest, so a page full of videos must not get one each.
 const MAX_ACTIVE_RENDERERS = 2;
+const STACK_CHECK_MS = 1000; // how often to check that the player's overlays still paint over the canvas
+// Redrawn subtitles (paintCues), sized like Chrome's own captions: font 5% of the video height,
+// rows touching, the last row almost on the bottom edge. Pages' ::cue rules can change the size.
+const CUE_FONT_SHARE = 0.05;
+const CUE_LINE_HEIGHT = 1.2; // em per text row; must match line-height in content.css
+const CUE_MIN_PX = 12;
+const CUE_EDGE_PCT = 0.5; // gap between the picture edge and the first/last row
+const CUE_MAX_LINES = 12; // a line setting further out than this would land off the picture
+const CUE_MIN_SIZE_PCT = 20;
+const CUE_LIFT_RECHECK_MS = [150, 1200, 3500]; // after a pointer move: shown, then faded control bars
 
 declare global { interface Window { __a4kLoaded?: boolean } }
 let nextId = 1;
@@ -43,6 +54,9 @@ class VideoUpscaler {
 
   private frameHandle: number | null = null;
 
+  // Retry of a frame skipped because the GPU was still busy (see frame()).
+  private busyTimer: number | null = null;
+
   private usesVfc = false;
 
   private rendering = false;
@@ -50,6 +64,18 @@ class VideoUpscaler {
   private rerender = false;
 
   private failed = false;
+
+  /** Set when the canvas had to move to the start of this container (see coversOverlay). */
+  private lowered: Element | null = null;
+
+  private lastStackCheck = 0;
+
+  /** Our copy of the browser's own subtitles (see paintCues). */
+  private cues: HTMLDivElement | null = null;
+
+  private readonly cueTracks = new WeakSet<TextTrack>();
+
+  private cueListWatched = false;
 
   private starting = false;
 
@@ -296,6 +322,7 @@ class VideoUpscaler {
     canvas.setAttribute('aria-hidden', 'true');
     this.canvas = canvas;
     this.mountCanvas(canvas);
+    this.watchCues();
     this.setStatus('Loading', 'Preparing Anime4K (first start compiles shaders, 5–10 s).');
 
     const timeout = window.setTimeout(() => {
@@ -346,9 +373,10 @@ class VideoUpscaler {
     if (v.videoWidth !== this.width || v.videoHeight !== this.height) { this.teardown(); this.sync(); return; }
     if (r.busy()) {
       // The GPU is still on the last frame: queueing another only adds lag and load. Draw
-      // whatever frame is current once it is done (skipping frames it had no time for).
-      this.usesVfc = false;
-      this.frameHandle = requestAnimationFrame(() => { this.frameHandle = null; this.frame(); });
+      // whatever frame is current once it is done (skipping frames it had no time for). A
+      // timer, not an animation frame: those stop while the window is covered, which would
+      // leave a paused video without its picture.
+      this.busyTimer = window.setTimeout(() => { this.busyTimer = null; this.frame(); }, BUSY_RETRY_MS);
       return;
     }
     const gen = this.generation;
@@ -356,9 +384,10 @@ class VideoUpscaler {
     try {
       r.render();
       if (gen !== this.generation) return;
-      if (this.canvas) this.canvas.hidden = false;
+      // Shown again (scrolled back, tab back, seek done): the redrawn subtitles must come back with it.
+      if (this.canvas?.hidden) { this.canvas.hidden = false; this.paintCues(); }
       this.setStatus('Active');
-      if (!__FIREFOX__) this.countWatch();
+      this.countWatch();
     } catch (e) {
       if (gen === this.generation) {
         // gpu.js is a separate bundle, so match the error by name rather than instanceof.
@@ -447,6 +476,7 @@ class VideoUpscaler {
   }
 
   private stopLoop() {
+    if (this.busyTimer !== null) { window.clearTimeout(this.busyTimer); this.busyTimer = null; }
     if (this.frameHandle === null) return;
     if (this.usesVfc) this.video.cancelVideoFrameCallback(this.frameHandle);
     else cancelAnimationFrame(this.frameHandle);
@@ -460,6 +490,8 @@ class VideoUpscaler {
     this.renderer = null;
     this.canvas?.remove();
     this.canvas = null;
+    this.cues?.remove();
+    this.cues = null;
     this.starting = false;
     this.rendering = false;
     this.rerender = false;
@@ -470,9 +502,155 @@ class VideoUpscaler {
   private mountCanvas(canvas: HTMLCanvasElement) {
     const parent = this.video.parentElement;
     if (!parent) return;
-    if (!pageLevel(parent) && getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
-    this.video.insertAdjacentElement('afterend', canvas);
+    if (this.lowered && this.lowered.contains(this.video)) {
+      // See coversOverlay: first in the player container, so all of the player's overlays paint over it.
+      this.lowered.prepend(canvas);
+    } else {
+      this.lowered = null;
+      if (!pageLevel(parent) && getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
+      this.video.insertAdjacentElement('afterend', canvas);
+    }
     this.layout();
+  }
+
+  /** Repaint our subtitle copy whenever a track's cues or modes change. */
+  private watchCues() {
+    const tracks = this.video.textTracks;
+    const hook = () => {
+      for (const t of tracks) {
+        if (this.cueTracks.has(t)) continue;
+        this.cueTracks.add(t);
+        t.addEventListener('cuechange', () => this.paintCues());
+      }
+      this.paintCues();
+    };
+    if (!this.cueListWatched) {
+      this.cueListWatched = true;
+      tracks.addEventListener('addtrack', hook);
+      tracks.addEventListener('change', hook);
+      // Players show their control bar on pointer movement and fade it a few seconds later:
+      // re-check the subtitle lift shortly after a move and again once a fade has finished.
+      let timers: number[] = [];
+      document.addEventListener('pointermove', () => {
+        if (!this.cues || this.cues.hidden) return;
+        for (const t of timers) clearTimeout(t);
+        timers = CUE_LIFT_RECHECK_MS.map((ms) => window.setTimeout(() => this.paintCues(), ms));
+      }, { passive: true, capture: true });
+    }
+    hook();
+  }
+
+  /**
+   * The browser draws a <video>'s own subtitle tracks (<track>, WebVTT) inside the video picture, so
+   * the canvas covers them. Show the active cues again in a layer just above the canvas, over the
+   * same picture area, styled like the browser's default captions.
+   */
+  private paintCues() {
+    const c = this.canvas;
+    const active = c && !c.hidden
+      ? [...this.video.textTracks].filter((t) => t.mode === 'showing').flatMap((t) => [...(t.activeCues ?? [])])
+      : [];
+    if (!c || !active.length) { if (this.cues) this.cues.hidden = true; return; }
+    let box = this.cues;
+    if (!box) {
+      box = document.createElement('div');
+      box.className = 'a4k-cues';
+      box.setAttribute('aria-hidden', 'true'); // screen readers already get the real track
+      this.cues = box;
+    }
+    if (box.previousElementSibling !== c) c.insertAdjacentElement('afterend', box);
+    for (const k of ['left', 'top', 'width', 'height', 'clipPath', 'zIndex'] as const) box.style[k] = c.style[k];
+    box.style.fontSize = `${Math.max(CUE_MIN_PX, parseFloat(c.style.height) * CUE_FONT_SHARE)}px`;
+    // Cues with their own placement go where they ask; the rest stack at the bottom centre.
+    const stack = document.createElement('div');
+    stack.className = 'a4k-stack';
+    const placed: HTMLElement[] = [];
+    for (const cue of active) {
+      const el = document.createElement('div');
+      el.className = 'a4k-cue';
+      const text = document.createElement('span');
+      // getCueAsHTML keeps WebVTT's own <i>/<b>/<u> markup; it builds nodes, never runs page markup.
+      if ('getCueAsHTML' in cue) text.append((cue as VTTCue).getCueAsHTML());
+      else text.textContent = (cue as { text?: string }).text ?? '';
+      el.append(text);
+      applyCueRules(text, this.video);
+      // A ::cue font size or line height sizes the whole cue box, rows included: move them from the
+      // text to the box, or rows keep the default height around smaller text and drift apart.
+      for (const k of ['fontSize', 'lineHeight'] as const) {
+        if (text.style[k]) { el.style[k] = text.style[k]; text.style[k] = ''; }
+      }
+      const at = cuePlacement(cue);
+      if (at) { Object.assign(el.style, at); placed.push(el); } else stack.append(el);
+    }
+    // Bottom-anchored cues move up above the player's control bar while it is showing.
+    const lift = this.controlBarLift(c);
+    if (lift) {
+      stack.style.bottom = `calc(${CUE_EDGE_PCT}% + ${lift}px)`;
+      for (const el of placed) if (el.style.bottom) el.style.bottom = `calc(${el.style.bottom} + ${lift}px)`;
+    }
+    box.replaceChildren(stack, ...placed);
+    box.hidden = false;
+  }
+
+  /**
+   * Height in px of the player's control bar over the bottom of the picture, while it is visible;
+   * 0 when hidden or absent. A control bar here is something drawn over the video along the bottom
+   * edge, at least 40% of the picture wide and at most 35% tall (so full-size click layers don't count).
+   */
+  private controlBarLift(c: HTMLCanvasElement): number {
+    const v = this.video;
+    const root = v.getRootNode() as Document | ShadowRoot;
+    const r = c.getBoundingClientRect();
+    if (r.height < 50) return 0;
+    let top = r.bottom;
+    for (const fx of [0.2, 0.5, 0.8]) {
+      const x = r.left + r.width * fx;
+      const y = r.bottom - Math.min(8, r.height * 0.02);
+      if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) continue;
+      const hits = root.elementsFromPoint(x, y);
+      const vi = hits.indexOf(v);
+      for (const e of vi < 0 ? hits : hits.slice(0, vi)) {
+        if (e === c || e.contains(v) || this.cues?.contains(e)) continue;
+        const b = e.getBoundingClientRect();
+        if (b.height > r.height * 0.35 || b.width < r.width * 0.4 || b.bottom < r.bottom - r.height * 0.05) continue;
+        if (!isShown(e)) continue;
+        top = Math.min(top, b.top);
+      }
+    }
+    return Math.round(Math.min(r.height * 0.35, Math.max(0, r.bottom - top)));
+  }
+
+  /**
+   * True when something the page draws over the video (controls, menus, subtitles) ends up under the
+   * canvas. Right after the video is the right place for almost every player, but a player that puts
+   * its controls before an unpositioned <video> would have them painted under the canvas. Checked by
+   * hit-testing a grid over the picture with and without the canvas.
+   */
+  private coversOverlay(c: HTMLCanvasElement): boolean {
+    const v = this.video;
+    const root = v.getRootNode() as Document | ShadowRoot;
+    const r = c.getBoundingClientRect();
+    // Rows reach close to the edges: control bars and subtitles sit in the bottom tenth.
+    const rows = [0.04, 0.25, 0.5, 0.75, 0.88, 0.96];
+    const cols = [0.06, 0.3, 0.5, 0.7, 0.94];
+    for (const fy of rows) {
+      for (const fx of cols) {
+        const x = r.left + r.width * fx;
+        const y = r.top + r.height * fy;
+        if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) continue;
+        const under = root.elementsFromPoint(x, y); // the canvas is pointer-events: none, so not listed
+        const vi = under.indexOf(v);
+        if (vi <= 0) continue;
+        const above = under.slice(0, vi).filter((e) => !e.contains(v));
+        if (!above.length) continue;
+        c.style.pointerEvents = 'auto';
+        const over = root.elementsFromPoint(x, y);
+        c.style.pointerEvents = '';
+        const ci = over.indexOf(c);
+        if (ci >= 0 && above.some((e) => over.indexOf(e) > ci)) return true;
+      }
+    }
+    return false;
   }
 
   /** Re-check placement; called on every scan because players move or restyle the video without resizing it. */
@@ -498,9 +676,14 @@ class VideoUpscaler {
     // Display size crossed the 2x line (fullscreen, theater mode, zoom): rebuild at the other scale.
     if ((this.renderer || this.starting) && this.wantedScale() !== this.scale) { this.teardown(); this.sync(); return; }
     // Players move the <video> between containers (theater/fullscreen layouts): follow it.
-    if (c.previousElementSibling !== v) { this.mountCanvas(c); return; }
+    const host = this.lowered;
+    const misplaced = host
+      ? c.parentElement !== host || host.firstElementChild !== c || !host.contains(v)
+      : c.previousElementSibling !== v;
+    if (misplaced) { this.mountCanvas(c); return; }
+    const box = host ?? parent; // the canvas's containing block
     const vr = v.getBoundingClientRect();
-    const pr = parent.getBoundingClientRect();
+    const pr = box.getBoundingClientRect();
     const cs = getComputedStyle(v);
     const px = (s: string) => parseFloat(s) || 0;
     // object-fit applies to the content box, inside the video's own border and padding.
@@ -512,14 +695,14 @@ class VideoUpscaler {
     const [posX, posY] = cs.objectPosition.split(' ');
     const ox = objectOffset(posX, bw - pw);
     const oy = objectOffset(posY, bh - ph);
-    if (pageLevel(parent) && getComputedStyle(parent).position === 'static') {
+    if (!host && pageLevel(parent) && getComputedStyle(parent).position === 'static') {
       // No positioned parent (see mountCanvas): the canvas is placed in page coordinates.
       c.style.left = `${vr.left + window.scrollX + boxL + ox}px`;
       c.style.top = `${vr.top + window.scrollY + boxT + oy}px`;
     } else {
-      // An absolutely positioned child is placed from the parent's padding box and scrolls with it.
-      c.style.left = `${vr.left - pr.left - parent.clientLeft + parent.scrollLeft + boxL + ox}px`;
-      c.style.top = `${vr.top - pr.top - parent.clientTop + parent.scrollTop + boxT + oy}px`;
+      // An absolutely positioned child is placed from its container's padding box and scrolls with it.
+      c.style.left = `${vr.left - pr.left - box.clientLeft + box.scrollLeft + boxL + ox}px`;
+      c.style.top = `${vr.top - pr.top - box.clientTop + box.scrollTop + boxT + oy}px`;
     }
     c.style.width = `${pw}px`;
     c.style.height = `${ph}px`;
@@ -527,9 +710,153 @@ class VideoUpscaler {
     // inset() order: top right bottom left.
     const clip = [-oy, ox + pw - bw, oy + ph - bh, -ox].map((n) => Math.max(0, n));
     c.style.clipPath = clip.some((n) => n > 0) ? `inset(${clip.map((n) => `${n}px`).join(' ')})` : '';
+    // Same stacking level as the video: the canvas sits right after it in the DOM, so it paints over
+    // the video but under anything the player draws on top (controls, menus, subtitles).
     const z = cs.zIndex;
-    c.style.zIndex = z && z !== 'auto' ? String(Number(z) + 1) : '1';
+    c.style.zIndex = !host && z && z !== 'auto' ? z : '';
+    // Once a second while drawing: if the player's own overlays end up under the canvas, move it to
+    // the start of the player's positioned container (see coversOverlay).
+    const now = performance.now();
+    if (!host && !c.hidden && now - this.lastStackCheck > STACK_CHECK_MS) {
+      this.lastStackCheck = now;
+      const container = positionedAncestor(v);
+      if (container && this.coversOverlay(c)) { this.lowered = container; this.mountCanvas(c); return; }
+    }
+    this.paintCues(); // follow size and position changes
   }
+}
+
+/**
+ * Where a cue asks to be drawn, from its WebVTT settings (line, position, size, align), as styles
+ * for an absolutely placed box in the picture area. Null means "use the default": bottom centre.
+ * Settings that would put the text off the picture, or that we don't draw (vertical text), fall
+ * back to the default rather than being followed.
+ */
+function cuePlacement(cue: TextTrackCue): Partial<CSSStyleDeclaration> | null {
+  if (typeof VTTCue === 'undefined' || !(cue instanceof VTTCue) || cue.vertical) return null;
+  const { line } = cue;
+  if (line === 'auto' && cue.position === 'auto' && cue.size >= 100 && cue.align === 'center') return null;
+  const s: Partial<CSSStyleDeclaration> = {};
+  // Vertical: a line number counts text rows from the top (0, 1, …) or bottom (-1, -2, …);
+  // a percentage is a point on the picture's height.
+  if (line === 'auto') {
+    s.bottom = `${CUE_EDGE_PCT}%`;
+  } else if (cue.snapToLines) {
+    if (Math.abs(line) > CUE_MAX_LINES) return null;
+    if (line >= 0) s.top = `calc(${line * CUE_LINE_HEIGHT}em + ${CUE_EDGE_PCT}%)`;
+    else s.bottom = `calc(${(-line - 1) * CUE_LINE_HEIGHT}em + ${CUE_EDGE_PCT}%)`;
+  } else {
+    if (line < 0 || line > 100) return null;
+    if (cue.lineAlign === 'end') s.bottom = `${100 - line}%`;
+    else {
+      s.top = `${line}%`;
+      if (cue.lineAlign === 'center') s.transform = 'translateY(-50%)';
+    }
+  }
+  // Horizontal: a box `size`% wide, anchored at `position`% by positionAlign; text aligned by align.
+  const align = cue.align === 'left' || cue.align === 'start' ? 'start' : cue.align === 'right' || cue.align === 'end' ? 'end' : 'center';
+  const size = Math.min(100, Math.max(CUE_MIN_SIZE_PCT, cue.size)); // too narrow: widen instead of one word per row
+  let pos = cue.position === 'auto' ? { start: 0, center: 50, end: 100 }[align] : cue.position;
+  if (pos < 0 || pos > 100) pos = 50;
+  // Chrome's VTTCue has no positionAlign/lineAlign properties at all: treat missing as 'auto'/'start'.
+  const anchor = !cue.positionAlign || cue.positionAlign === 'auto'
+    ? { start: 'line-left', center: 'center', end: 'line-right' }[align]
+    : cue.positionAlign;
+  const left = anchor === 'line-left' ? pos : anchor === 'line-right' ? pos - size : pos - size / 2;
+  s.left = `${Math.min(100 - size, Math.max(0, left))}%`;
+  s.width = `${size}%`;
+  s.textAlign = { start: 'left', center: 'center', end: 'right' }[align];
+  return s;
+}
+
+// --- the page's own ::cue styles, applied to our subtitle copy --------------
+// Only the properties browsers let ::cue change (CSS Pseudo-Elements, WebVTT spec), so the copy
+// looks the way the browser would have drawn it with the page's styles.
+const CUE_PROPS = /^(color|opacity|visibility|text-decoration(-.+)?|text-shadow|background(-.+)?|outline(-.+)?|font(-.+)?|line-height|white-space|text-combine-upright|ruby-position)$/;
+const CUE_RULES_MS = 2000; // re-read the page's stylesheets at most this often
+interface CueRule { prefix: string; inner: string | null; decls: [string, string, string][] }
+let cueRules: { at: number; root: Document | ShadowRoot; rules: CueRule[] } | null = null;
+
+/** Split a selector list on top-level commas (not the ones inside ::cue(a, b) or :is(...)). */
+function splitSelectors(list: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < list.length; i += 1) {
+    const ch = list[i];
+    if (ch === '(') depth += 1;
+    else if (ch === ')') depth -= 1;
+    else if (ch === ',' && depth === 0) { out.push(list.slice(start, i)); start = i + 1; }
+  }
+  out.push(list.slice(start));
+  return out.map((s) => s.trim());
+}
+
+function readCueRules(root: Document | ShadowRoot): CueRule[] {
+  const rules: CueRule[] = [];
+  const walk = (list: CSSRuleList) => {
+    for (const r of list) {
+      if (r instanceof CSSMediaRule && !matchMedia(r.media.mediaText).matches) continue;
+      if (r instanceof CSSStyleRule && r.selectorText.includes('::cue')) {
+        const decls: [string, string, string][] = [];
+        for (const name of r.style) {
+          if (CUE_PROPS.test(name)) decls.push([name, r.style.getPropertyValue(name), r.style.getPropertyPriority(name)]);
+        }
+        if (!decls.length) continue;
+        for (const sel of splitSelectors(r.selectorText)) {
+          const m = sel.match(/^(.*?)::cue(?:\((.*)\))?$/);
+          if (m) rules.push({ prefix: m[1].trim(), inner: m[2]?.trim() || null, decls });
+        }
+      } else if ('cssRules' in r && (r as CSSGroupingRule).cssRules) {
+        walk((r as CSSGroupingRule).cssRules);
+      }
+    }
+  };
+  for (const sheet of [...root.styleSheets, ...(root.adoptedStyleSheets ?? [])]) {
+    try { walk(sheet.cssRules); } catch { /* cross-origin sheet: unreadable, as for any page script */ }
+  }
+  return rules;
+}
+
+/** Style one cue's text (and its <i>, <b>, <c.class> parts) with the page's ::cue rules. */
+function applyCueRules(text: HTMLElement, video: HTMLVideoElement) {
+  const root = video.getRootNode() as Document | ShadowRoot;
+  const now = performance.now();
+  if (!cueRules || cueRules.root !== root || now - cueRules.at > CUE_RULES_MS) cueRules = { at: now, root, rules: readCueRules(root) };
+  if (!cueRules.rules.length) return;
+  // Normal declarations first, then !important ones, each in stylesheet order: later rules win,
+  // !important beats normal, as in the cascade.
+  for (const important of [false, true]) {
+    for (const rule of cueRules.rules) {
+      try {
+        if (rule.prefix && !video.matches(rule.prefix)) continue;
+        const targets = rule.inner ? [...text.querySelectorAll<HTMLElement>(rule.inner)] : [text];
+        for (const el of targets) {
+          for (const [name, value, prio] of rule.decls) if ((prio === 'important') === important) el.style.setProperty(name, value);
+        }
+      } catch { /* a selector the browser can't match from here (e.g. VTT-only syntax): skip it */ }
+    }
+  }
+}
+
+/** Painted at all: not display:none or visibility:hidden, and not faded out (opacity along the ancestors). */
+function isShown(el: Element): boolean {
+  let opacity = 1;
+  for (let n: Element | null = el; n; n = n.parentElement) {
+    const s = getComputedStyle(n);
+    if (s.display === 'none' || s.visibility === 'hidden') return false;
+    opacity *= Number(s.opacity);
+    if (opacity < 0.1) return false;
+  }
+  return true;
+}
+
+/** Nearest positioned ancestor below <body>, or null. */
+function positionedAncestor(el: Element): Element | null {
+  for (let p = el.parentElement; p && !pageLevel(p); p = p.parentElement) {
+    if (getComputedStyle(p).position !== 'static') return p;
+  }
+  return null;
 }
 
 /**
@@ -634,7 +961,7 @@ function notify() {
   syncMenu();
 }
 
-// --- watch counting for the rating card (Chrome only) -------------------------------
+// --- watch counting for the rating card -----------------------------------------
 // Totals since the last report; sent to the background about once a minute and on page hide.
 const watchReport = { seconds: 0, episodes: 0 };
 const WATCH_REPORT_MS = 60000;
@@ -778,9 +1105,7 @@ if (!window.__a4kLoaded) {
   scan();
   // Videos that become visible later (lazy players) are picked up by periodic rescans.
   scanTimer = window.setInterval(queueScan, 2000);
-  if (!__FIREFOX__) {
-    watchTimer = window.setInterval(reportWatch, WATCH_REPORT_MS);
-    window.addEventListener('pagehide', reportWatch);
-  }
+  watchTimer = window.setInterval(reportWatch, WATCH_REPORT_MS);
+  window.addEventListener('pagehide', reportWatch);
   })();
 }

@@ -7,6 +7,7 @@ import { REVIEW_URL, RateAction, cardFor, loadRate, pendingLevel } from './rate-
 import { MANGA_PROTOCOL, loadMangaSites, onMangaSitesChanged, setMangaSites } from './manga-sites';
 import type { MangaStatus } from './manga';
 import type { MangaMeta } from './manga-meta';
+import { BROWSER, reportUrl } from './site-links';
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
 const hintEl = $('#hint');
@@ -17,6 +18,8 @@ const presetNameEl = $('#presetName');
 const sourcesEl = $('#sources');
 const emptyEl = $('#empty');
 const presetsEl = $('#presets');
+// popup.html carries a plain /report link; this adds the version and browser.
+$<HTMLAnchorElement>('#report').href = reportUrl(chrome.runtime.getManifest().version, BROWSER);
 const perf = {
   verdict: $('#verdict'), load: $('#k-load'), ms: $('#k-ms'), fps: $('#k-fps'), avg: $('#k-avg'), limit: $('#k-limit'), late: $('#k-late'),
   bars: $('#bars'), legend: $('#legend'),
@@ -364,9 +367,8 @@ async function showWhatsNew() {
   await clearWhatsNew().catch(() => {});
 }
 
-/** Rating card at a new milestone (Chrome only). Answers go to the background, which stores them. */
+/** Rating card at a new milestone. Answers go to the background, which stores them. */
 async function showRateCard() {
-  if (__FIREFOX__) return;
   const state = await loadRate().catch(() => null);
   const level = state && pendingLevel(state);
   if (!state || !level) return;

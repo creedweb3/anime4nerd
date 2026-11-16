@@ -10,8 +10,22 @@ import { markUpdated, restoreBadge } from './whats-new';
 import { RateAction, addWatch, applyAction, markReturning, updateRate } from './rate-prompt';
 import type { Message } from './settings';
 import { addressBlocked, isMetadataHost, isPrivateHost } from './private-host';
+import { uninstallUrl } from './site-links';
 
 const RATE_ACTIONS: readonly RateAction[] = ['dismiss', 'clicked', 'rated'];
+
+// After removal the browser opens the site's optional feedback page. The URL carries only the
+// version; the page sends answers only if the user fills it in and presses send. A failure here
+// must not stop the rest of the background script, so it is logged and ignored.
+function setUninstallPage(): void {
+  const warn = (e: unknown) => console.warn('Anime4Nerd: could not set the uninstall page', e);
+  try {
+    chrome.runtime.setUninstallURL(uninstallUrl(chrome.runtime.getManifest().version)).catch(warn);
+  } catch (e) {
+    warn(e);
+  }
+}
+setUninstallPage();
 
 async function injectTab(tabId: number): Promise<void> {
   let frames: { frameId: number }[] = [];
@@ -27,30 +41,28 @@ async function injectTab(tabId: number): Promise<void> {
 chrome.runtime.onInstalled.addListener(async (details) => {
   const version = chrome.runtime.getManifest().version;
   if (details.reason === 'update' && details.previousVersion !== version) await markUpdated(version).catch(() => {});
-  if (details.reason === 'update' && !__FIREFOX__) await markReturning().catch(() => {});
+  if (details.reason === 'update') await markReturning().catch(() => {});
   const tabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] });
   await Promise.allSettled(tabs.map((t) => (t.id ? injectTab(t.id) : Promise.resolve())));
 });
 
 chrome.runtime.onStartup.addListener(() => { void restoreBadge().catch(() => {}); });
 
-// Rating card counters (Chrome build only). Only this extension's own pages and content
-// scripts can send runtime messages here; values are clamped again in addWatch.
-if (!__FIREFOX__) {
-  chrome.runtime.onMessage.addListener((msg: Message, sender, respond) => {
-    if (sender.id !== chrome.runtime.id) return false;
-    if (msg?.type === 'a4k-watch') void updateRate((s) => addWatch(s, msg.seconds, msg.episodes)).catch(() => {});
-    else if (msg?.type === 'a4k-rate' && RATE_ACTIONS.includes(msg.action)) void updateRate((s) => applyAction(s, msg.action, msg.level)).catch(() => {});
-    else if (msg?.type === 'a4k-fetch-image') {
-      if (!sender.tab?.url || sender.frameId === undefined) { respond({ error: 'Only page frames may ask.' }); return false; }
-      // The asking frame's own origin decides the local-address exemption, not the tab around it.
-      const frame = `${sender.tab.id}:${sender.documentId}`;
-      limited(sender.tab.id ?? -1, () => fetchImage(msg.url, sender.origin ?? sender.url ?? '', frame)).then(respond, (e: unknown) => respond({ error: e instanceof Error ? e.message : String(e) }));
-      return true; // answers asynchronously
-    }
-    return false;
-  });
-}
+// Rating card counters, and manga page images (Chrome build only). Only this extension's own
+// pages and content scripts can send runtime messages here; values are clamped again in addWatch.
+chrome.runtime.onMessage.addListener((msg: Message, sender, respond) => {
+  if (sender.id !== chrome.runtime.id) return false;
+  if (msg?.type === 'a4k-watch') void updateRate((s) => addWatch(s, msg.seconds, msg.episodes)).catch(() => {});
+  else if (msg?.type === 'a4k-rate' && RATE_ACTIONS.includes(msg.action)) void updateRate((s) => applyAction(s, msg.action, msg.level)).catch(() => {});
+  else if (!__FIREFOX__ && msg?.type === 'a4k-fetch-image') {
+    if (!sender.tab?.url || sender.frameId === undefined) { respond({ error: 'Only page frames may ask.' }); return false; }
+    // The asking frame's own origin decides the local-address exemption, not the tab around it.
+    const frame = `${sender.tab.id}:${sender.documentId}`;
+    limited(sender.tab.id ?? -1, () => fetchImage(msg.url, sender.origin ?? sender.url ?? '', frame)).then(respond, (e: unknown) => respond({ error: e instanceof Error ? e.message : String(e) }));
+    return true; // answers asynchronously
+  }
+  return false;
+});
 
 /** Largest manga page image the background will fetch for a content script. */
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;

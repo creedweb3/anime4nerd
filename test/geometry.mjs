@@ -74,11 +74,78 @@ const LAYOUT = [
     expect: (v) => ({ x: v.x + 120, y: v.y, w: 720, h: 540 }),
   },
   {
+    // Player controls drawn over the video (z-index auto) must stay on top of the upscaled picture.
+    name: 'layout-controls',
+    body: `<div style="position:relative;width:960px;height:540px">${video()}<div id="ctl" style="position:absolute;left:0;right:0;bottom:0;height:48px;background:#333"></div></div>`,
+    expect: (v) => ({ x: v.x + 120, y: v.y, w: 720, h: 540 }),
+    top: '#ctl',
+  },
+  {
+    // Same, with a positioned video and controls at the same z-index after it.
+    name: 'layout-controls-z',
+    body: `<div style="position:relative;width:960px;height:540px">${video('position:relative;z-index:1')}<div id="ctl" style="position:absolute;z-index:1;left:0;right:0;bottom:0;height:48px;background:#333"></div></div>`,
+    expect: (v) => ({ x: v.x + 120, y: v.y, w: 720, h: 540 }),
+    top: '#ctl',
+  },
+  {
+    // Controls placed before the <video> in the page (video not positioned): the canvas must still
+    // end up under them, so it may be mounted elsewhere than right after the video.
+    name: 'layout-controls-before',
+    body: `<div style="position:relative;width:960px;height:540px"><div id="ctl" style="position:absolute;left:0;right:0;bottom:0;height:48px;background:#333"></div>${video()}</div>`,
+    expect: (v) => ({ x: v.x + 120, y: v.y, w: 720, h: 540 }),
+    top: '#ctl',
+    anywhere: true,
+  },
+  {
+    // The browser draws <track> subtitles inside the video, under the canvas: Anime4Nerd redraws
+    // them above it, where the WebVTT cue settings ask, and falls back to bottom-centre for
+    // placements that would land off the picture or that it doesn't support (vertical text).
+    name: 'layout-cues',
+    // The page's own ::cue rules must carry over: yellow text, green <b>, and the cue's <i> stays italic.
+    body: '<style>video::cue { color: rgb(255, 200, 0); padding: 9em } ::cue(b) { color: rgb(0, 255, 0) }</style>'
+      + video().replace('></video>', '><track kind="subtitles" src="cues.vtt" srclang="en" default></video>'),
+    cueStyle: (s) => s.italic === 'italic' && s.color === 'rgb(255, 200, 0)' && s.bold === 'rgb(0, 255, 0)' && s.padding.startsWith('0px '), // ::cue can't set padding
+    // fx/fy: where the cue's centre sits as a fraction of the picture.
+    cues: {
+      'Bottom line': (p) => p.fy > 0.75 && Math.abs(p.fx - 0.5) < 0.15,
+      'Top sign': (p) => p.fy < 0.25,
+      'Left note': (p) => p.fx > 0.1 && p.fx < 0.3 && p.fy > 0.3 && p.fy < 0.7, // box from 10%, text left-aligned
+      'Weird far': (p) => p.fy > 0.75,
+      Sideways: (p) => p.fy > 0.75,
+    },
+  },
+  {
+    // While the player's control bar is showing, the redrawn subtitles sit above it; when it hides
+    // (opacity 0), they go back down to the bottom edge.
+    name: 'layout-cues-bar',
+    body: `<div style="position:relative;width:960px;height:540px">${video().replace('></video>', '><track kind="subtitles" src="bar.vtt" srclang="en" default></video>')}<div id="bar" style="position:absolute;left:0;right:0;bottom:0;height:64px;background:rgba(20,20,20,.7)"></div></div>`,
+    bar: true,
+  },
+  {
     name: 'layout-cap', // three eligible videos: only MAX_ACTIVE_RENDERERS (2) may run
     body: [1, 2, 3].map(() => video('width:480px;height:270px')).join(''),
     statuses: { Active: 2, Waiting: 1 },
   },
 ];
+
+// Cues for layout-cues: all active for the whole (looping) clip.
+const CUES_VTT = `WEBVTT
+
+00:00.000 --> 01:00.000
+<i>Bottom</i> <b>line</b>
+
+00:00.000 --> 01:00.000 line:0
+Top sign
+
+00:00.000 --> 01:00.000 line:50% position:10% align:start size:40%
+Left note
+
+00:00.000 --> 01:00.000 line:-40
+Weird far
+
+00:00.000 --> 01:00.000 vertical:rl
+Sideways
+`;
 
 const server = http.createServer((req, res) => {
   const name = path.basename(new URL(req.url, 'http://x').pathname);
@@ -86,6 +153,9 @@ const server = http.createServer((req, res) => {
   if (name.endsWith('.mp4')) {
     res.writeHead(200, { 'content-type': 'video/mp4' });
     fs.createReadStream(path.join(work, name)).pipe(res);
+  } else if (name === 'cues.vtt' || name === 'bar.vtt') {
+    res.writeHead(200, { 'content-type': 'text/vtt' });
+    res.end(name === 'cues.vtt' ? CUES_VTT : 'WEBVTT\n\n00:00.000 --> 01:00.000\nAbove the bar\n');
   } else if (layout) {
     res.writeHead(200, { 'content-type': 'text/html' });
     res.end(`<!doctype html><body style="margin:0">${layout.body}</body>`);
@@ -101,14 +171,18 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'a4k-geom-profile-'));
 const ctx = await chromium.launchPersistentContext(profile, {
   headless: false,
   executablePath: exe,
-  args: [`--disable-extensions-except=${dist}`, `--load-extension=${dist}`, '--autoplay-policy=no-user-gesture-required'],
+  // A real window (real GPU), parked off-screen so it does not pop up; A4K_SHOW=1 shows it.
+  args: [...(process.env.A4K_SHOW ? [] : ['--window-position=-32000,-32000']), `--disable-extensions-except=${dist}`, `--load-extension=${dist}`, '--autoplay-policy=no-user-gesture-required'],
 });
 let failures = 0;
 try {
   const sw = ctx.serviceWorkers()[0] ?? await ctx.waitForEvent('serviceworker', { timeout: 10000 });
   await sw.evaluate((key) => chrome.storage.local.set({ 'anime4k-sources': { [key]: true } }), `127.0.0.1:${port}::127.0.0.1:${port}`);
 
+  // ONLY=<regex> runs just the matching cases, e.g. ONLY=controls
+  const only = process.env.ONLY ? new RegExp(process.env.ONLY) : null;
   for (const c of CASES) {
+    if (only && !only.test(c.name)) continue;
     const page = await ctx.newPage();
     const glErrors = [];
     page.on('console', (m) => { if (/GL_INVALID|WebGL: /.test(m.text())) glErrors.push(m.text()); });
@@ -136,6 +210,7 @@ try {
   }
 
   for (const l of LAYOUT) {
+    if (only && !only.test(l.name)) continue;
     const page = await ctx.newPage();
     await page.goto(`http://127.0.0.1:${port}/${l.name}`);
     await page.waitForTimeout(12000);
@@ -146,13 +221,46 @@ try {
     });
     let ok;
     let detail;
-    if (l.statuses) {
+    if (l.bar) {
+      const where = () => page.evaluate(() => {
+        const s = [...document.querySelectorAll('.a4k-cues span')].find((e) => e.textContent.trim() === 'Above the bar');
+        const c = document.querySelector('canvas.a4k-canvas').getBoundingClientRect();
+        const b = document.getElementById('bar').getBoundingClientRect();
+        return s && { cueBottom: Math.round(s.getBoundingClientRect().bottom), barTop: Math.round(b.top), pictureBottom: Math.round(c.bottom) };
+      });
+      const shown = await where();
+      await page.evaluate(() => { document.getElementById('bar').style.opacity = '0'; });
+      await page.mouse.move(400, 300); await page.waitForTimeout(1500); // a pointer move or a scan repaints
+      const hidden = await where();
+      ok = list?.[0]?.status === 'Active' && shown && hidden
+        && shown.cueBottom <= shown.barTop + 1 && hidden.cueBottom > hidden.barTop + 20;
+      detail = `status=${list?.[0]?.status} barShown=${JSON.stringify(shown)} barHidden=${JSON.stringify(hidden)}`;
+    } else if (l.cues) {
+      const pos = await page.evaluate((texts) => {
+        const c = document.querySelector('canvas.a4k-canvas')?.getBoundingClientRect();
+        const spans = [...document.querySelectorAll('.a4k-cues span')];
+        return c && Object.fromEntries(texts.map((t) => {
+          const s = spans.find((e) => e.textContent.trim() === t)?.getBoundingClientRect();
+          return [t, s ? { fx: (s.x + s.width / 2 - c.x) / c.width, fy: (s.y + s.height / 2 - c.y) / c.height } : null];
+        }));
+      }, Object.keys(l.cues));
+      const bad = Object.entries(l.cues).filter(([t, okAt]) => !pos?.[t] || !okAt(pos[t])).map(([t]) => t);
+      // Look of the "Bottom line" copy: page ::cue rules applied, cue markup kept, padding not copied.
+      const look = await page.evaluate(() => {
+        const s = [...document.querySelectorAll('.a4k-cues span')].find((e) => e.textContent.trim() === 'Bottom line');
+        const i = s?.querySelector('i'); const b = s?.querySelector('b');
+        return s && { color: getComputedStyle(s).color, padding: getComputedStyle(s).padding, italic: i && getComputedStyle(i).fontStyle, bold: b && getComputedStyle(b).color };
+      });
+      const styled = !l.cueStyle || (look && l.cueStyle(look));
+      ok = list?.[0]?.status === 'Active' && bad.length === 0 && styled;
+      detail = `status=${list?.[0]?.status} misplaced=${JSON.stringify(bad)} look=${JSON.stringify(look)} at=${JSON.stringify(pos)}`;
+    } else if (l.statuses) {
       const counts = {};
       for (const i of list ?? []) counts[i.status] = (counts[i.status] ?? 0) + 1;
       ok = Object.entries(l.statuses).every(([s, n]) => counts[s] === n);
       detail = `statuses=${JSON.stringify(counts)}`;
     } else {
-      const r = await page.evaluate(() => {
+      const r = await page.evaluate((top) => {
         const v = document.querySelector('video');
         const c = document.querySelector('canvas.a4k-canvas');
         const vr = v.getBoundingClientRect();
@@ -162,14 +270,25 @@ try {
           canvas: cr && { x: cr.x, y: cr.y, w: cr.width, h: cr.height },
           clip: c?.style.clipPath ?? '',
           nextToVideo: c?.previousElementSibling === v,
+          // Paint order: let the canvas take hits for a moment and ask what is on top where the
+          // controls are, and in the middle of the picture (where the canvas must cover the video).
+          stack: top && c ? (() => {
+            c.style.pointerEvents = 'auto';
+            const t = document.querySelector(top).getBoundingClientRect();
+            const atControls = document.elementFromPoint(t.x + t.width / 2, t.y + t.height / 2);
+            const atMiddle = document.elementFromPoint(cr.x + cr.width / 2, cr.y + cr.height / 3);
+            c.style.pointerEvents = '';
+            return { controlsOnTop: atControls === document.querySelector(top), canvasOverVideo: atMiddle === c };
+          })() : null,
         };
-      });
+      }, l.top ?? null);
       const want = l.expect(r.video);
       const near = (a, b) => Math.abs(a - b) <= 1;
-      ok = list?.[0]?.status === 'Active' && r.canvas && r.nextToVideo
+      ok = list?.[0]?.status === 'Active' && r.canvas && (r.nextToVideo || l.anywhere)
         && near(r.canvas.x, want.x) && near(r.canvas.y, want.y) && near(r.canvas.w, want.w) && near(r.canvas.h, want.h)
-        && r.clip === (l.clip ?? '');
-      detail = `status=${list?.[0]?.status} canvas=${JSON.stringify(r.canvas)} want=${JSON.stringify(want)} clip="${r.clip}" nextToVideo=${r.nextToVideo}`;
+        && r.clip === (l.clip ?? '')
+        && (!l.top || (r.stack?.controlsOnTop && r.stack?.canvasOverVideo));
+      detail = `status=${list?.[0]?.status} canvas=${JSON.stringify(r.canvas)} want=${JSON.stringify(want)} clip="${r.clip}" nextToVideo=${r.nextToVideo}${l.top ? ` stack=${JSON.stringify(r.stack)}` : ''}`;
     }
     if (!ok) failures += 1;
     console.log(`${ok ? 'PASS' : 'FAIL'} ${l.name}: ${detail}`);
