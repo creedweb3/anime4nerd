@@ -14,4 +14,3 @@ site/public/
 design/
 docs/private/
 *.stackdump
-test/shaders/

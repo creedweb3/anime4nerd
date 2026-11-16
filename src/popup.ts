@@ -1,7 +1,6 @@
 import {
-  Message, PRESETS, Settings, VideoInfo, capNote, engineVariant, frameVerdict, loadSettings, VERDICT_TEXT, onSettingsChanged, onSourcesChanged, saveSettings, setSource,
+  Message, PRESETS, Settings, VideoInfo, capNote, frameVerdict, loadSettings, VERDICT_TEXT, onSettingsChanged, onSourcesChanged, saveSettings, setSource,
 } from './settings';
-import { ENGINES, Engine, engineInfo } from './engines';
 import { EMPTY_META, MediaMeta } from './media-meta';
 import { WHATS_NEW_URL, clearWhatsNew, pendingWhatsNew } from './whats-new';
 import { REVIEW_URL, RateAction, cardFor, loadRate, pendingLevel } from './rate-prompt';
@@ -18,11 +17,6 @@ const presetNameEl = $('#presetName');
 const sourcesEl = $('#sources');
 const emptyEl = $('#empty');
 const presetsEl = $('#presets');
-const engineChip = $<HTMLButtonElement>('#engine');
-const engineMenu = $('#engine-menu');
-const engineList = $('#engine-list');
-const engineNoteEl = $('#engine-note');
-const effectsEl = $('#effects');
 const perf = {
   verdict: $('#verdict'), load: $('#k-load'), ms: $('#k-ms'), fps: $('#k-fps'), avg: $('#k-avg'), limit: $('#k-limit'), late: $('#k-late'),
   bars: $('#bars'), legend: $('#legend'),
@@ -43,142 +37,24 @@ let pointerBusy = false;
 for (const ev of ['pointerup', 'pointercancel'] as const) window.addEventListener(ev, () => { pointerBusy = false; });
 let focusId: string | null = null; // which video the performance panel follows
 
-// --- engine / presets / effects ---------------------------------------------------
+// --- presets / effects --------------------------------------------------------
 const PRESET_DESC: Record<string, string> = {
   A: 'sharp', B: 'soft', C: 'denoise', AA: 'sharper, heavy', BB: 'softer, heavy', CA: 'denoise+sharp',
 };
-
-/** Preset tiles of an engine: Anime4K's modes, or the engine's variants. */
-function presetOptions(engine: Engine): { value: string; label: string; description: string }[] {
-  return engine === 'anime4k'
-    ? PRESETS.map((p) => ({ value: p.value, label: p.label, description: PRESET_DESC[p.value] }))
-    : engineInfo(engine).variants;
+for (const p of PRESETS) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'tile';
+  b.dataset.preset = p.value;
+  b.setAttribute('role', 'menuitemradio');
+  const name = document.createElement('b');
+  name.textContent = p.label;
+  const desc = document.createElement('small');
+  desc.textContent = PRESET_DESC[p.value];
+  b.append(name, desc);
+  b.addEventListener('click', () => { void saveSettings({ preset: p.value }); });
+  presetsEl.append(b);
 }
-
-/** The active engine's chosen preset, as its tile label. */
-function presetLabel(s: Settings): string {
-  const value = s.engine === 'anime4k' ? s.preset : engineVariant(s);
-  return presetOptions(s.engine).find((p) => p.value === value)?.label ?? value;
-}
-
-let tilesFor: Engine | null = null;
-function buildPresetTiles(engine: Engine) {
-  tilesFor = engine;
-  const opts = presetOptions(engine);
-  presetsEl.replaceChildren(...opts.map((p) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'tile';
-    b.dataset.preset = p.value;
-    b.setAttribute('role', 'menuitemradio');
-    const name = document.createElement('b');
-    name.textContent = p.label;
-    const desc = document.createElement('small');
-    desc.textContent = p.description;
-    b.append(name, desc);
-    b.addEventListener('click', () => {
-      void saveSettings((cur) => (cur.engine === 'anime4k'
-        ? { preset: p.value as Settings['preset'] }
-        : { variants: { ...cur.variants, [cur.engine]: p.value } }));
-    });
-    return b;
-  }));
-  // Four variants sit better in two columns than as 3 + 1.
-  presetsEl.classList.toggle('two', opts.length === 4);
-}
-
-function costMeter(cost: number): HTMLElement {
-  const m = document.createElement('span');
-  m.className = 'cost';
-  m.title = `GPU cost ${cost} of 5`;
-  for (let i = 0; i < 5; i++) {
-    const bar = document.createElement('i');
-    if (i < cost) bar.className = cost >= 4 ? 'f hot' : 'f';
-    m.append(bar);
-  }
-  return m;
-}
-
-function buildEngineMenu() {
-  const groups: HTMLElement[] = [];
-  let box: HTMLElement | null = null;
-  for (const e of ENGINES) {
-    if (box?.dataset.group !== e.group) {
-      box = document.createElement('div');
-      box.dataset.group = e.group;
-      box.setAttribute('role', 'group');
-      const id = `grp-${groups.length}`;
-      box.setAttribute('aria-labelledby', id);
-      const g = document.createElement('div');
-      g.className = 'grp';
-      g.id = id;
-      g.setAttribute('role', 'presentation');
-      g.textContent = e.group;
-      box.append(g);
-      groups.push(box);
-    }
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'eng';
-    b.tabIndex = -1; // arrow keys move between items (see the menu's keydown)
-    b.dataset.engine = e.id;
-    b.setAttribute('role', 'menuitemradio');
-    const name = document.createElement('b');
-    name.textContent = e.name;
-    if (e.webgpuOnly) {
-      const api = document.createElement('span');
-      api.className = 'api-tag';
-      api.textContent = 'webgpu';
-      api.title = 'Uses compute shaders: always runs on WebGPU';
-      name.append(api);
-    }
-    const blurb = document.createElement('small');
-    blurb.textContent = e.blurb;
-    b.append(name, blurb, costMeter(e.cost));
-    b.addEventListener('click', () => {
-      setEngineMenu(false);
-      engineChip.focus();
-      void saveSettings({ engine: e.id });
-    });
-    box.append(b);
-  }
-  engineList.replaceChildren(...groups);
-}
-
-function setEngineMenu(open: boolean) {
-  engineMenu.hidden = !open;
-  engineChip.setAttribute('aria-expanded', String(open));
-  // The menu overlays the panels; on a short popup (nothing playing) grow it so the menu fits
-  // instead of scrolling the GPU API switch out of view.
-  document.body.style.minHeight = open ? `${engineMenu.offsetTop + engineMenu.offsetHeight + 8}px` : '';
-  if (open) {
-    const items = [...engineMenu.querySelectorAll<HTMLButtonElement>('.eng')];
-    (items.find((b) => b.getAttribute('aria-checked') === 'true') ?? items[0])?.focus();
-  }
-}
-buildEngineMenu();
-engineChip.addEventListener('click', () => setEngineMenu(engineMenu.hidden !== false));
-engineMenu.addEventListener('keydown', (e) => {
-  const items = [...engineMenu.querySelectorAll<HTMLButtonElement>('.eng')];
-  const i = items.indexOf(document.activeElement as HTMLButtonElement);
-  const go = (n: number) => { e.preventDefault(); items[(n + items.length) % items.length].focus(); };
-  if (e.key === 'ArrowDown') go(i + 1);
-  else if (e.key === 'ArrowUp') go(i - 1);
-  else if (e.key === 'Home') go(0);
-  else if (e.key === 'End') go(items.length - 1);
-});
-// Leaving the menu with the keyboard closes it (Tab still reaches the GPU API switch inside it).
-engineMenu.addEventListener('focusout', (e) => {
-  const to = e.relatedTarget as Node | null;
-  if (to && !engineMenu.contains(to) && to !== engineChip) setEngineMenu(false);
-});
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && !engineMenu.hidden) { e.preventDefault(); setEngineMenu(false); engineChip.focus(); }
-});
-document.addEventListener('pointerdown', (e) => {
-  if (!engineMenu.hidden && !engineMenu.contains(e.target as Node) && !engineChip.contains(e.target as Node)) setEngineMenu(false);
-});
-
 for (const b of document.querySelectorAll<HTMLButtonElement>('[data-field]')) {
   b.addEventListener('click', () => {
     const f = b.dataset.field as 'darkenLines' | 'thinLines';
@@ -188,32 +64,17 @@ for (const b of document.querySelectorAll<HTMLButtonElement>('[data-field]')) {
 for (const b of document.querySelectorAll<HTMLButtonElement>('[data-upscale]')) {
   b.addEventListener('click', () => { void saveSettings({ upscale: b.dataset.upscale as Settings['upscale'] }); });
 }
-for (const b of document.querySelectorAll<HTMLButtonElement>('[data-backend]')) {
-  b.addEventListener('click', () => { void saveSettings({ backend: b.dataset.backend as Settings['backend'] }); });
-}
 function paintSettings(s: Settings) {
   settings = s;
-  const info = engineInfo(s.engine);
-  engineChip.textContent = info.name.toLowerCase();
-  for (const b of engineMenu.querySelectorAll<HTMLButtonElement>('[data-engine]')) {
-    b.setAttribute('aria-checked', String(b.dataset.engine === s.engine));
-  }
-  if (tilesFor !== s.engine) buildPresetTiles(s.engine);
-  engineNoteEl.textContent = `${info.name} · ${info.blurb}`;
-  presetNameEl.textContent = presetLabel(s);
-  const chosen = s.engine === 'anime4k' ? s.preset : engineVariant(s);
+  presetNameEl.textContent = PRESETS.find((p) => p.value === s.preset)?.label ?? s.preset;
   for (const b of presetsEl.querySelectorAll<HTMLButtonElement>('[data-preset]')) {
-    b.setAttribute('aria-checked', String(b.dataset.preset === chosen));
+    b.setAttribute('aria-checked', String(b.dataset.preset === s.preset));
   }
-  effectsEl.hidden = s.engine !== 'anime4k'; // darken / thin lines are Anime4K shaders
   for (const b of document.querySelectorAll<HTMLButtonElement>('[data-field]')) {
     b.setAttribute('aria-checked', String(s[b.dataset.field as 'darkenLines' | 'thinLines']));
   }
   for (const b of document.querySelectorAll<HTMLButtonElement>('[data-upscale]')) {
     b.setAttribute('aria-checked', String(b.dataset.upscale === s.upscale));
-  }
-  for (const b of document.querySelectorAll<HTMLButtonElement>('[data-backend]')) {
-    b.setAttribute('aria-checked', String(b.dataset.backend === s.backend));
   }
 }
 
@@ -321,8 +182,7 @@ function patchCard(c: Card, v: VideoInfo) {
   const out = v.stats ? `${v.stats.outputWidth}×${v.stats.outputHeight}` : pLabel(outH);
   const scale = v.height ? Math.round(outH / v.height) : 0;
   const capped = v.stats && settings ? capNote(settings.upscale, scale) : '';
-  const api = v.stats?.backend ? ` · ${v.stats.backend}` : ''; // the API actually drawing (auto may fall back)
-  const res = v.height ? ` · ${pLabel(v.height)} → ${out} (${scale}×)${capped}${api}` : '';
+  const res = v.height ? ` · ${pLabel(v.height)} → ${out} (${scale}×)${capped}` : '';
   setText(c.meta, `${tabHost || v.frameHost}${res}`);
   c.meta.title = v.frameHost !== tabHost ? `player frame: ${v.frameHost} · stream: ${v.mediaHost}` : `stream: ${v.mediaHost}`;
   const st = cardState(v);
@@ -472,10 +332,8 @@ async function refresh() {
     let gpuMs: number | null = null;
     for (const { v } of list) if (v.enabled && v.stats?.gpuMs != null) gpuMs = (gpuMs ?? 0) + v.stats.gpuMs;
     const mangaBusy = reading && manga!.s.on && manga!.s.done > 0;
-    // Anime4K keeps its short mode code (a, aa, ca); other engines show their variant's label.
-    const mode = (settings.engine === 'anime4k' ? settings.preset : presetLabel(settings)).toLowerCase();
-    hintEl.textContent = reading ? (mangaBusy ? `manga · ${mode}` : 'manga')
-      : list.length === 0 ? 'off' : active ? `on · ${mode}` : on ? 'starting' : 'off';
+    hintEl.textContent = reading ? (mangaBusy ? `manga · ${settings.preset.toLowerCase()}` : 'manga')
+      : list.length === 0 ? 'off' : active ? `on · ${settings.preset.toLowerCase()}` : on ? 'starting' : 'off';
     hintEl.classList.toggle('on', active > 0 || mangaBusy);
     // Without GPU timing (Firefox) the chip shows the frame rate drawn instead.
     const drawn = list.find((x) => x.v.enabled && x.v.stats && !x.v.stats.timerSupported && x.v.stats.fps > 0)?.v.stats;

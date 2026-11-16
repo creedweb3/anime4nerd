@@ -108,8 +108,7 @@ What the build does (build.mjs)
 - The manifest is manifest.json with Firefox changes (firefoxManifest() in build.mjs):
   background.scripts instead of a service worker, gecko id anime4nerd@creedweb3.github.io,
   strict_min_version 140.0 (Android 142.0), data_collection_permissions none.
-- No runtime npm dependencies. Dev dependencies: esbuild, typescript, @types/chrome,
-  @webgpu/types.
+- No runtime npm dependencies. Dev dependencies: esbuild, typescript, @types/chrome.
 
 Files in the package
 - background.js: on install/update, injects the content scripts into tabs already open.

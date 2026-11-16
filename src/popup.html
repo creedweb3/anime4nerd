@@ -7,20 +7,11 @@
 </head>
 <body>
   <header class="bar">
-    <button type="button" class="chip engine" id="engine" aria-haspopup="menu" aria-expanded="false" aria-controls="engine-menu" title="Upscaling engine">anime4k</button>
+    <span class="chip">anime4k</span>
     <span class="chip" id="hint">off</span>
     <span class="chip grow" id="gpuchip">gpu —</span>
     <span class="chip" id="clock"></span>
   </header>
-  <div class="engine-menu" id="engine-menu" hidden>
-    <div id="engine-list" role="menu" aria-label="Upscaling engine"></div>
-    <div class="pills api" id="backend" role="radiogroup" aria-label="GPU API">
-      <span class="pills-label">gpu api</span>
-      <button type="button" class="pill" data-backend="auto" role="radio" title="WebGPU when this browser and page support it, otherwise WebGL2">auto</button>
-      <button type="button" class="pill" data-backend="webgl2" role="radio" title="Always WebGL2 (works everywhere)">webgl2</button>
-      <button type="button" class="pill" data-backend="webgpu" role="radio" title="Always WebGPU; shows an error instead of falling back">webgpu</button>
-    </div>
-  </div>
 
   <a class="update-note" id="whatsnew" href="https://anime4nerd.pages.dev/#changes" target="_blank" rel="noopener" hidden>
     <span><span class="update-label">updated</span><span class="update-dot">●</span> v<b id="whatsnew-ver"></b></span><span class="update-link">what's new →</span>
@@ -68,7 +59,6 @@
 
   <section class="panel">
     <div class="panel-head"><span>preset</span><span id="presetName"></span></div>
-    <div class="engine-note" id="engine-note"></div>
     <div class="grid" id="presets"></div>
     <div class="pills" id="effects">
       <button type="button" class="pill" data-field="darkenLines" role="menuitemcheckbox">darken lines</button>

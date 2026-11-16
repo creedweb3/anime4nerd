@@ -168,7 +168,8 @@ export function startManga(getSettings: () => Settings, loadGpu: () => Promise<G
       const p: PageImage = { naturalWidth: w, naturalHeight: h, renderedWidth: r.width, left: r.left + scrollX, top: r.top + scrollY, src: img.currentSrc };
       images.push(p); els.set(p, img);
     }
-    const canvases = Array.from(document.querySelectorAll('canvas')).slice(0, MAX_CANVASES)
+    // Not our own overlay on an upscaled video: it would make a video page look like a canvas reader.
+    const canvases = Array.from(document.querySelectorAll<HTMLCanvasElement>('canvas:not(.a4k-canvas)')).slice(0, MAX_CANVASES)
       .map((c) => ({ width: c.width, height: c.height, renderedWidth: c.getBoundingClientRect().width }));
     const d = classifyPage({
       images, canvases, viewport: { width: innerWidth, height: innerHeight }, url: location.href,

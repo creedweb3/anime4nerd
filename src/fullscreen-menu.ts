@@ -1,6 +1,7 @@
 // On-video menu for fullscreen players, where the toolbar popup can't open.
 // A small ☰ button in the top-right corner opens a compact panel (on/off, preset,
-// upscale); the button fades out when the mouse is idle, like player controls.
+// upscale); the button fades out when the mouse is idle, like player controls. If a control
+// of the player already sits in that corner, the button moves down the edge to a free spot.
 
 import {
   PRESETS, Settings, Upscale, VideoInfo, capNote, frameVerdict, saveSettings, VERDICT_TEXT, setSource,
@@ -18,6 +19,33 @@ const PINNED_STYLE: [string, string][] = [
 ];
 // Players toggle play / fullscreen on these; the menu must swallow them.
 const SWALLOW = ['click', 'dblclick', 'mousedown', 'mouseup', 'pointerdown', 'pointerup', 'touchstart', 'touchend', 'wheel', 'keydown'];
+
+// Where the button may sit: distance from the top of the screen, down the right edge.
+const SLOT_TOPS = [16, 64, 112, 160, 208, 256];
+const EDGE_PX = 16; // gap to the right edge
+const BUTTON_PX = 34; // side of the ☰ button (see .toggle)
+const MENU_MAX_PX = 480; // tallest the open menu gets (see genuine())
+const PLACE_EVERY_MS = 400; // how often the spot is re-checked while the mouse moves
+// What counts as a player control: real controls, and anything that shows a hand cursor.
+const CONTROL = 'button, a[href], input, select, textarea, summary, [role="button"], [role="menuitem"], [role="tab"], [onclick]';
+// A clickable element this large is a click-to-play surface, not a control to keep clear of.
+const SURFACE_PX = 200;
+
+/** True if a control of the page lies under the size x size square at (x, y), ignoring `self`. */
+function coversControl(root: Document | ShadowRoot, self: Element, x: number, y: number, size: number): boolean {
+  const inset = 3;
+  const points = [[inset, inset], [size - inset, inset], [inset, size - inset], [size - inset, size - inset], [size / 2, size / 2]];
+  for (const [dx, dy] of points) {
+    for (const el of root.elementsFromPoint(x + dx, y + dy)) {
+      if (el === self || el instanceof HTMLVideoElement || el.classList.contains('a4k-canvas')) continue;
+      const control = el.closest(CONTROL) ?? (getComputedStyle(el).cursor === 'pointer' ? el : null);
+      if (!control) continue;
+      const r = control.getBoundingClientRect();
+      if (r.width > 0 && r.width <= SURFACE_PX && r.height <= SURFACE_PX) return true;
+    }
+  }
+  return false;
+}
 
 const CSS = `
 :host { all: initial; position: fixed; top: 16px; right: 16px; z-index: 2147483647;
@@ -65,6 +93,12 @@ export class FullscreenMenu {
 
   private pollTimer: number | null = null;
 
+  private top = SLOT_TOPS[0]; // the button's current spot
+
+  private placedAt = -Infinity;
+
+  private placeTimer: number | null = null;
+
   constructor(private readonly target: () => VideoInfo | null, private readonly settings: () => Settings) {
     for (const [k, v] of PINNED_STYLE) this.host.style.setProperty(k, v, 'important');
     const shadow = this.host.attachShadow({ mode: 'closed' });
@@ -100,8 +134,7 @@ export class FullscreenMenu {
 
     this.panel.append(
       head, this.meta, this.perf, this.graph,
-      // Anime4K modes; picking one here also switches the engine back to Anime4K.
-      this.group('preset', PRESETS.map((p) => [p.value, p.label]), (v) => ({ engine: 'anime4k', preset: v as Settings['preset'] }), 'preset'),
+      this.group('preset', PRESETS.map((p) => [p.value, p.label]), (v) => ({ preset: v as Settings['preset'] }), 'preset'),
       this.effects(),
       this.group('upscale', UPSCALES, (v) => ({ upscale: v as Upscale }), 'upscale'),
     );
@@ -169,13 +202,37 @@ export class FullscreenMenu {
   /** Show the menu inside `container` (the fullscreen element or its shadow root), or remove it when null. */
   mount(container: Element | ShadowRoot | null) {
     if (!container) { this.host.remove(); this.setOpen(false); return; }
-    if (this.host.parentNode !== container) { container.append(this.host); this.wake(); }
+    if (this.host.parentNode !== container) { container.append(this.host); this.setTop(SLOT_TOPS[0]); this.wake(); }
     this.refresh();
+  }
+
+  private setTop(top: number) {
+    this.top = top;
+    this.host.style.setProperty('top', `${top}px`, 'important');
+  }
+
+  /**
+   * Keep the button off the player's own controls: stay where it is while that spot is free,
+   * else take the first free spot down the right edge. Not while the menu is open or the
+   * mouse is on the button, so it never moves from under the pointer.
+   */
+  private place() {
+    const now = performance.now();
+    if (now - this.placedAt < PLACE_EVERY_MS || this.wrap.classList.contains('open') || this.toggle.matches(':hover')) return;
+    this.placedAt = now;
+    const root = this.host.getRootNode() as Document | ShadowRoot;
+    const x = innerWidth - EDGE_PX - BUTTON_PX;
+    const free = (top: number) => (top === SLOT_TOPS[0] || top + MENU_MAX_PX <= innerHeight) && !coversControl(root, this.host, x, top, BUTTON_PX);
+    const top = [this.top, ...SLOT_TOPS].find(free);
+    if (top !== undefined && top !== this.top) this.setTop(top);
   }
 
   /** Mouse moved: show the button again and restart the idle fade. */
   wake() {
     if (!this.host.isConnected) return;
+    this.place();
+    // Players show their controls on the same mouse move, often a moment later: look again.
+    if (this.placeTimer === null) this.placeTimer = window.setTimeout(() => { this.placeTimer = null; this.place(); }, PLACE_EVERY_MS + 100);
     this.wrap.classList.remove('idle');
     if (this.idleTimer !== null) window.clearTimeout(this.idleTimer);
     this.idleTimer = window.setTimeout(() => { this.idleTimer = null; this.wrap.classList.add('idle'); }, IDLE_MS);
@@ -192,7 +249,7 @@ export class FullscreenMenu {
     this.meta.textContent = !t ? '' : st
       ? `${t.height}p → ${st.outputWidth}×${st.outputHeight} (${scale}×)${capNote(s.upscale, scale)}`
       : `${t.height}p · ${t.status.toLowerCase()}`;
-    for (const b of this.panel.querySelectorAll<HTMLButtonElement>('[data-preset]')) b.setAttribute('aria-checked', String(s.engine === 'anime4k' && b.dataset.preset === s.preset));
+    for (const b of this.panel.querySelectorAll<HTMLButtonElement>('[data-preset]')) b.setAttribute('aria-checked', String(b.dataset.preset === s.preset));
     for (const b of this.panel.querySelectorAll<HTMLButtonElement>('[data-upscale]')) b.setAttribute('aria-checked', String(b.dataset.upscale === s.upscale));
     for (const b of this.panel.querySelectorAll<HTMLButtonElement>('[data-field]')) {
       b.setAttribute('aria-checked', String(s[b.dataset.field as 'darkenLines' | 'thinLines']));

@@ -1,69 +1,37 @@
-// WebGL2 runner for mpv-format GLSL shader chains (Anime4K and the other engines).
+// WebGL2 runner for Anime4K's mpv-format GLSL shader chains.
 // Loaded lazily by the content script via import(chrome.runtime.getURL('gpu.js')).
 
 import { buildFragmentSource } from './mpv-hooks';
-import type { Plane } from './engines';
-import type { Settings } from './settings';
+import { chainKey, type Settings } from './settings';
 import {
-  Anime4kRenderer, HOOK_OF, LoadedChain, MAX_OUTPUT_PX, MAX_TEXTURE_BYTES, RenderSource, RenderStats, SourceSizeChanged,
-  estimateBytes, loadChain, orderedPasses, planChain, poolTextures,
+  Anime4kRenderer, HOOK, MAX_OUTPUT_PX, MAX_TEXTURE_BYTES, RenderSource, RenderStats, SourceSizeChanged,
+  estimateBytes, orderedPasses, planChain, poolTextures,
 } from './chain';
 import { decodedSize, uploadSize } from './video-size';
-import { createWebGpuRenderer, webgpuAvailable } from './gpu-webgpu';
-import { engineInfo } from './engines';
+import { REDRAW, createFrameReuse, differenceRadius } from './gpu-reuse';
 
-export type { Anime4kRenderer, Backend, RenderSource, RenderStats } from './chain';
-export { SourceSizeChanged, setShaderBase } from './chain';
+export type { Anime4kRenderer, RenderSource, RenderStats } from './chain';
+export { SourceSizeChanged } from './chain';
 
 /** How often render() re-checks the frame size and GL error state (each check stalls the GPU briefly). */
 const HEALTH_CHECK_MS = 1000;
 
-// Full-range BT.709 conversions, for chains that work on Y or YCbCr (chroma centred at 0.5).
-const TO_PLANE_FRAG = (plane: Plane) => `#version 300 es
-precision highp float;
-in vec2 v_uv;
-out vec4 fragColor;
-uniform sampler2D SRC_raw;
-void main() {
-  vec3 c = texture(SRC_raw, v_uv).rgb;
-  float y = dot(c, vec3(0.2126, 0.7152, 0.0722));
-  ${plane === 'luma'
-    ? 'fragColor = vec4(y, 0.0, 0.0, 1.0);'
-    : 'fragColor = vec4(y, (c.b - y) / 1.8556 + 0.5, (c.r - y) / 1.5748 + 0.5, 1.0);'}
-}`;
+/** Frame reuse: half-size (source pixels) of the window read back to measure a chain's reach. */
+const REACH_WINDOW = 128;
 
-/**
- * The final draw to the canvas (flipped: textures are stored top row first). For Y / YCbCr
- * chains it also converts back to RGB, so that costs no extra full-size pass.
- */
-const PRESENT_FRAG = (plane: Plane) => (plane === 'rgb' ? `#version 300 es
+/** Frame reuse: the measured reach is widened by this factor (plus 2 pixels) before use. */
+const REACH_MARGIN = 1.25;
+
+/** Frame reuse: reach already measured for a chain at a size (measuring costs a few full frames). */
+const reachCache = new Map<string, number | null>();
+
+/** The final draw to the canvas (flipped: textures are stored top row first). */
+const PRESENT_FRAG = `#version 300 es
 precision highp float;
 in vec2 v_uv;
 out vec4 fragColor;
-uniform sampler2D PLANE_raw;
-void main() { fragColor = vec4(texture(PLANE_raw, vec2(v_uv.x, 1.0 - v_uv.y)).rgb, 1.0); }` : `#version 300 es
-precision highp float;
-in vec2 v_uv;
-out vec4 fragColor;
-uniform sampler2D PLANE_raw;
-uniform vec2 PLANE_size;
-uniform sampler2D SRC_raw;
-uniform vec2 u_offset; // accumulated pixel shift of the plane (mpv //!OFFSET)
-void main() {
-  vec2 uv = vec2(v_uv.x, 1.0 - v_uv.y);
-  vec4 p = texture(PLANE_raw, uv + u_offset / PLANE_size);
-  float y = p.x;
-  vec2 cbcr;
-  ${plane === 'luma'
-    ? `vec3 c = texture(SRC_raw, uv).rgb;
-  float sy = dot(c, vec3(0.2126, 0.7152, 0.0722));
-  cbcr = vec2((c.b - sy) / 1.8556, (c.r - sy) / 1.5748);`
-    : 'cbcr = p.yz - 0.5;'}
-  float r = y + 1.5748 * cbcr.y;
-  float b = y + 1.8556 * cbcr.x;
-  float g = (y - 0.2126 * r - 0.0722 * b) / 0.7152;
-  fragColor = vec4(clamp(vec3(r, g, b), 0.0, 1.0), 1.0);
-}`);
+uniform sampler2D FRAME_raw;
+void main() { fragColor = vec4(texture(FRAME_raw, vec2(v_uv.x, 1.0 - v_uv.y)).rgb, 1.0); }`;
 
 const VERT = `#version 300 es
 out vec2 v_uv;
@@ -116,17 +84,16 @@ async function finishPrograms(
 
 interface Tex { tex: WebGLTexture; w: number; h: number; }
 
-/** A texture a pass samples: `uniform` is its sampler's name in the shader, `${name}_size` its size. */
-interface PassInput { name: string; uniform: string; tex: Tex; }
+/** A texture a pass samples: `${name}_raw` is its sampler in the shader, `${name}_size` its size. */
+interface PassInput { name: string; tex: Tex; }
 
 interface CompiledPass {
   desc: string;
   program: WebGLProgram;
   inputs: (PassInput & { loc: WebGLUniformLocation | null; sizeLoc: WebGLUniformLocation | null })[];
   output: Tex | null; // null: the canvas
+  final: boolean; // writes the texture the canvas is drawn from
   fbo: WebGLFramebuffer | null;
-  offset: [number, number] | null; // plane shift to undo (conversion back to RGB only)
-  offsetLoc: WebGLUniformLocation | null;
 }
 
 function compile(gl: WebGL2RenderingContext, type: number, src: string, label: string): WebGLShader {
@@ -141,9 +108,9 @@ function compile(gl: WebGL2RenderingContext, type: number, src: string, label: s
   return sh;
 }
 
-/** Why WebGPU failed on this page (auto then stays on WebGL2); null while it has not failed. */
-let webgpuFailure: string | null = null;
-export function webgpuFailureReason(): string | null { return webgpuFailure; }
+let frameReuse = true;
+/** Redraw only what changed since the last frame (gpu-reuse.ts); off only to compare (tests). */
+export function setFrameReuse(on: boolean): void { frameReuse = on; }
 
 export async function createAnime4kRenderer(
   video: RenderSource,
@@ -154,26 +121,8 @@ export async function createAnime4kRenderer(
 ): Promise<Anime4kRenderer> {
   const { w, h } = video instanceof ImageBitmap ? { w: video.width, h: video.height } : uploadSize(video);
   if (!w || !h) throw new Error('Waiting for video dimensions.');
-  // WebGPU first when asked (or on auto, unless it already failed on this page); on auto any
-  // failure falls back to WebGL2 on the same canvas, which WebGPU leaves untouched until it succeeds.
-  // Engines built on compute shaders (ArtCNN 1.6) run on WebGPU whatever the setting says.
-  const info = engineInfo(settings.engine);
-  const mustGpu = settings.backend === 'webgpu' || !!info.webgpuOnly;
-  const tryGpu = mustGpu || (settings.backend === 'auto' && webgpuFailure === null && webgpuAvailable());
-  if (tryGpu) {
-    try {
-      return await createWebGpuRenderer(video, canvas, (f16) => loadChain(settings, { wgsl: true, f16 }), onError, wantScale, w, h);
-    } catch (e) {
-      if (info.webgpuOnly && !(e instanceof DOMException)) {
-        throw new Error(`${info.name} needs WebGPU (compute shaders), which is not available here: ${e instanceof Error ? e.message : String(e)}`);
-      }
-      if (mustGpu || (e instanceof DOMException && e.name === 'SecurityError')) throw e;
-      webgpuFailure = e instanceof Error ? e.message : String(e);
-    }
-  }
-  const chain = await loadChain(settings);
   try {
-    return await buildRenderer(video, canvas, chain, onError, wantScale, w, h);
+    return await buildRenderer(video, canvas, settings, onError, wantScale, w, h);
   } catch (e) {
     // A build that fails after creating its context must give it back: pages get ~16 contexts,
     // and a leaked one evicts the oldest, which may be another video's working renderer.
@@ -185,7 +134,7 @@ export async function createAnime4kRenderer(
 async function buildRenderer(
   video: RenderSource,
   canvas: HTMLCanvasElement,
-  chain: LoadedChain,
+  settings: Settings,
   onError: (msg: string) => void,
   wantScale: number,
   w: number,
@@ -200,7 +149,8 @@ async function buildRenderer(
     powerPreference: 'high-performance',
   });
   if (!gl) throw new Error('WebGL2 is unavailable in this browser.');
-  if (!gl.getExtension('EXT_color_buffer_float') && !gl.getExtension('EXT_color_buffer_half_float')) {
+  const floatRead = !!gl.getExtension('EXT_color_buffer_float'); // half-float textures can be read back as floats
+  if (!floatRead && !gl.getExtension('EXT_color_buffer_half_float')) {
     throw new Error('This GPU cannot render to half-float textures.');
   }
   gl.getExtension('OES_texture_float_linear');
@@ -209,12 +159,12 @@ async function buildRenderer(
   if (w * 2 > maxTex || h * 2 > maxTex) throw new Error("The upscaled video exceeds this GPU's texture limit.");
   // Beyond 2x is optional: halve the scale until the output fits the texture limit, the output
   // cap, and the memory budget for every intermediate texture of the chain.
-  const hook = HOOK_OF[chain.plane];
   let scale = wantScale;
-  let { passes, textures } = orderedPasses(chain, scale);
+  let passes = orderedPasses(settings, scale);
+  const wantReuse = isVideo && frameReuse;
   const tooBig = () => w * scale > maxTex || h * scale > maxTex || w * h * scale * scale > MAX_OUTPUT_PX
-    || estimateBytes(passes, textures, chain.plane, w, h, scale) > MAX_TEXTURE_BYTES;
-  while (scale > 2 && tooBig()) { scale /= 2; ({ passes, textures } = orderedPasses(chain, scale)); }
+    || estimateBytes(passes, w, h, scale, wantReuse) > MAX_TEXTURE_BYTES;
+  while (scale > 2 && tooBig()) { scale /= 2; passes = orderedPasses(settings, scale); }
 
   canvas.width = w * scale;
   canvas.height = h * scale;
@@ -244,45 +194,17 @@ async function buildRenderer(
     return t;
   }
 
-  // Lookup tables from //!TEXTURE blocks (RAVU), uploaded once.
-  const lookup = new Map<string, Tex>();
-  for (const ut of textures) {
-    const tex = gl.createTexture()!;
-    gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-    const floats32 = ut.data.byteLength === ut.w * ut.h * 16; // mpv's dumps hold float32 even for 16f formats
-    if (ut.format === 'rgba16f' && floats32) {
-      const texels = new Float32Array(ut.data.buffer, ut.data.byteOffset, ut.data.byteLength >> 2);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, ut.w, ut.h, 0, gl.RGBA, gl.FLOAT, texels);
-    } else if (ut.format === 'rgba16f') {
-      const texels = new Uint16Array(ut.data.buffer, ut.data.byteOffset, ut.data.byteLength >> 1);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, ut.w, ut.h, 0, gl.RGBA, gl.HALF_FLOAT, texels);
-    } else if (ut.format === 'rgba32f') {
-      const texels = new Float32Array(ut.data.buffer, ut.data.byteOffset, ut.data.byteLength >> 2);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, ut.w, ut.h, 0, gl.RGBA, gl.FLOAT, texels);
-    } else {
-      throw new Error(`Lookup texture ${ut.name} has unsupported format ${ut.format}.`);
-    }
-    const filter = ut.linear ? gl.LINEAR : gl.NEAREST;
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    const t = { tex, w: ut.w, h: ut.h };
-    allTex.push(t);
-    textureBytes += ut.data.byteLength;
-    lookup.set(ut.name, t);
-  }
-  const lookupNames = new Set(lookup.keys());
-
   // Video frame texture (RGBA8; the video itself is 8-bit).
   const videoTex = makeTex(w, h, false);
+  // Frame reuse (video only): the previous frame is kept to find what changed.
+  const reuse = wantReuse ? createFrameReuse(gl, w, h) : null;
+  const prevTex = reuse ? makeTex(w, h, false) : null;
 
   // --- build pass list ------------------------------------------------------
   // Pass outputs share textures once nothing reads them any more (see poolTextures): a long
   // chain needs a handful of textures per size instead of one per pass.
-  const plan = planChain(passes, lookupNames, chain.plane, w, h, scale);
-  const { slotOf, slots } = poolTextures(plan);
+  const plan = planChain(passes, w, h, scale);
+  const { slotOf, slots } = poolTextures(plan, !!reuse);
   const slotTex = slots.map((s, i) => (i === 0 ? videoTex : makeTex(s.w, s.h, true)));
   const texOf = (id: number) => slotTex[slotOf[id]];
 
@@ -295,16 +217,18 @@ async function buildRenderer(
     pendingPrograms.push({ prog, fs, label: desc });
     let fbo: WebGLFramebuffer | null = null;
     if (out) {
+      const stencil = reuse?.stencilFor(out.w, out.h);
       fbo = gl!.createFramebuffer()!;
       gl!.bindFramebuffer(gl!.FRAMEBUFFER, fbo);
       gl!.framebufferTexture2D(gl!.FRAMEBUFFER, gl!.COLOR_ATTACHMENT0, gl!.TEXTURE_2D, out.tex, 0);
+      if (stencil) gl!.framebufferRenderbuffer(gl!.FRAMEBUFFER, gl!.STENCIL_ATTACHMENT, gl!.RENDERBUFFER, stencil);
       if (gl!.checkFramebufferStatus(gl!.FRAMEBUFFER) !== gl!.FRAMEBUFFER_COMPLETE) {
         throw new Error('This GPU cannot render to half-float textures.');
       }
     }
     // Uniform locations are resolved after linking completes (see below).
     const c: CompiledPass = {
-      desc, program: prog, output: out, fbo, offset: null, offsetLoc: null,
+      desc, program: prog, output: out, fbo, final: false,
       inputs: inputs.map((i) => ({ ...i, loc: null, sizeLoc: null })),
     };
     compiled.push(c);
@@ -312,11 +236,8 @@ async function buildRenderer(
   }
 
   for (const s of plan.steps) {
-    const inputs = s.inputs.map((inp): PassInput => (typeof inp.ref === 'string'
-      ? { name: inp.name, uniform: inp.name, tex: lookup.get(inp.ref)! }
-      : { name: inp.name, uniform: `${inp.name}_raw`, tex: texOf(inp.ref) }));
-    const src = s.kind === 'to-plane' ? TO_PLANE_FRAG(chain.plane) : buildFragmentSource(s.pass!, hook, lookupNames);
-    addPass(s.pass?.desc ?? 'to plane', src, inputs, texOf(s.out));
+    const inputs = s.inputs.map((inp): PassInput => ({ name: inp.name, tex: texOf(inp.ref) }));
+    addPass(s.pass.desc, buildFragmentSource(s.pass, HOOK), inputs, texOf(s.out)).final = s.out === plan.final;
   }
 
   const finalSize = plan.sizes[plan.final];
@@ -325,22 +246,16 @@ async function buildRenderer(
     canvas.width = finalSize.w;
     canvas.height = finalSize.h;
   }
-  // The present pass draws to the canvas; for Y / YCbCr chains it also converts back to RGB.
-  const present = addPass('present', PRESENT_FRAG(chain.plane), [
-    { name: 'PLANE', uniform: 'PLANE_raw', tex: texOf(plan.final) },
-    { name: 'SRC', uniform: 'SRC_raw', tex: videoTex },
-  ], null);
-  if (chain.plane !== 'rgb') present.offset = plan.offset;
+  addPass('present', PRESENT_FRAG, [{ name: 'FRAME', tex: texOf(plan.final) }], null);
 
   await finishPrograms(gl, pendingPrograms, () => destroyed);
   gl.deleteShader(vs);
   if (destroyed) throw new DOMException('Canceled', 'AbortError');
   for (const c of compiled) {
     for (const inp of c.inputs) {
-      inp.loc = gl.getUniformLocation(c.program, inp.uniform);
+      inp.loc = gl.getUniformLocation(c.program, `${inp.name}_raw`);
       inp.sizeLoc = gl.getUniformLocation(c.program, `${inp.name}_size`);
     }
-    if (c.offset) c.offsetLoc = gl.getUniformLocation(c.program, 'u_offset');
   }
 
   const vao = gl.createVertexArray()!;
@@ -353,10 +268,87 @@ async function buildRenderer(
   const texUnitsAvail = gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS) as number;
   for (const c of compiled) {
     // Only samplers the shader actually reads take a texture unit (the hooked texture is always
-    // declared but often unused, which would push ArtCNN C4F32 one over the usual 16).
+    // declared but often unused).
     c.inputs = c.inputs.filter((inp) => inp.loc || inp.sizeLoc);
     const units = c.inputs.filter((inp) => inp.loc).length;
     if (units > texUnitsAvail) throw new Error(`Pass "${c.desc}" needs ${units} textures; GPU allows ${texUnitsAvail}.`);
+  }
+
+  /** Runs every pass; `partial`: only where the stencil buffers are marked (see gpu-reuse.ts). */
+  function drawPasses(partial: boolean) {
+    if (partial) gl!.enable(gl!.STENCIL_TEST); else gl!.disable(gl!.STENCIL_TEST);
+    for (const c of compiled) {
+      gl!.bindFramebuffer(gl!.FRAMEBUFFER, c.fbo);
+      gl!.viewport(0, 0, c.output ? c.output.w : canvas.width, c.output ? c.output.h : canvas.height);
+      gl!.useProgram(c.program);
+      if (partial) {
+        // The canvas is always drawn in full; it has no stencil buffer.
+        if (!c.fbo) gl!.disable(gl!.STENCIL_TEST);
+        else if (c.final) gl!.stencilFunc(gl!.EQUAL, REDRAW, 0xff);
+        else gl!.stencilFunc(gl!.NOTEQUAL, 0, 0xff);
+      }
+      let unit = 0;
+      c.inputs.forEach((inp) => {
+        if (inp.loc) {
+          gl!.activeTexture(gl!.TEXTURE0 + unit);
+          gl!.bindTexture(gl!.TEXTURE_2D, inp.tex.tex);
+          gl!.uniform1i(inp.loc, unit);
+          unit += 1;
+        }
+        if (inp.sizeLoc) gl!.uniform2f(inp.sizeLoc, inp.tex.w, inp.tex.h);
+      });
+      gl!.drawArrays(gl!.TRIANGLES, 0, 3);
+    }
+  }
+
+  /**
+   * The chain's reach, measured on this very chain and size: draw a noise image, change a 2x2
+   * block at its centre, and see how far the final texture differs. It is read as floats, so
+   * any influence counts, however small. Null (no frame reuse) when the change spreads past
+   * the window read back, e.g. a pass that uses whole-picture statistics.
+   */
+  function measureReach(): number | null {
+    const last = compiled.find((c) => c.final);
+    const sx = canvas.width / w;
+    const half = Math.min(REACH_WINDOW, Math.floor(Math.min(w, h) / 2) - 1);
+    if (!last || !floatRead || half < 8 || !Number.isInteger(sx) || canvas.height !== h * sx) return null;
+    const side = 2 * half * sx;
+    const px = new Uint8Array(w * h * 4);
+    const shots = [new Float32Array(side * side * 4), new Float32Array(side * side * 4)];
+    const draw = (into: Float32Array) => {
+      gl!.activeTexture(gl!.TEXTURE0);
+      gl!.bindTexture(gl!.TEXTURE_2D, videoTex.tex);
+      gl!.texSubImage2D(gl!.TEXTURE_2D, 0, 0, 0, w, h, gl!.RGBA, gl!.UNSIGNED_BYTE, px);
+      drawPasses(false);
+      gl!.bindFramebuffer(gl!.FRAMEBUFFER, last.fbo);
+      gl!.readPixels(canvas.width / 2 - half * sx, canvas.height / 2 - half * sx, side, side, gl!.RGBA, gl!.FLOAT, into);
+    };
+    let worst = 0;
+    // Harsh and mild noise: the first drives data-dependent shaders hard, the second avoids
+    // clipping that could hide a difference.
+    for (const contrast of [255, 96]) {
+      for (let i = 0; i < px.length; i++) px[i] = i % 4 === 3 ? 255 : 128 + (Math.random() - 0.5) * contrast;
+      draw(shots[0]);
+      const cx = Math.floor(w / 2);
+      const cy = Math.floor(h / 2);
+      for (const [x, y] of [[cx - 1, cy - 1], [cx, cy - 1], [cx - 1, cy], [cx, cy]]) {
+        for (let k = 0; k < 3; k++) px[(y * w + x) * 4 + k] = 255 - px[(y * w + x) * 4 + k];
+      }
+      draw(shots[1]);
+      const r = differenceRadius(shots[0], shots[1], side);
+      if (r === null || r === 0) return null;
+      worst = Math.max(worst, r / sx);
+    }
+    return Math.ceil(worst * REACH_MARGIN) + 2;
+  }
+  let reach: number | null = null; // source pixels; null = draw every frame in full
+  let prevValid = false; // prevTex holds the frame the final texture was drawn from
+  if (reuse?.usable) {
+    const key = `${chainKey(settings)}|${w}x${h}|${canvas.width}`;
+    if (!reachCache.has(key)) {
+      try { reachCache.set(key, measureReach()); } catch { reachCache.set(key, null); }
+    }
+    reach = reachCache.get(key) ?? null;
   }
 
   // --- GPU timing -------------------------------------------------------------
@@ -411,7 +403,7 @@ async function buildRenderer(
       outputWidth: canvas.width,
       outputHeight: canvas.height,
       timerSupported: !!timerExt,
-      backend: 'webgl2',
+      reach,
     };
   }
 
@@ -421,6 +413,7 @@ async function buildRenderer(
     for (const q of pendingQueries) gl!.deleteQuery(q);
     pendingQueries.length = 0;
     if (lastFence) gl!.deleteSync(lastFence);
+    reuse?.destroy();
     canvas.removeEventListener('webglcontextlost', onLost);
     for (const c of compiled) { gl!.deleteProgram(c.program); if (c.fbo) gl!.deleteFramebuffer(c.fbo); }
     for (const t of allTex) gl!.deleteTexture(t.tex);
@@ -447,6 +440,10 @@ async function buildRenderer(
       lastHealthCheck = t0;
       while (gl!.getError() !== gl!.NO_ERROR) { /* drain older errors so only the upload is judged */ }
     }
+    // With frame reuse the last frame's texture becomes "previous" and the other one is refilled.
+    const canReuse = !!reuse && reach !== null && prevValid && !frame;
+    prevValid = false;
+    if (prevTex) [videoTex.tex, prevTex.tex] = [prevTex.tex, videoTex.tex];
     gl!.activeTexture(gl!.TEXTURE0);
     gl!.bindTexture(gl!.TEXTURE_2D, videoTex.tex);
     gl!.texSubImage2D(gl!.TEXTURE_2D, 0, 0, 0, w, h, gl!.RGBA, gl!.UNSIGNED_BYTE, frame ?? video);
@@ -462,23 +459,8 @@ async function buildRenderer(
       }
     }
 
-    for (const c of compiled) {
-      gl!.bindFramebuffer(gl!.FRAMEBUFFER, c.fbo);
-      gl!.viewport(0, 0, c.output ? c.output.w : canvas.width, c.output ? c.output.h : canvas.height);
-      gl!.useProgram(c.program);
-      let unit = 0;
-      c.inputs.forEach((inp) => {
-        if (inp.loc) {
-          gl!.activeTexture(gl!.TEXTURE0 + unit);
-          gl!.bindTexture(gl!.TEXTURE_2D, inp.tex.tex);
-          gl!.uniform1i(inp.loc, unit);
-          unit += 1;
-        }
-        if (inp.sizeLoc) gl!.uniform2f(inp.sizeLoc, inp.tex.w, inp.tex.h);
-      });
-      if (c.offsetLoc && c.offset) gl!.uniform2f(c.offsetLoc, c.offset[0], c.offset[1]);
-      gl!.drawArrays(gl!.TRIANGLES, 0, 3);
-    }
+    drawPasses(canReuse && reuse!.mark(videoTex.tex, prevTex!.tex, reach!));
+    prevValid = !frame;
 
     if (query) { gl!.endQuery(timerExt!.TIME_ELAPSED_EXT); pendingQueries.push(query); }
     if (lastFence) gl!.deleteSync(lastFence);

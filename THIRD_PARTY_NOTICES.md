@@ -12,42 +12,6 @@ Anime4Nerd bundles the following third-party work.
 Anime4K is the work of bloc97 and contributors. Anime4Nerd only loads these
 shaders in a browser; it does not modify them.
 
-The Anime4K GAN shaders (`shaders/Anime4K_Upscale_GAN_x2_S.glsl`,
-`Anime4K_Upscale_GAN_x2_M.glsl`, `Anime4K_Restore_GAN_UL.glsl`) come from the
-same commit under the same license.
-
-## Other upscaling engines (shaders)
-
-These ship as separate, unmodified files in the extension's `shaders/` folder,
-and load only when the engine is picked in the popup. Exact upstream commits
-are in `src/shaders/engines/SOURCE.txt`.
-
-- **ArtCNN**: https://github.com/Artoriuz/ArtCNN, tag v1.4.2, `Legacy/`
-  fragment-shader builds. MIT, Copyright (c) 2024 João Chrisóstomo
-  (`shaders/LICENSE.ArtCNN`).
-- **ArtCNN 1.6**: https://github.com/Artoriuz/ArtCNN, tag v1.6.2, `GLSL/`
-  compute-shader builds (WebGPU only), same license.
-- **FSRCNNX**: https://github.com/igv/FSRCNN-TensorFlow, release 1.1.
-  LGPL-3.0, Copyright (C) 2017-2021 igv (`shaders/LICENSE.LGPL-3.0`,
-  `shaders/LICENSE.GPL-3.0`).
-- **RAVU and NNEDI3**: https://github.com/bjin/mpv-prescalers, by bjin.
-  LGPL-3.0 (`shaders/LICENSE.LGPL-3.0`, `shaders/LICENSE.GPL-3.0`).
-- **AMD FidelityFX FSR 1 and CAS**: mpv ports by agyild
-  (https://gist.github.com/agyild). MIT, Copyright (c) 2017-2021 Advanced
-  Micro Devices, Inc.; the license text is in each file's header. Anime4Nerd
-  sets the sharpness constant when it loads the file.
-
-The LGPL-3.0 shaders are the complete source of those components. You can
-replace any of them with a modified version by editing the file in the
-extension's `shaders/` folder.
-
-For the optional WebGPU backend, every shader above (Anime4K included) is also
-shipped as a machine translation to WGSL (`shaders/*.wgsl.json`), generated at
-build time by `tools/wgsl-gen.ts` with naga (https://github.com/gfx-rs/wgpu,
-MIT/Apache-2.0, via the `naga-wasm` package; build tool only, not shipped). The
-translations are derived from, and covered by the same licenses as, the shader
-files they are generated from; the original GLSL ships alongside them.
-
 ## Store screenshot artwork (not shipped in the extension)
 
 - Image: "A snapshot from the 2012 demo release from the Morevna Project"
