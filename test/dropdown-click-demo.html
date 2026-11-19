@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Anime4Nerd: dropdown outside click</title>
+<style>
+:root { --bg: #0b0b0b; --panel: #101010; --line: #2a2a2a; --line2: #3a3a3a; --fg: #e4e4e4; --dim: #8d8d8d; --faint: #585858; --ok: #9fd3a8; --bad: #e39a9a; }
+* { box-sizing: border-box; }
+body { margin: 0; padding: 24px; background: #050505; color: var(--fg);
+  font: 12px/1.5 "JetBrains Mono", "Cascadia Mono", Consolas, ui-monospace, monospace; }
+h1 { font-size: 14px; margin: 0 0 4px; }
+.lead { color: var(--dim); margin: 0 0 20px; max-width: 900px; }
+.board { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; }
+.col h2 { font-size: 12px; margin: 0 0 2px; }
+.col p { color: var(--dim); font-size: 11px; margin: 0 0 8px; width: 300px; min-height: 34px; }
+.log { width: 300px; margin-top: 8px; padding: 6px 8px; border: 1px solid var(--line); color: var(--dim); font-size: 11px; min-height: 64px; white-space: pre-line; }
+.log b { color: var(--fg); font-weight: 400; }
+
+/* A small copy of the popup: header row, video card, preset grid, upscale pills. */
+.popup { width: 300px; padding: 10px; background: var(--bg); border: 1px solid var(--line2); display: flex; flex-direction: column; gap: 10px; position: relative; }
+.popup > * { transition: opacity .12s, filter .12s; }
+.popup.open > :not(.bar) { opacity: .4; filter: blur(1.5px); }
+.bar { display: flex; gap: 6px; position: relative; z-index: 2; }
+.chip { border: 1px solid var(--line2); background: transparent; color: var(--fg); font: inherit; padding: 3px 8px; cursor: pointer; }
+.chip:hover { border-color: var(--fg); }
+.modechip { position: relative; }
+.modechip .chip::after { content: " ▾"; color: var(--dim); font-size: 9px; }
+.list { position: absolute; top: calc(100% + 4px); left: 0; width: 190px; padding: 3px; background: var(--bg); border: 1px solid var(--line2); box-shadow: 0 10px 18px -8px #000; }
+.list[hidden] { display: none; }
+.opt { display: flex; gap: 6px; padding: 4px 8px 4px 5px; border: 1px solid transparent; cursor: pointer; }
+.opt:hover { border-color: var(--line2); background: #171717; }
+.opt b { width: 5ch; font-weight: 400; }
+.opt small { color: var(--faint); font-size: 11px; }
+.opt.on small::after { content: " ●"; color: var(--ok); }
+.panel { border: 1px solid var(--line); background: var(--panel); padding: 10px; display: grid; gap: 6px; }
+.head { color: var(--faint); font-size: 10px; text-transform: uppercase; letter-spacing: .1em; display: flex; justify-content: space-between; }
+.card { display: flex; justify-content: space-between; align-items: center; padding: 8px; border: 1px solid rgba(159,211,168,.6); }
+.switch { width: 36px; height: 20px; padding: 0; position: relative; border: 1px solid rgba(159,211,168,.6); background: var(--bg); cursor: pointer; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 18px; width: 14px; height: 14px; background: var(--ok); transition: left .08s; }
+.switch[aria-checked="false"] { border-color: rgba(227,154,154,.45); }
+.switch[aria-checked="false"]::after { left: 2px; background: rgba(227,154,154,.75); }
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.btn { border: 1px solid var(--line2); background: transparent; color: var(--dim); font: inherit; padding: 6px; cursor: pointer; text-align: left; }
+.btn:hover { color: var(--fg); }
+.btn[aria-checked="true"] { color: var(--fg); border-color: var(--fg); }
+.pills { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.pills .btn { text-align: center; padding: 3px 0; }
+.pills .btn[aria-checked="true"] { background: #fff; color: #000; }
+</style>
+</head>
+<body>
+<h1>Mode list: clicking outside</h1>
+<p class="lead">Open the mode list (auto ▾), then click a dimmed button behind it. The log under each popup says what happened.
+Today the click goes through. Both fixes only close the list; they differ in what the header row does.</p>
+<div class="board" id="board"></div>
+
+<script>
+const VARIANTS = [
+  { key: 'today', name: 'Today', note: 'The list closes and the button behind it also fires.' },
+  { key: 'closeAll', name: 'Fix A: closes only', note: 'Any click outside the list only closes it, header buttons included. Click again to use them.' },
+  { key: 'closeDim', name: 'Fix B: header still works', note: 'Clicks on the dimmed area only close the list. The sharp header row (on · a, gpu) still works on the first click.' },
+];
+
+const POPUP = `
+  <div class="bar">
+    <span class="modechip"><button class="chip mode" aria-expanded="false">auto</button>
+      <div class="list" hidden>
+        <div class="opt on" data-mode="auto"><b>auto</b><small>video and manga</small></div>
+        <div class="opt" data-mode="anime"><b>anime</b><small>video only</small></div>
+        <div class="opt" data-mode="manga"><b>manga</b><small>pages only</small></div>
+      </div></span>
+    <button class="chip" data-act="on · a">on · a</button>
+    <button class="chip" data-act="gpu">gpu 3.6 ms</button>
+  </div>
+  <div class="panel"><div class="head"><span>playing now</span></div>
+    <div class="card"><span>I'm Luffy! The Man Who's…</span><button class="switch" role="switch" aria-checked="true" data-act="switch"></button></div></div>
+  <div class="panel"><div class="head"><span>preset</span><span>mode a</span></div>
+    <div class="grid" data-group="preset">
+      <button class="btn" aria-checked="true" data-act="Mode A">Mode A</button>
+      <button class="btn" data-act="Mode B">Mode B</button>
+      <button class="btn" data-act="Mode C">Mode C</button></div>
+    <div class="head"><span>upscale</span></div>
+    <div class="pills" data-group="upscale">
+      ${['auto', '2×', '4×', '8×', '16×', '32×'].map((u) => `<button class="btn" data-act="${u}" ${u === '2×' ? 'aria-checked="true"' : ''}>${u}</button>`).join('')}</div>
+  </div>`;
+
+function build(v) {
+  const col = document.createElement('section');
+  col.className = 'col';
+  col.innerHTML = `<h2>${v.name}</h2><p>${v.note}</p><div class="popup">${POPUP}</div><div class="log">open the list, then click behind it</div>`;
+  document.getElementById('board').append(col);
+  const pop = col.querySelector('.popup'), btn = col.querySelector('.mode'), list = col.querySelector('.list'), log = col.querySelector('.log');
+  const lines = [];
+  const say = (t) => { lines.unshift(t); log.innerHTML = lines.slice(0, 4).join('\n'); };
+  const isOpen = () => !list.hidden;
+  const setOpen = (o) => { list.hidden = !o; btn.setAttribute('aria-expanded', String(o)); pop.classList.toggle('open', o); };
+
+  btn.addEventListener('click', () => { setOpen(!isOpen()); say(isOpen() ? 'list opened' : 'list closed'); });
+  list.addEventListener('click', (e) => {
+    const o = e.target.closest('.opt'); if (!o) return;
+    list.querySelectorAll('.opt').forEach((x) => x.classList.toggle('on', x === o));
+    btn.textContent = o.dataset.mode; setOpen(false); say(`<b>mode: ${o.dataset.mode}</b>`);
+  });
+  // The page's own buttons.
+  pop.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-act]'); if (!b) return;
+    if (b.classList.contains('switch')) b.setAttribute('aria-checked', String(b.getAttribute('aria-checked') !== 'true'));
+    const g = b.closest('[data-group]');
+    if (g) g.querySelectorAll('.btn').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
+    say(`<b>button fired: ${b.dataset.act}</b>`);
+  });
+
+  if (v.key === 'today') {
+    // As popup.ts today: a pointerdown anywhere outside the chip closes the list; the click carries on.
+    document.addEventListener('pointerdown', (e) => { if (isOpen() && !col.querySelector('.modechip').contains(e.target)) { setOpen(false); say('list closed'); } });
+    return;
+  }
+  // Fixes: catch the press before any button sees it (capture phase), close, and swallow its click.
+  let swallow = false;
+  document.addEventListener('pointerdown', (e) => {
+    if (!isOpen() || col.querySelector('.modechip').contains(e.target)) return;
+    if (v.key === 'closeDim' && pop.querySelector('.bar').contains(e.target)) { setOpen(false); say('list closed'); return; }
+    e.preventDefault(); e.stopPropagation();
+    setOpen(false); swallow = true; say('list closed <b>(click swallowed)</b>');
+  }, true);
+  document.addEventListener('click', (e) => { if (swallow) { swallow = false; e.preventDefault(); e.stopPropagation(); } }, true);
+}
+VARIANTS.forEach(build);
+</script>
+</body>
+</html>

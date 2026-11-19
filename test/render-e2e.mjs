@@ -50,10 +50,10 @@ const results = [];
 const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ` (${detail})` : ''}`); };
 
 const ctx = await chromium.launchPersistentContext(fs.mkdtempSync(path.join(os.tmpdir(), 'a4k-render-prof-')), {
-  headless: false,
+  headless: !process.env.A4K_SHOW, // headless by default; A4K_SHOW=1 opens a real window
   executablePath: exe,
   viewport: { width: 1280, height: 720 },
-  // A real window (real GPU), parked off-screen so it does not pop up; A4K_SHOW=1 shows it.
+  // Headless (new headless mode loads extensions). A4K_SHOW=1 opens a real window for the real GPU.
   args: [...(process.env.A4K_SHOW ? [] : ['--window-position=-32000,-32000']), `--disable-extensions-except=${dist}`, `--load-extension=${dist}`, '--autoplay-policy=no-user-gesture-required'],
 });
 try {

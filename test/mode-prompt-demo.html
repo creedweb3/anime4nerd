@@ -1,0 +1,2093 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Anime4Nerd: mode prompt demo</title>
+
+<!--
+  1. src/popup.css, verbatim. media="not all" keeps it off this page (it sizes html/body to the
+     popup's 380px); the script below copies its text into the popup iframe, where it applies.
+-->
+<style id="popup-css" media="not all">
+:root {
+  color-scheme: dark;
+  --bg: #0b0b0b;
+  --panel: #111;
+  --line: #262626;
+  --line2: #3a3a3a;
+  --fg: #e4e4e4;
+  --dim: #8d8d8d;
+  --faint: #585858;
+  --on: #fff;
+  --bar: #d0d0d0;
+  --bar-dim: #3c3c3c;
+  --ok: #9fd3a8;
+  --warn: #e3c58a;
+  --bad: #e39a9a;
+  --g: 159, 211, 168;
+  --r: 227, 154, 154;
+}
+
+* { box-sizing: border-box; }
+
+/*
+ * Baseline: no part of the popup keeps a browser or system default look. One rule each for
+ * hidden elements, text selection, the keyboard focus ring, links, pressed and disabled controls.
+ */
+[hidden] { display: none !important; } /* wins over any class that sets display */
+:root { accent-color: var(--on); caret-color: var(--on); -webkit-tap-highlight-color: transparent; }
+::selection { background: var(--on); color: #000; }
+:focus-visible { outline: 1px solid var(--on); outline-offset: 1px; }
+:focus:not(:focus-visible) { outline: none; }
+a { color: inherit; -webkit-user-drag: none; }
+button:active, a:active { filter: brightness(1.25); }
+button:disabled { opacity: 0.35; cursor: default; }
+input:disabled { cursor: default; }
+
+/*
+ * Scrollbars: one look for every scrolling box in the popup, including ones nobody planned for.
+ * A 10px lane with a 4px thumb in the middle of it, no arrows, no track.
+ * Chromium takes the ::-webkit-scrollbar rules (exact sizes); they stop working as soon as
+ * scrollbar-color or scrollbar-width is set, so those two are only given to browsers without them.
+ */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-button { display: none; }
+::-webkit-scrollbar-thumb { background: var(--line2); background-clip: padding-box; border: 3px solid transparent; }
+::-webkit-scrollbar-thumb:hover, ::-webkit-scrollbar-thumb:active { background-color: var(--dim); }
+@supports not selector(::-webkit-scrollbar) {
+  * { scrollbar-width: thin; scrollbar-color: var(--line2) transparent; }
+}
+/*
+ * A browser popup is at most 600px tall. Taller content scrolls inside body, not in the window:
+ * a window scrollbar is added outside the 380px and makes the right gap wider than the left.
+ * Body keeps a 10px lane free on the right for its bar, the same as the left padding, so both
+ * side gaps are 10px whether the bar shows or not.
+ */
+html { overflow: hidden; }
+body {
+  width: 380px;
+  max-height: 600px;
+  overflow: hidden auto;
+  scrollbar-gutter: stable;
+  margin: 0;
+  padding: 10px 0 10px 10px; /* right: the scrollbar lane. Same as a panel's own padding, so nested boxes step in evenly */
+  background: var(--bg);
+  color: var(--fg);
+  font: 12px/1.5 "JetBrains Mono", "Cascadia Mono", "Fira Code", Consolas, ui-monospace, monospace;
+  cursor: default; /* no text cursor over labels; the text can still be selected and copied */
+}
+
+/* top bar ------------------------------------------------------------------ */
+.bar { display: flex; gap: 4px; margin-bottom: 6px; }
+.chip {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--dim);
+  padding: 3px 8px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.chip.grow { flex: 1; }
+.chip.on { color: var(--on); border-color: var(--line2); }
+.chip.bug { display: flex; align-items: center; padding: 3px 6px; text-decoration: none; }
+.chip.bug:hover { color: var(--fg); border-color: var(--line2); }
+.chip.bug:focus-visible { color: var(--on); border-color: var(--on); }
+/*
+ * Mode dropdown: a chip whose whole box is a button, so a click anywhere on it opens the list.
+ * The button carries the chip's padding; the caret is drawn over it. The chip shows only the
+ * value; its tooltip says it is the mode. The list is the popup's own (see popup.ts): it floats
+ * under the chip and takes no room in the layout.
+ */
+.chip.mode { position: relative; flex: none; padding: 0; }
+.chip.mode:hover, .chip.mode:has([aria-expanded="true"]) { border-color: var(--line2); }
+.chip.mode:has(#mode:focus-visible) { border-color: var(--on); outline: 1px solid var(--on); outline-offset: 1px; }
+#mode {
+  appearance: none;
+  display: block;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  outline: none; /* the chip shows the focus ring */
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  padding: 3px 21px 3px 8px;
+  cursor: pointer;
+}
+.mode-list {
+  position: absolute;
+  top: 100%;
+  left: -1px;
+  z-index: 10;
+  width: max-content;
+  max-width: 170px;
+  margin-top: 7px; /* its top edge lies on the first panel's top line; its left edge on the chip's and the panel's */
+  padding: 2px;
+  border: 1px solid var(--line2);
+  background: var(--panel);
+  box-shadow: 0 10px 18px -8px #000;
+}
+/* While the list is open everything under the header steps back (dimmed and slightly blurred); the header row stays as it is. */
+body > * { transition: opacity 0.12s, filter 0.12s; }
+body:has(#mode[aria-expanded="true"]) > :not(.bar) { opacity: 0.4; filter: blur(1.5px); }
+@media (prefers-reduced-motion: reduce) { body > * { transition: none; } }
+.mode-opt { display: flex; align-items: baseline; gap: 6px; padding: 4px 8px 4px 5px; border: 1px solid transparent; cursor: pointer; } /* 5px: the names start under the chip's own text */
+.mode-opt b { width: 5ch; color: var(--fg); font-weight: 400; }
+.mode-opt::after { content: "●"; margin-left: auto; padding-left: 6px; color: var(--ok); font-size: 8px; visibility: hidden; } /* marks the current mode; its room is kept in every row */
+.mode-opt small { color: var(--faint); font-size: 10px; }
+.mode-opt[aria-selected="true"] b { color: var(--on); font-weight: 600; }
+.mode-opt[aria-selected="true"]::after { visibility: visible; }
+/* One highlight for the row under the pointer and the row the arrow keys are on. */
+.mode-opt.active { background: #1a1a1a; border-color: var(--line2); }
+.mode-opt.active small { color: var(--dim); }
+.chip.mode::after {
+  content: '';
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  margin-top: -1px;
+  border: 3px solid transparent;
+  border-top-color: currentColor;
+  pointer-events: none;
+}
+
+/* tooltip: one box for every [data-tip], placed by popup.ts so it stays inside the popup --------- */
+.tip {
+  position: fixed;
+  z-index: 20;
+  max-width: 240px;
+  padding: 3px 7px;
+  border: 1px solid var(--line2);
+  background: var(--panel);
+  color: var(--fg);
+  font-size: 10px;
+  box-shadow: 0 10px 18px -8px #000;
+  pointer-events: none;
+}
+
+/* what's new banner (after an update) -------------------------------------- */
+.update-note {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 7px 10px;
+  border: 1px solid var(--line2);
+  background: var(--panel);
+  color: var(--dim);
+  font-size: 11px;
+  text-decoration: none;
+}
+.update-label { color: var(--faint); font-size: 9px; text-transform: uppercase; letter-spacing: 0.16em; margin-right: 6px; }
+.update-dot { color: var(--ok); }
+.update-note b { color: var(--on); font-weight: 600; }
+.update-note:hover, .update-note:focus-visible { border-color: var(--dim); }
+.update-note:hover .update-link, .update-note:focus-visible .update-link { color: var(--on); }
+
+/* mode suggestion (Chrome; see popup.ts) -------------------------------------- */
+.mp-btn {
+  border: 1px solid var(--line2);
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  font-size: 11px;
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mp-btn:hover { color: var(--on); border-color: var(--on); }
+.mp-btn.primary { background: var(--on); border-color: var(--on); color: #000; font-weight: 600; }
+.mp-btn.primary:hover { background: var(--bar); border-color: var(--bar); color: #000; }
+.mp-dot { color: var(--ok); }
+/*
+ * The card the page would get after the switch, locked. Red and dashed, like a video card that
+ * is off: the page is not being upscaled.
+ */
+.source.mp-preview { gap: 3px; padding: 6px 12px; border: 1px dashed rgba(var(--r), 0.55); background: linear-gradient(135deg, rgba(var(--r), 0.12), rgba(var(--r), 0.02) 60%, transparent) var(--bg); cursor: default; }
+.source.mp-preview:hover, .source.mp-preview:active { filter: none; }
+.mp-preview:not([hidden]) + .sources:not(:empty) { margin-top: 10px; } /* a video beside the reader: its card keeps the cards' usual distance */
+.mp-dim { display: flex; flex-direction: column; gap: 3px; opacity: 0.5; }
+.mp-preview .switch { pointer-events: none; }
+.mp-preview .switch input { border-color: rgba(var(--r), 0.5); }
+.mp-preview .switch input::after { background: rgba(var(--r), 0.7); }
+.mp-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 5px; color: var(--dim); font-size: 12px; }
+.mp-row { display: flex; align-items: center; gap: 6px; flex: none; }
+.mp-paused { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+.mp-foot .mp-paused, .mp-foot .mp-dot { color: var(--bad); } /* stopped: red, as the off state is everywhere else */
+/*
+ * After a switch: "now in manga mode" and an undo, for a few seconds. It lies over the panel's
+ * head row and takes no room of its own, so the popup keeps its height (600px at most).
+ */
+.mp-head { position: relative; }
+.mp-done { position: absolute; inset: -7px 0 -3px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 3px 0 8px; border: 1px solid var(--line2); background: var(--bg); color: var(--fg); font-size: 10px; letter-spacing: normal; text-transform: none; }
+.mp-done .mp-dot { margin-right: 4px; }
+.mp-done .mp-btn { font-size: 10px; padding: 1px 6px; }
+/* While the suggestion shows, the mode chip takes the stopped colour. */
+.chip.mode.mp-ind-frame { border-color: rgba(var(--r), 0.6); background: linear-gradient(135deg, rgba(var(--r), 0.14), transparent 70%) var(--panel); }
+
+/* rating card (Chrome; see rate-prompt.ts) ---------------------------------- */
+.rate-card {
+  --accent: var(--fg);
+  position: relative;
+  margin-bottom: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line2);
+  background: var(--panel);
+}
+.rate-card.lv2, .rate-card.lv3 {
+  --accent: rgb(var(--g));
+  border-color: rgba(var(--g), 0.5);
+  background: linear-gradient(135deg, rgba(var(--g), 0.12), transparent 60%) var(--panel);
+}
+.rate-card.lv4 {
+  --accent: var(--warn);
+  border-color: rgba(227, 197, 138, 0.6);
+  background: linear-gradient(135deg, rgba(227, 197, 138, 0.14), transparent 60%) var(--panel);
+}
+.rate-top { color: var(--faint); font-size: 10px; }
+.rate-badge {
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 1px solid var(--line2);
+  color: var(--faint);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}
+.rate-card.lv2 .rate-badge, .rate-card.lv3 .rate-badge, .rate-card.lv4 .rate-badge { color: var(--accent); border-color: var(--accent); }
+.rate-big { color: var(--accent); font-size: 22px; font-weight: 700; line-height: 1.1; }
+.rate-row { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; margin-top: 8px; }
+.rate-lines { color: var(--faint); font-size: 10px; }
+.rate-actions { display: flex; flex-direction: column; align-items: stretch; gap: 4px; flex: none; }
+.rate-go {
+  padding: 4px 10px;
+  border: 1px solid var(--warn);
+  background: var(--warn);
+  color: #0b0b0b;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.rate-go:hover, .rate-go:focus-visible { filter: brightness(1.1); }
+.rate-done {
+  padding: 2px 8px;
+  border: 1px solid var(--line2);
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.rate-done:hover, .rate-x:hover { color: var(--on); }
+.rate-x {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--faint);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* panels ------------------------------------------------------------------- */
+.panel {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 10px;
+  margin-bottom: 6px;
+}
+.panel:last-of-type { margin-bottom: 0; }
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  color: var(--faint);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  margin-bottom: 6px;
+}
+
+/* video card --------------------------------------------------------------- */
+.sources { display: grid; gap: 10px; }
+
+.source {
+  border: 1px solid var(--line);
+  background: var(--bg);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  overflow: hidden;
+  transition: background 0.12s, border-color 0.12s;
+}
+/* off: red wash + border; on: green wash + border (X1 combo) */
+.source {
+  background: linear-gradient(135deg, rgba(var(--r), 0.14), rgba(var(--r), 0.02) 60%, transparent) var(--bg);
+  border-color: rgba(var(--r), 0.5);
+}
+.source.on {
+  background: linear-gradient(135deg, rgba(var(--g), 0.16), rgba(var(--g), 0.02) 60%, transparent) var(--bg);
+  border-color: rgba(var(--g), 0.6);
+}
+.source:hover { filter: brightness(1.08); }
+.source:active { filter: brightness(1.18); }
+
+.line { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.title { font-size: 14px; font-weight: 600; line-height: 1.3; }
+.episode { opacity: 0.85; }
+.tag {
+  display: inline-block;
+  border: 1px solid rgba(var(--r), 0.4);
+  padding: 1px 6px;
+  font-size: 10px;
+  color: rgba(var(--r), 0.85);
+  transition: color 0.12s, border-color 0.12s;
+  vertical-align: 2px;
+  white-space: nowrap;
+  margin-right: 4px;
+}
+.source.on .tag { border-color: rgba(var(--g), 0.5); color: rgb(var(--g)); }
+.meta { color: var(--faint); font-size: 11px; }
+
+.state { font-size: 12px; }
+.state.ok { color: var(--ok); }
+.state.warn { color: var(--warn); }
+.state.bad { color: var(--bad); }
+.state.dim { color: var(--dim); }
+.state.off { color: rgba(var(--r), 0.9); }
+
+/* switch: label is the hit area (44px tall), input is the visual */
+.switch { flex: none; display: flex; align-items: center; padding: 8px 0 8px 12px; margin: -8px 0 -8px 0; cursor: pointer; }
+.switch input {
+  appearance: none;
+  width: 36px;
+  height: 20px;
+  border: 1px solid var(--line2);
+  background: var(--bg);
+  position: relative;
+  cursor: pointer;
+  margin: 2px 0 0;
+}
+.switch input::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: var(--bar-dim);
+  transition: left 0.08s, background 0.08s;
+}
+.switch input { border-color: rgba(var(--r), 0.45); }
+.switch input::after { background: rgba(var(--r), 0.75); }
+.switch input:checked { border-color: rgba(var(--g), 0.6); }
+.switch input:checked::after { left: 18px; background: rgb(var(--g)); }
+.switch:hover input { border-color: var(--on); }
+
+/* performance panel ---------------------------------------------------------- */
+.verdict { text-transform: none; letter-spacing: 0; font-size: 11px; }
+.verdict.ok { color: var(--ok); } .verdict.warn { color: var(--warn); } .verdict.bad { color: var(--bad); } .verdict.dim { color: var(--dim); }
+#perf .meta { margin-top: 4px; }
+
+/* gpu: six boxes + bars ---------------------------------------------------- */
+.kv { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.kv div { border: 1px solid var(--line); padding: 3px 8px; min-height: 40px; }
+.kv span {
+  display: block;
+  color: var(--faint);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.kv b { display: block; font-size: 14px; font-weight: 600; white-space: nowrap; line-height: 1.4; }
+.kv b.ok { color: var(--ok); } .kv b.warn { color: var(--warn); } .kv b.bad { color: var(--bad); }
+
+.bars {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 20px;
+  border-bottom: 1px solid var(--line);
+  margin-top: 2px;
+}
+.bars i { flex: 1; background: var(--bar); display: block; min-height: 1px; }
+.bars i.empty { background: var(--bar-dim); }
+.bars i.over { background: var(--bad); }
+.bars i.stale { opacity: 0.45; }
+.bars s { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--faint); pointer-events: none; }
+
+.empty { color: var(--faint); margin: 0; font-size: 11px; }
+
+/* presets ------------------------------------------------------------------ */
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.tile {
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--dim);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  padding: 5px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+}
+.tile small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile:hover { border-color: var(--line2); }
+.tile b { color: var(--fg); font-size: 12px; font-weight: 600; }
+.tile small { font-size: 10px; color: var(--faint); }
+.tile[aria-checked="true"] { background: #1a1a1a; border-color: var(--on); }
+.tile[aria-checked="true"] b::before { content: "▸ "; color: var(--on); }
+
+.pills { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.pill {
+  border: 1px solid var(--line2);
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  font-size: 11px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.pill:hover { color: var(--on); border-color: var(--on); }
+.pill::before { content: "+ "; }
+.pill[aria-checked="true"] { background: var(--on); color: #000; border-color: var(--on); }
+.pill[aria-checked="true"]:hover { background: var(--bar); border-color: var(--bar); color: #000; }
+.pill[aria-checked="true"]::before { content: "✓ "; }
+.pill[role="radio"]::before, .pill[role="radio"][aria-checked="true"]::before { content: none; }
+.pills-label { color: var(--faint); font-size: 11px; align-self: center; margin-right: auto; }
+
+.note { display: none; }
+
+/* manga mode (local prototype): chapter card in "playing now" ------------------- */
+.manga-card { margin-top: 10px; }
+.sources:empty + .manga-card { margin-top: 0; }
+/* one line: chapter tag and "9 pages · colour · 2000×2798", vertically centred together */
+.manga-card .episode, .mp-preview .episode { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.manga-card .tag, .mp-preview .tag { vertical-align: baseline; margin-right: 0; flex: none; }
+.manga-card .epname, .mp-preview .epname { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+/* No separator line in the card: the status line, or the bar, sits a little lower instead. */
+.manga-card .mc-prog, .manga-card .state { margin-top: 4px; }
+/*
+ * Progress: one block per page in page order, all the same size, on one row whatever the page
+ * count. A long chapter (see MC_MAX_BLOCKS in popup.ts) gets one segment per state instead, as
+ * wide as its share of the pages, so no block is ever thinner than a pixel.
+ */
+.mc-pages { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 2px; }
+.mc-pages i { height: 6px; background: var(--bar-dim); }
+.mc-pages i.done { background: var(--ok); }
+.mc-pages i.fail { background: var(--bad); }
+.mc-pages i.now { background: transparent; box-shadow: inset 0 0 0 1px var(--on); }
+.mc-pages.shares { display: flex; }
+.mc-pages.shares i { flex: 0 0 0; min-width: 2px; }
+/* Counts: four equal boxes, a coloured square and one word over the number, both centred. */
+.mc-counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+.mc-counts > div { display: flex; flex-direction: column-reverse; justify-content: center; align-items: center; gap: 1px; min-width: 0; border: 1px solid var(--line); padding: 5px 0 4px; }
+.mc-counts b { font-size: 12px; font-weight: 600; line-height: 1.2; color: var(--fg); }
+.mc-counts [data-k="done"] b { color: var(--ok); }
+.mc-counts [data-k="fail"] b { color: var(--bad); }
+.mc-counts span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding-left: 0.12em; /* balances the tracking after the last letter, so the label sits on the centre line */
+  color: var(--faint);
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.mc-counts .zero b { color: var(--faint); }
+.mc-counts .zero .pkey { opacity: 0.4; }
+.manga-card.unsupported .switch { opacity: 0.35; pointer-events: none; }
+/* mode "manga": a video card shows its stored switch, but it cannot be flipped */
+.source.paused { cursor: default; }
+.source.paused .switch { opacity: 0.35; pointer-events: none; }
+
+/* manga mode: header tag and page map ------------------------------------------ */
+.chip.manga { color: var(--ok); border-color: rgba(var(--g), 0.5); }
+
+/*
+ * One square per page. The sizes are chosen so every cell and gap is a whole pixel: the tray's
+ * border (1px) and padding (2px) leave 332px of the panel's 338px, which is 12 cells of 24px and
+ * 11 gaps of 4px. Columns and rows are both the fixed cell size, so a cell is square whatever
+ * width is left; only the space between columns can stretch.
+ */
+.pmap {
+  --cell: 24px;
+  display: grid;
+  grid-template-columns: repeat(12, var(--cell));
+  grid-auto-rows: var(--cell);
+  justify-content: space-between;
+  gap: 4px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  margin-bottom: 8px;
+}
+/*
+ * Long chapters: three rows and a scrollbar. The cells keep their size and the gaps give way:
+ * the scrollbar takes 11px, which leaves 321px, 12 cells of 24px and 11 gaps of 3px. The columns
+ * are spread over the width rather than given a fixed gap, so a scrollbar of another width
+ * changes the gaps and never the cells. The thumb is the popup's usual 4px (see the top of the file).
+ */
+.pmap.long {
+  column-gap: 0;
+  row-gap: 3px;
+  max-height: calc(3 * var(--cell) + 2 * 3px + 6px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.pmap.long::-webkit-scrollbar { width: 11px; }
+.pmap.long::-webkit-scrollbar-thumb { border-width: 3px 3px 3px 4px; }
+
+/* A cell and its square beside the counts share one look. States change colours only, never the box. */
+.pcell, .pkey { border: 1px solid var(--line2); background: transparent; }
+.pcell.done, .pkey.done { background: var(--ok); border-color: var(--ok); }
+.pcell.fail, .pkey.fail { background: var(--bad); border-color: var(--bad); }
+.pcell.now, .pkey.now { border-style: dashed; border-color: var(--on); }
+
+.pcell {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  color: var(--dim);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: 0;
+  cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s, color 0.12s;
+}
+.pcell.done, .pcell.fail { color: var(--bg); }
+.pcell.now { color: var(--on); animation: pcell-now 0.9s ease-in-out infinite alternate; }
+.pcell[aria-disabled='true'] { cursor: default; }
+.pcell:not([aria-disabled='true']):hover { border-color: var(--on); }
+.pcell:not(.done, .fail, [aria-disabled='true']):hover { color: var(--on); }
+@keyframes pcell-now { from { opacity: 1; } to { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) {
+  .pcell { transition: none; }
+  .pcell.now { animation: none; }
+}
+
+.kv.two { grid-template-columns: repeat(2, 1fr); }
+.pkey { flex: none; width: 6px; height: 6px; }
+</style>
+
+<!--
+  2. NEW CSS for the three prompt designs (not in the extension yet). Applies to this page
+     (design C sits on the site) and is copied into the popup iframe (designs A and B).
+-->
+<style id="prompt-css">
+/* TEST ONLY: scrollbar looks for the popup's own bar (not in the extension) */
+.sb-fade { position: sticky; bottom: -10px; height: 28px; margin: -28px 0 0; background: linear-gradient(transparent, var(--bg)); pointer-events: none; transition: opacity 0.15s; }
+.sb-fade.end { opacity: 0; }
+
+/* manga card: progress bar and counts (replaces the status line and the page map legend) */
+.mc-prog[hidden] { display: none; }
+.mc-barrow { display: flex; align-items: center; gap: 8px; }
+.mc-bar { flex: 1; min-width: 0; display: flex; gap: 2px; height: 4px; }
+.mc-pages, .mc-pct { display: none; }
+/* thick */
+.mc-bar-thick .mc-bar { height: 8px; }
+/* percent: thin bar, number at its end */
+.mc-bar-percent .mc-pct { display: block; flex: none; min-width: 4ch; text-align: right; font-size: 10px; font-weight: 600; line-height: 1; color: var(--ok); }
+/* pages / dots: one mark per page, in page order, all the same size */
+.mc-bar-pages .mc-bar, .mc-bar-dots .mc-bar { display: none; }
+.mc-bar-pages .mc-pages, .mc-bar-dots .mc-pages { flex: 1; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 2px; }
+.mc-pages i { height: 6px; background: var(--bar-dim); }
+.mc-pages i.done { background: var(--ok); }
+.mc-pages i.fail { background: var(--bad); }
+.mc-pages i.now { background: transparent; box-shadow: inset 0 0 0 1px var(--on); }
+.mc-bar-dots .mc-pages { justify-items: center; }
+.mc-bar-dots .mc-pages i { width: 6px; border-radius: 50%; }
+/* frame: outlined track, fill inside */
+.mc-bar-frame .mc-bar { height: 10px; padding: 2px; gap: 1px; border: 1px solid var(--line2); }
+/* none */
+.mc-bar-none .mc-barrow { display: none; }
+.mc-bar-none .mc-counts { margin-top: 0; }
+.mc-bar i { flex: 0 0 0; min-width: 0; background: var(--bar-dim); transition: flex-grow 0.3s; }
+.mc-bar i.done { background: var(--ok); }
+.mc-bar i.now { background: repeating-linear-gradient(90deg, var(--on) 0 3px, transparent 3px 5px); }
+.mc-bar i.fail { background: var(--bad); }
+.mc-bar i[style*="flex-grow: 0"] { display: none; }
+/* Counts: always four equal columns with the same gap as the tiles elsewhere (8px), one word each. */
+.mc-counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+.mc-counts > div { display: flex; flex-direction: column; min-width: 0; }
+.mc-counts b { font-size: 14px; font-weight: 600; line-height: 1.4; color: var(--fg); }
+.mc-counts [data-k="done"] b { color: var(--ok); }
+.mc-counts [data-k="fail"] b { color: var(--bad); }
+.mc-counts span { display: flex; align-items: center; gap: 5px; color: var(--faint); font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; white-space: nowrap; }
+.mc-counts .zero b { color: var(--faint); }
+.mc-counts .zero .pkey { opacity: 0.4; }
+/* tiles: the performance panel's boxes (label on top, number under it) */
+.mc-tiles > div { flex-direction: column-reverse; justify-content: flex-end; border: 1px solid var(--line); padding: 3px 8px; }
+.mc-tiles .pkey { display: none; }
+/* split: no boxes, a hairline between columns, everything centred */
+.mc-split { gap: 0; }
+.mc-split > div { align-items: center; padding: 1px 0; }
+.mc-split > div + div { border-left: 1px solid var(--line); }
+.mc-split .pkey { display: none; }
+/* row: square, number, word on one line */
+.mc-row > div { flex-direction: row; align-items: center; gap: 5px; }
+.mc-row b { order: 2; font-size: 12px; }
+.mc-row span { order: 3; letter-spacing: 0.08em; }
+.mc-row span .pkey { display: none; }
+.mc-row > div::before { content: ''; order: 1; flex: none; width: 8px; height: 8px; border: 1px solid var(--line2); }
+.mc-row [data-k="done"]::before { background: var(--ok); border-color: var(--ok); }
+.mc-row [data-k="now"]::before { border-style: dashed; border-color: var(--on); }
+.mc-row [data-k="fail"]::before { background: var(--bad); border-color: var(--bad); }
+/* edge: boxes with the state colour down the left side */
+.mc-edge > div { flex-direction: column-reverse; justify-content: flex-end; border: 1px solid var(--line); border-left: 2px solid var(--line2); padding: 3px 8px; }
+.mc-edge [data-k="done"] { border-left-color: var(--ok); }
+.mc-edge [data-k="now"] { border-left-color: var(--on); }
+.mc-edge [data-k="fail"] { border-left-color: var(--bad); }
+.mc-edge .zero { border-left-color: var(--line2); }
+.mc-edge .pkey { display: none; }
+/* plain: number over word, left aligned, squares kept */
+/* tiles+squares: the boxes, with the coloured square kept beside each word */
+/* Compact: label and number both centred in the box; the square's box is part of the centred label. */
+.mc-tileskey { gap: 6px; }
+.mc-tileskey > div { flex-direction: column-reverse; justify-content: center; align-items: center; gap: 1px; border: 1px solid var(--line); padding: 5px 0 4px; }
+.mc-tileskey b { font-size: 12px; line-height: 1.2; }
+.mc-tileskey span { justify-content: center; gap: 4px; font-size: 8px; letter-spacing: 0.12em; line-height: 1.2; }
+.mc-tileskey span { padding-left: 0.12em; } /* balances the tracking after the last letter, so the label sits on the centre line */
+.mc-tileskey .pkey { width: 6px; height: 6px; }
+/* the card has no separator line: the bar sits a little lower instead */
+.manga-card .mc-prog, .manga-card .state { margin-top: 4px; }
+/* split+row: the row design's one line (square, number, word), centred in split's divided columns */
+.mc-splitrow { gap: 0; }
+.mc-splitrow > div { flex-direction: row; align-items: center; justify-content: center; gap: 5px; padding: 2px 0; }
+.mc-splitrow > div + div { border-left: 1px solid var(--line); }
+.mc-splitrow b { order: 2; font-size: 12px; }
+.mc-splitrow span { order: 3; letter-spacing: 0.08em; }
+.mc-splitrow span .pkey { display: none; }
+.mc-splitrow > div::before { content: ''; order: 1; flex: none; width: 8px; height: 8px; border: 1px solid var(--line2); }
+.mc-splitrow [data-k="done"]::before { background: var(--ok); border-color: var(--ok); }
+.mc-splitrow [data-k="now"]::before { border-style: dashed; border-color: var(--on); }
+.mc-splitrow [data-k="fail"]::before { background: var(--bad); border-color: var(--bad); }
+.mc-splitrow .zero::before { opacity: 0.4; }
+/* split+squares: split, with the coloured square kept beside each word */
+.mc-splitkey { gap: 0; }
+.mc-splitkey > div { align-items: center; padding: 1px 0; }
+.mc-splitkey > div + div { border-left: 1px solid var(--line); }
+/* split+edge: split, with the state colour as a short bar over each number */
+.mc-splitedge { gap: 0; }
+.mc-splitedge > div { align-items: center; padding: 1px 0; }
+.mc-splitedge > div + div { border-left: 1px solid var(--line); }
+.mc-splitedge .pkey { display: none; }
+.mc-splitedge > div::before { content: ''; width: 16px; height: 2px; margin-bottom: 3px; background: var(--line2); }
+.mc-splitedge [data-k="done"]::before { background: var(--ok); }
+.mc-splitedge [data-k="now"]::before { background: var(--on); }
+.mc-splitedge [data-k="fail"]::before { background: var(--bad); }
+.mc-splitedge .zero::before { background: var(--line2); }
+@media (prefers-reduced-motion: reduce) { .mc-bar i { transition: none; } }
+
+/* shared controls: square corners, 1px borders, the popup's own sizes */
+.mp-btn {
+  border: 1px solid var(--line2);
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  font-size: 11px;
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mp-btn:hover { color: var(--on); border-color: var(--on); }
+.mp-btn.primary { background: var(--on); border-color: var(--on); color: #000; font-weight: 600; padding: 4px 10px; }
+.mp-btn.primary:hover { background: var(--bar); border-color: var(--bar); color: #000; }
+.mp-x { border: 0; background: transparent; color: var(--faint); font: inherit; font-size: 12px; line-height: 1; padding: 6px; cursor: pointer; }
+.mp-x:hover { color: var(--on); }
+.mp-link {
+  border: 0;
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  font-size: 10px;
+  padding: 2px 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+.mp-link:hover { color: var(--on); }
+.mp-btn:focus-visible, .mp-x:focus-visible, .mp-link:focus-visible { outline: 1px solid var(--on); outline-offset: 1px; }
+.mp-dot { color: var(--ok); }
+
+/* A: strip under the header, on top of .update-note (as built: src/popup.css) */
+.update-note.mp-strip { align-items: center; gap: 4px; padding: 3px 4px 3px 8px; }
+.update-note.mp-strip:hover { border-color: var(--line2); } /* the strip itself is not a link */
+/* What was found, on one line: a long series name is cut, the buttons never move. */
+.mp-msg { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); font-size: 10px; }
+.mp-msg .mp-dot { margin-right: 4px; }
+.mp-actions { display: flex; align-items: center; gap: 2px; flex: none; }
+.mp-strip .mp-btn { font-size: 10px; padding: 3px 6px; }
+.mp-strip .mp-link { padding: 3px; }
+.mp-strip .mp-x { padding: 5px 3px; }
+.mp-strip [hidden] { display: none; }
+
+/* B: five variants inside "playing now". .mp-b: any variant; .mp-inv: the green "on" look of .source.on */
+.mp-b[hidden], .sources[hidden], .mp-done[hidden], .mp-hint[hidden] { display: none; }
+.mp-inv {
+  border: 1px solid rgba(var(--g), 0.6);
+  background: linear-gradient(135deg, rgba(var(--g), 0.16), rgba(var(--g), 0.02) 60%, transparent) var(--bg);
+}
+.mp-title { font-size: 14px; font-weight: 600; line-height: 1.3; }
+.mp-line { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); font-size: 11px; }
+.mp-row { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
+.mp-row .mp-link { margin-left: auto; }
+.mp-tag { flex: none; border: 1px solid rgba(var(--g), 0.5); padding: 1px 6px; color: rgb(var(--g)); font-size: 10px; white-space: nowrap; }
+
+/* B1: refined card */
+.mp-card { position: relative; display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; }
+.mp-sub { display: flex; align-items: center; gap: 8px; min-width: 0; margin-right: 16px; } /* 16px: clear of the ✕ */
+.mp-sub .mp-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-card .mp-row { margin-top: 2px; }
+.mp-card .mp-x { position: absolute; top: 4px; right: 4px; }
+
+/* B2: compact row */
+.mp-compact { display: flex; align-items: center; gap: 8px; padding: 5px 12px; }
+.mp-compact-text { flex: 1; min-width: 0; }
+.mp-compact-text > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.4; }
+.mp-compact-title { font-size: 12px; font-weight: 600; }
+.mp-compact-sub { color: var(--dim); font-size: 10px; }
+
+/* B3: the card the user will get, locked */
+/* Red, like a video card that is off: the page is not being upscaled. */
+.source.mp-preview { gap: 3px; padding: 6px 12px; border: 1px dashed rgba(var(--r), 0.55); background: linear-gradient(135deg, rgba(var(--r), 0.12), rgba(var(--r), 0.02) 60%, transparent) var(--bg); cursor: default; }
+.mp-preview .mp-foot { margin-top: 5px; }
+.mp-preview .mp-foot .mp-row { margin-top: 0; flex: none; }
+.mp-preview .mp-paused { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+.source.mp-preview:hover, .source.mp-preview:active { filter: none; }
+.mp-dim { display: flex; flex-direction: column; gap: 3px; opacity: 0.5; }
+.mp-preview .episode { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.mp-preview .tag { margin-right: 0; vertical-align: baseline; }
+.mp-preview .switch { pointer-events: none; }
+.mp-preview .switch input { border-color: rgba(var(--r), 0.5); }
+.mp-preview .switch input::after { background: rgba(var(--r), 0.7); }
+.mp-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--dim); font-size: 12px; }
+.mp-foot .mp-paused, .mp-foot .mp-dot { color: var(--bad); } /* stopped: red, as the off state is everywhere else */
+
+/* B4: pick a mode */
+.mp-pick { display: flex; flex-direction: column; gap: 6px; padding: 6px 12px 10px; }
+.mp-pick-top { display: flex; align-items: center; gap: 6px; margin-right: -8px; }
+.mp-seg { display: flex; }
+.mp-seg button {
+  position: relative;
+  flex: 1;
+  border: 1px solid var(--line2);
+  background: var(--bg);
+  color: var(--dim);
+  font: inherit;
+  font-size: 11px;
+  padding: 4px 0;
+  cursor: pointer;
+}
+.mp-seg button + button { margin-left: -1px; }
+.mp-seg button:hover { z-index: 1; color: var(--on); border-color: var(--on); }
+.mp-seg button.mp-suggest { z-index: 2; background: rgba(var(--g), 0.16); border-color: rgb(var(--g)); color: var(--on); font-weight: 600; }
+.mp-seg button.mp-suggest:hover { background: rgba(var(--g), 0.28); border-color: rgb(var(--g)); }
+.mp-seg button.mp-suggest::before { content: '● '; color: var(--ok); }
+/* the current mode is quiet: the eye goes to the suggested one */
+.mp-seg button[aria-pressed="true"] { background: var(--panel); color: var(--fg); cursor: default; }
+.mp-seg button[aria-pressed="true"]:hover { z-index: 0; color: var(--fg); border-color: var(--line2); }
+.mp-seg button[aria-pressed="true"]::after { content: ' · now'; color: var(--faint); }
+.mp-seg button:focus-visible { z-index: 3; outline: 1px solid var(--on); outline-offset: 1px; }
+
+/* B5: the empty text, with a purpose */
+.mp-empty { display: flex; flex-direction: column; gap: 3px; }
+.mp-empty-title { font-size: 12px; }
+.mp-empty .mp-row { margin-top: 5px; }
+
+/* B, after a switch: "now in manga mode · undo" for 4 s: .mp-done, in popup.css */
+
+/* B: mode-chip indicator. dot: inside the chip, left of the word "mode" */
+.chip.mode.mp-ind-dot::before {
+  content: '';
+  position: absolute;
+  left: 2px; /* inside the chip's 8px left padding: the chip keeps its width */
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 50%;
+  background: var(--ok);
+  pointer-events: none;
+  animation: mp-pulse 1.1s ease-in-out infinite alternate;
+}
+@keyframes mp-pulse { from { opacity: 1; } to { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .chip.mode.mp-ind-dot::before { animation: none; } }
+/* underline: 2px green bottom edge, no change in size */
+.chip.mode.mp-ind-underline { box-shadow: inset 0 -2px 0 var(--ok); }
+/* frame: the whole chip takes the stopped colour */
+.chip.mode.mp-ind-frame { border-color: rgba(var(--r), 0.6); background: linear-gradient(135deg, rgba(var(--r), 0.14), transparent 70%) var(--panel); }
+/* edge: 2px red left edge, no change in size */
+.chip.mode.mp-ind-edge { box-shadow: inset 2px 0 0 var(--bad); }
+/* corner: a folded red corner, top right */
+.chip.mode.mp-ind-corner::before { content: ''; position: absolute; top: -1px; right: -1px; width: 7px; height: 7px; background: linear-gradient(45deg, transparent 50%, var(--bad) 50%); pointer-events: none; }
+/* beat: the chip border breathes between its own colour and red */
+.chip.mode.mp-ind-beat { animation: mp-beat 1.2s ease-in-out infinite alternate; }
+@keyframes mp-beat { from { border-color: var(--line2); } to { border-color: var(--bad); } }
+@media (prefers-reduced-motion: reduce) { .chip.mode.mp-ind-beat { animation: none; border-color: var(--bad); } }
+/* word: the state chip next to it says what was found */
+.chip.mp-ind-word { color: var(--bad); border-color: rgba(var(--r), 0.5); }
+/* arrow: a second chip that switches */
+.chip.mp-hint { flex: none; font: inherit; font-size: 10px; color: var(--ok); border-color: rgba(var(--g), 0.5); cursor: pointer; }
+.chip.mp-hint:hover { border-color: var(--ok); color: var(--on); }
+.chip.mp-hint:focus-visible { outline: 1px solid var(--on); outline-offset: 1px; }
+
+/* C: note on the site page itself */
+.mp-toast {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  width: 310px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line2);
+  background: var(--panel);
+  color: var(--fg);
+  font: 12px/1.5 "JetBrains Mono", "Cascadia Mono", "Fira Code", Consolas, ui-monospace, monospace;
+  box-shadow: 0 14px 28px -12px #000;
+}
+.mp-toast[hidden] { display: none; }
+.mp-brand { color: var(--faint); font-size: 9px; text-transform: uppercase; letter-spacing: 0.16em; }
+</style>
+
+<!-- 3. This demo page only: controls and the fake site. -->
+<style>
+/* the popup's tokens, repeated because popup.css above does not apply to this page */
+:root {
+  color-scheme: dark;
+  --bg: #0b0b0b;
+  --panel: #111;
+  --line: #262626;
+  --line2: #3a3a3a;
+  --fg: #e4e4e4;
+  --dim: #8d8d8d;
+  --faint: #585858;
+  --on: #fff;
+  --bar: #d0d0d0;
+  --ok: #9fd3a8;
+  --warn: #e3c58a;
+  --bad: #e39a9a;
+  --g: 159, 211, 168;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 20px 24px 40px;
+  background: #171717;
+  color: var(--fg);
+  font: 12px/1.5 "JetBrains Mono", "Cascadia Mono", "Fira Code", Consolas, ui-monospace, monospace;
+}
+h1 { margin: 0 0 2px; font-size: 14px; font-weight: 600; }
+.demo-intro { margin: 0 0 14px; color: var(--dim); font-size: 11px; max-width: 110ch; }
+
+.demo-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; margin-bottom: 16px; padding: 10px; border: 1px solid var(--line); background: var(--panel); }
+.demo-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.demo-key { color: var(--faint); font-size: 11px; margin-right: 2px; }
+.demo-btn { border: 1px solid var(--line2); background: transparent; color: var(--dim); font: inherit; font-size: 11px; padding: 4px 10px; cursor: pointer; }
+.demo-btn:hover { color: var(--on); border-color: var(--on); }
+.demo-btn[aria-pressed="true"] { background: var(--on); border-color: var(--on); color: #000; }
+.demo-btn:focus-visible, .site-play:focus-visible { outline: 1px solid var(--on); outline-offset: 2px; }
+.demo-status { color: var(--dim); font-size: 11px; margin-left: auto; }
+.demo-status b { color: var(--fg); font-weight: 600; }
+
+.demo-stage { display: grid; grid-template-columns: 380px; justify-content: center; gap: 24px; align-items: start; }
+@media (max-width: 860px) { .demo-stage { grid-template-columns: minmax(0, 1fr); } }
+.demo-label { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 6px; color: var(--faint); font-size: 11px; }
+.demo-label .over { color: var(--warn); }
+.demo-popup { position: sticky; top: 12px; }
+.demo-popup iframe { display: block; width: 380px; height: 520px; border: 0; background: var(--bg); box-shadow: 0 0 0 1px var(--line2), 0 24px 40px -18px #000; }
+
+/* fake site */
+.site { position: relative; border: 1px solid var(--line); background: #0e0e0e; }
+.site-bar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--line); background: var(--panel); color: var(--dim); font-size: 11px; }
+.site-url { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid var(--line); padding: 2px 8px; color: var(--fg); }
+.site-view { height: clamp(360px, calc(100vh - 250px), 640px); overflow-y: auto; padding: 16px; scrollbar-width: thin; scrollbar-color: var(--line2) transparent; }
+.site-heading { margin: 0 0 12px; font-size: 14px; font-weight: 600; text-align: center; }
+.site-heading small { display: block; color: var(--faint); font-size: 11px; font-weight: 400; }
+
+.site-reader { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+.site-page { margin: 0; width: min(100%, 300px); }
+.site-art { aspect-ratio: 1000 / 1399; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 2fr 1fr 2fr; gap: 6px; padding: 10px; background: #d9d6cf; outline: 2px solid transparent; outline-offset: 3px; }
+.site-art i { border: 2px solid #1c1c1c; background: #f1efe9; grid-column: 1 / 3; }
+.site-art.p1 { grid-template-rows: 1fr 1fr; }
+.site-art.p1 i { grid-column: auto; }
+.site-art.p1 i:first-child { grid-column: 1 / 3; }
+.site-art.p2 { grid-template-rows: 3fr 2fr; }
+.site-art.p2 i { grid-column: auto; }
+.site-art.p2 i:last-child { grid-column: 1 / 3; }
+.site-page.loading .site-art { background: #1a1a1a; }
+.site-page.loading .site-art i { visibility: hidden; }
+.site-page.done .site-art { outline-color: var(--ok); }
+.site-page.now .site-art { outline: 2px dashed var(--on); }
+.site-page.fail .site-art { outline-color: var(--bad); }
+.site-page figcaption { display: flex; justify-content: space-between; gap: 8px; margin-top: 7px; color: var(--faint); font-size: 10px; }
+.site-page.done .site-tag { color: var(--ok); }
+.site-page.now .site-tag { color: var(--on); }
+.site-page.fail .site-tag { color: var(--bad); }
+.site-page.current .site-num { color: var(--on); }
+.site-page.current .site-num::before { content: "▸ "; }
+
+.site-watch { max-width: 720px; margin: 0 auto; }
+.site-video { position: relative; aspect-ratio: 16 / 9; background: linear-gradient(160deg, #2a3140, #151a22 55%, #0d0f13); outline: 2px solid transparent; outline-offset: 3px; }
+.site-video.on { outline-color: var(--ok); }
+.site-badge { position: absolute; top: 8px; left: 8px; padding: 2px 8px; border: 1px solid var(--line2); background: rgba(11, 11, 11, 0.85); color: var(--dim); font-size: 10px; }
+.site-video.on .site-badge { color: var(--ok); border-color: rgba(var(--g), 0.5); }
+.site-play { position: absolute; left: 8px; bottom: 14px; border: 1px solid var(--line2); background: rgba(11, 11, 11, 0.85); color: var(--fg); font: inherit; font-size: 11px; padding: 4px 10px; cursor: pointer; }
+.site-play:hover { border-color: var(--on); color: var(--on); }
+.site-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--line2); }
+.site-progress i { display: block; width: 38%; height: 100%; background: var(--fg); }
+.site-watch .site-heading { margin: 14px 0; text-align: left; }
+.site-eps { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.site-eps span { border: 1px solid var(--line); padding: 6px 8px; color: var(--faint); font-size: 11px; }
+.site-eps span.cur { color: var(--fg); border-color: var(--line2); }
+</style>
+</head>
+<body>
+<h1>Mode prompt demo</h1>
+<p class="demo-intro">The real popup (current popup.css and markup) with sample data. Nothing here talks to the extension. Set the mode in the popup so it disagrees with the page, and the chosen prompt design appears.</p>
+
+<div class="demo-controls">
+  <div class="demo-group" role="group" aria-label="Page">
+    <span class="demo-key">Page</span>
+    <button type="button" class="demo-btn" data-page="manga">Manga reader</button>
+    <button type="button" class="demo-btn" data-page="video">Anime video</button>
+  </div>
+  <div class="demo-group" role="group" aria-label="Prompt design">
+    <span class="demo-key">Prompt design</span>
+    <button type="button" class="demo-btn" data-design="A" title="Strip under the popup header">A</button>
+    <button type="button" class="demo-btn" data-design="B1" title="Refined card at the top of the playing now panel">B1</button>
+    <button type="button" class="demo-btn" data-design="B2" title="Compact single row">B2</button>
+    <button type="button" class="demo-btn" data-design="B3" title="Preview of the card you get, locked">B3</button>
+    <button type="button" class="demo-btn" data-design="B4" title="Pick a mode: anime, manga, auto">B4</button>
+    <button type="button" class="demo-btn" data-design="B5" title="Empty state with a purpose">B5</button>
+    <button type="button" class="demo-btn" data-design="C" hidden title="Note on the site page; nothing extra in the popup">C</button>
+  </div>
+  <div class="demo-group" role="group" aria-label="Chip indicator">
+    <span class="demo-key">Chip indicator</span>
+    <button type="button" class="demo-btn" data-ind="dot" title="Pulsing dot inside the mode chip (B designs)">dot</button>
+    <button type="button" class="demo-btn" data-ind="underline" title="Green bottom edge on the mode chip (B designs)">underline</button>
+    <button type="button" class="demo-btn" data-ind="arrow" title="A second chip that switches (B designs)">arrow</button>
+    <button type="button" class="demo-btn" data-ind="frame" title="Red border and wash on the mode chip">frame</button>
+    <button type="button" class="demo-btn" data-ind="edge" title="Red left edge on the mode chip">edge</button>
+    <button type="button" class="demo-btn" data-ind="corner" title="Folded red corner on the mode chip">corner</button>
+    <button type="button" class="demo-btn" data-ind="beat" title="Mode chip border breathes red">beat</button>
+    <button type="button" class="demo-btn" data-ind="word" title="The state chip says what was found">word</button>
+    <button type="button" class="demo-btn" data-ind="none">none</button>
+  </div>
+  <div class="demo-group" role="group" aria-label="Popup height">
+    <span class="demo-key">Height</span>
+    <button type="button" class="demo-btn" data-tall="0" title="The popup as it is">normal</button>
+    <button type="button" class="demo-btn" data-tall="1" title="Test only: extra panels push the popup over 600px so it scrolls">over 600</button>
+  </div>
+  <div class="demo-group" role="group" aria-label="Scrollbar look">
+    <span class="demo-key">Scrollbar</span>
+    <button type="button" class="demo-btn" data-sb="plain" title="Thumb only (what the extension has)">plain</button>
+    <button type="button" class="demo-btn" data-sb="fade" title="Thumb only, with a fade at the bottom while there is more below">fade</button>
+  </div>
+  <div class="demo-group" role="group" aria-label="Progress bar style">
+    <span class="demo-key">Bar</span>
+    <button type="button" class="demo-btn" data-bar="thin" title="4px bar in four coloured segments">thin</button>
+    <button type="button" class="demo-btn" data-bar="thick" title="8px bar in four coloured segments">thick</button>
+    <button type="button" class="demo-btn" data-bar="percent" title="Thin bar with the percentage at its end">percent</button>
+    <button type="button" class="demo-btn" data-bar="pages" title="One block per page, in page order">pages</button>
+    <button type="button" class="demo-btn" data-bar="dots" title="One dot per page, in page order">dots</button>
+    <button type="button" class="demo-btn" data-bar="frame" title="Outlined track with the fill inside">frame</button>
+    <button type="button" class="demo-btn" data-bar="none" title="No bar, counts only">none</button>
+  </div>
+  <div class="demo-group" role="group" aria-label="Counts style">
+    <span class="demo-key">Counts</span>
+    <button type="button" class="demo-btn" data-counts="tiles" title="Four equal boxes, like the performance tiles">tiles</button>
+    <button type="button" class="demo-btn" data-counts="split" title="Four equal columns with thin dividers">split</button>
+    <button type="button" class="demo-btn" data-counts="row" title="One line: square, number, word">row</button>
+    <button type="button" class="demo-btn" data-counts="edge" title="Four equal boxes with a coloured left edge">edge</button>
+    <button type="button" class="demo-btn" data-counts="plain" title="Number over word, no boxes">plain</button>
+    <button type="button" class="demo-btn" data-counts="tileskey" title="tiles + squares: boxes with the coloured square beside each word">tiles+squares</button>
+    <button type="button" class="demo-btn" data-counts="splitrow" title="split + row: one line per column, hairlines between">split+row</button>
+    <button type="button" class="demo-btn" data-counts="splitkey" title="split + coloured squares: number over word, square beside the word, hairlines between">split+squares</button>
+    <button type="button" class="demo-btn" data-counts="splitedge" title="split + edge: hairlines between, state colour as a short bar over each number">split+edge</button>
+  </div>
+  <button type="button" class="demo-btn" id="demo-reset">Reset prompts</button>
+  <span class="demo-status" id="demo-status" role="status"></span>
+</div>
+
+<main class="demo-stage">
+  <!-- The fake site page is hidden (and design C with it); the script still fills it. -->
+  <section aria-label="Site page" hidden>
+    <div class="demo-label"><span>Site page (fake)</span><span>Outline: green upscaled, dashed in progress, red failed</span></div>
+    <div class="site">
+      <div class="site-bar"><span class="site-url" id="site-url"></span></div>
+      <div class="site-view" id="site-view"></div>
+      <!-- design C -->
+      <div class="mp-toast" id="mp-toast" role="group" aria-label="Anime4Nerd" hidden>
+        <span class="mp-brand">anime4nerd</span>
+        <span id="mp-toast-msg"></span>
+        <div class="mp-row">
+          <button type="button" class="mp-btn primary" data-act="switch">switch</button>
+          <button type="button" class="mp-btn" data-act="dismiss">not now</button>
+          <button type="button" class="mp-link" data-act="never">don't ask on this site</button>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section class="demo-popup" aria-label="Extension popup">
+    <div class="demo-label"><span>Popup (real CSS)</span><span id="demo-height"></span></div>
+    <iframe id="popup" title="Anime4Nerd popup"></iframe>
+  </section>
+</main>
+
+<!--
+  The popup's body: src/popup.html, with only these changes: the two external links point
+  nowhere, and the two prompt elements (marked "prompt design") are added.
+-->
+<template id="popup-body">
+  <header class="bar">
+    <span class="chip mode" id="modeChip">
+      <button type="button" id="mode" role="combobox" aria-label="Mode" aria-haspopup="listbox" aria-expanded="false" aria-controls="mode-list" data-tip="Mode: what the extension upscales">auto</button>
+      <div class="mode-list" id="mode-list" role="listbox" aria-label="Mode" hidden>
+        <div class="mode-opt" id="mode-opt-auto" role="option" data-mode="auto" aria-selected="true"><b>auto</b><small>video and manga</small></div>
+        <div class="mode-opt" id="mode-opt-anime" role="option" data-mode="anime" aria-selected="false"><b>anime</b><small>video only</small></div>
+        <div class="mode-opt" id="mode-opt-manga" role="option" data-mode="manga" aria-selected="false"><b>manga</b><small>pages only</small></div>
+      </div>
+    </span>
+    <!-- prompt design B, chip indicator "arrow" -->
+    <button type="button" class="chip mp-hint" id="mp-hint" data-act="switch" hidden></button>
+    <span class="chip" id="hint">off</span>
+    <span class="chip grow" id="gpuchip">gpu —</span>
+    <span class="chip" id="clock"></span>
+    <a class="chip bug" id="report" href="#" draggable="false" data-tip="Report a problem" aria-label="Report a problem">
+      <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M5.5 4.5a2.5 2.5 0 0 1 5 0"/><rect x="4.5" y="5" width="7" height="8" rx="3.5"/><path d="M8 7.5V13M2 9h2.5M11.5 9H14M2.5 5l2 1.5M13.5 5l-2 1.5M2.5 13l2-1.5M13.5 13l-2-1.5"/></svg>
+    </a>
+  </header>
+
+  <!-- prompt design A -->
+  <div class="update-note mp-strip" id="mp-strip" role="status" hidden>
+    <span class="mp-msg"><span class="mp-dot">●</span><span id="mp-strip-text"></span></span>
+    <span class="mp-actions">
+      <button type="button" class="mp-btn primary" id="mp-strip-go" data-act="switch"></button>
+      <button type="button" class="mp-link" id="mp-strip-auto" data-act="auto">use auto</button>
+      <button type="button" class="mp-btn" id="mp-strip-undo" data-act="undo" hidden>undo</button>
+      <button type="button" class="mp-x" id="mp-strip-x" data-act="never" data-tip="Don't ask on this site" aria-label="Don't ask on this site">✕</button>
+    </span>
+  </div>
+
+  <a class="update-note" id="whatsnew" href="#" draggable="false" hidden>
+    <span><span class="update-label">updated</span><span class="update-dot">●</span> v<b id="whatsnew-ver"></b></span><span class="update-link">what's new →</span>
+  </a>
+
+  <section class="rate-card" id="rate" hidden>
+    <button type="button" class="rate-x" id="rate-x" data-tip="Hide until the next milestone" aria-label="Hide">✕</button>
+    <div class="rate-top">you've upscaled<span class="rate-badge" id="rate-badge"></span></div>
+    <div class="rate-big" id="rate-big"></div>
+    <div class="rate-row">
+      <div class="rate-lines"><span id="rate-l1"></span><br /><span id="rate-l2"></span></div>
+      <div class="rate-actions">
+        <a class="rate-go" id="rate-go" draggable="false">★ rate it</a>
+        <button type="button" class="rate-done" id="rate-done" hidden>✓ already rated</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head mp-head">
+      <span id="nowLabel">playing now</span><span id="count"></span>
+      <!-- prompt design B, after a switch: over this row, as in the real popup -->
+      <div class="mp-done" id="mp-done" role="status" hidden>
+        <span><span class="mp-dot">●</span><span id="mp-done-text"></span></span>
+        <button type="button" class="mp-btn" id="mp-done-undo" data-act="undo">undo</button>
+      </div>
+    </div>
+    <!-- prompt design B1: refined card. Texts ([data-t]) come from PROMPT in the script. -->
+    <div class="mp-b mp-inv mp-card" id="mp-b1" role="group" aria-label="Mode suggestion" hidden>
+      <div class="mp-sub"><span class="mp-title" data-t="title"></span><span class="mp-tag" data-t="tag"></span></div>
+      <div class="mp-line" data-t="line"></div>
+      <div class="mp-row">
+        <button type="button" class="mp-btn primary" data-act="switch" data-t="go"></button>
+        <button type="button" class="mp-btn" data-act="auto">use auto</button>
+      </div>
+      <button type="button" class="mp-x" data-act="dismiss" data-tip="Hide" aria-label="Hide">✕</button>
+    </div>
+    <!-- prompt design B2: compact row -->
+    <div class="mp-b mp-inv mp-compact" id="mp-b2" role="group" aria-label="Mode suggestion" hidden>
+      <div class="mp-compact-text"><div class="mp-compact-title" data-t="title"></div><div class="mp-compact-sub" data-t="sub"></div></div>
+      <button type="button" class="mp-link" data-act="auto">use auto</button>
+      <button type="button" class="mp-btn primary" data-act="switch" data-t="go"></button>
+    </div>
+    <!-- prompt design B3: the card this page gets after the switch, locked -->
+    <div class="mp-b source mp-preview" id="mp-b3" role="group" aria-label="Mode suggestion" hidden>
+      <div class="mp-dim">
+        <div class="line"><div class="title" data-t="title"></div><label class="switch"><input type="checkbox" disabled aria-label="Off until the mode changes" /></label></div>
+        <div class="episode"><span class="tag" data-t="tag"></span><span class="epname" data-t="name"></span></div>
+      </div>
+      <div class="mp-foot"><span class="mp-row"><button type="button" class="mp-btn primary" data-act="switch" data-t="go"></button><button type="button" class="mp-btn" data-act="auto">use auto</button></span><span class="mp-paused"><span class="mp-dot">●</span> <span data-t="paused"></span></span></div>
+    </div>
+    <!-- prompt design B4: pick a mode -->
+    <div class="mp-b mp-inv mp-pick" id="mp-b4" role="group" aria-label="Mode suggestion" hidden>
+      <div class="mp-pick-top"><span class="mp-msg"><span class="mp-dot">●</span><span data-t="pick"></span></span><button type="button" class="mp-x" data-act="dismiss" data-tip="Hide" aria-label="Hide">✕</button></div>
+      <div class="mp-seg" role="group" aria-label="Mode">
+        <button type="button" data-mode="anime">anime</button>
+        <button type="button" data-mode="manga">manga</button>
+        <button type="button" data-mode="auto">auto</button>
+      </div>
+    </div>
+    <div class="sources" id="sources"></div>
+    <div class="source manga-card" id="manga-card" hidden>
+      <div class="line"><div class="title" id="manga-title"></div><label class="switch" id="manga-switch"><input type="checkbox" aria-label="Upscale manga pages on this site" /></label></div>
+      <div class="episode"><span class="tag" id="manga-tag"></span><span class="epname" id="manga-name"></span></div>
+      <div class="state" id="manga-state" hidden></div>
+      <div class="mc-prog" id="manga-prog">
+        <div class="mc-barrow"><div class="mc-bar" id="mc-bar" role="img"><i class="done"></i><i class="now"></i><i class="fail"></i><i class="wait"></i></div><div class="mc-pages" id="mc-pages" aria-hidden="true"></div><b class="mc-pct" id="mc-pct"></b></div>
+        <div class="mc-counts">
+          <div data-k="done"><b>0</b><span><i class="pkey done"></i>done</span></div>
+          <div data-k="now"><b>0</b><span><i class="pkey now"></i>active</span></div>
+          <div data-k="fail"><b>0</b><span><i class="pkey fail"></i>failed</span></div>
+          <div data-k="wait"><b>0</b><span><i class="pkey"></i>queued</span></div>
+        </div>
+      </div>
+    </div>
+    <p class="empty" id="empty">No video found yet. Start playback, then reopen this popup.</p>
+    <!-- prompt design B5: stands in for the empty text -->
+    <div class="mp-b mp-empty" id="mp-b5" role="group" aria-label="Mode suggestion" hidden>
+      <div class="mp-empty-title"><span class="mp-dot">●</span> <span data-t="emptyTitle"></span></div>
+      <div class="mp-line" data-t="emptyLine"></div>
+      <div class="mp-row">
+        <button type="button" class="mp-btn primary" data-act="switch" data-t="go"></button>
+        <button type="button" class="mp-btn" data-act="auto">use auto</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="pmap" hidden>
+    <div class="panel-head"><span>page map</span><span class="verdict dim" id="pmap-count"></span></div>
+    <div class="pmap" id="pmap-grid" role="group" aria-label="pages in this chapter"></div>
+    <div class="kv two">
+      <div><span>Per page</span><b id="pmap-per">–</b></div>
+      <div><span>Left</span><b id="pmap-left">–</b></div>
+    </div>
+  </section>
+
+  <section class="panel" id="perf">
+    <div class="panel-head"><span>performance</span><span class="verdict dim" id="verdict">● off</span></div>
+    <div class="kv">
+      <div><span>GPU</span><b id="k-load">—</b></div>
+      <div><span>Per frame</span><b id="k-ms">—</b></div>
+      <div><span>Output</span><b id="k-fps">—</b></div>
+      <div><span>Avg · peak</span><b id="k-avg">—</b></div>
+      <div><span>Frame limit</span><b id="k-limit">—</b></div>
+      <div><span>Late frames</span><b id="k-late">—</b></div>
+    </div>
+    <div class="bars" id="bars"></div>
+    <div class="meta" id="legend">no measurements yet</div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><span>preset</span><span id="presetName"></span></div>
+    <div class="grid" id="presets"></div>
+    <div class="pills" id="effects">
+      <button type="button" class="pill" data-field="darkenLines" role="menuitemcheckbox">darken lines</button>
+      <button type="button" class="pill" data-field="thinLines" role="menuitemcheckbox">thin lines</button>
+    </div>
+    <div class="pills" id="upscale" role="radiogroup" aria-label="upscale">
+      <span class="pills-label">upscale</span>
+      <button type="button" class="pill" data-upscale="auto" role="radio" data-tip="4× only when the video is shown at more than 2× its size">auto</button>
+      <button type="button" class="pill" data-upscale="2x" role="radio">2×</button>
+      <button type="button" class="pill" data-upscale="4x" role="radio" data-tip="Heavier: about 2× the GPU time and memory of 2×">4×</button>
+      <button type="button" class="pill" data-upscale="8x" role="radio" data-tip="Experimental. Uses the largest scale up to this that fits your GPU (output capped at 8K).">8×</button>
+      <button type="button" class="pill" data-upscale="16x" role="radio" data-tip="Experimental. Uses the largest scale up to this that fits your GPU (output capped at 8K).">16×</button>
+      <button type="button" class="pill" data-upscale="32x" role="radio" data-tip="Experimental. Uses the largest scale up to this that fits your GPU (output capped at 8K).">32×</button>
+    </div>
+  </section>
+  <div class="tip" id="tip" role="tooltip" hidden></div>
+</template>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---- sample data (stands in for chrome.* and the content script) -----------------
+  const PRESETS = [
+    { value: 'A', label: 'Mode A' }, { value: 'B', label: 'Mode B' }, { value: 'C', label: 'Mode C' },
+    { value: 'AA', label: 'A+A' }, { value: 'BB', label: 'B+B' }, { value: 'CA', label: 'C+A' },
+  ];
+  const PRESET_DESC = { A: 'sharp', B: 'soft', C: 'denoise', AA: 'sharper, heavy', BB: 'softer, heavy', CA: 'denoise+sharp' };
+  const PRESET_MS = { A: 6.1, B: 5.8, C: 5.2, AA: 13.6, BB: 13.1, CA: 10.9 };
+  const UPSCALE_WANT = { auto: null, '2x': 2, '4x': 4, '8x': 8, '16x': 16, '32x': 32 };
+  const MAX_SCALE = 4; // 1080p source, output capped at 8K
+  const SOURCE_FPS = 23.976;
+  const VIDEO = { w: 1920, h: 1080 };
+  const PAGE_SIZE = { w: 1000, h: 1399 };
+  const TOTAL = 24; // pages in the chapter
+  const LOADED = 18; // pages the reader has on the page
+  const LOADING = 2; // slots still loading
+  const PAGE_MS = 420;
+  const POPUP_MAX_HEIGHT = 600; // Chrome's limit for an extension popup
+  const BARS = 48;
+  const PMAP_COLS = 12;
+  const PMAP_ROWS = 3;
+  const UNKNOWN = '–';
+  const CELL_WORD = { done: 'done', now: 'in progress', fail: 'failed', wait: 'waiting' };
+  const SITES = {
+    manga: { host: 'mangadot.net', url: 'https://mangadot.net/read/witch-hat-atelier/chapter-12', title: 'Witch Hat Atelier' },
+    video: { host: 'miruro.tv', url: 'https://miruro.tv/watch/sousou-no-frieren/episode-12', title: 'Sousou no Frieren' },
+  };
+  // What each prompt says, by the mode it offers.
+  const PROMPT = {
+    manga: {
+      strip: `manga · ${SITES.manga.title} · ${TOTAL} pages`, go: 'switch to manga',
+      title: SITES.manga.title, toast: 'Manga detected. Switch to manga mode?',
+      tag: 'ch 12', line: `manga · ${TOTAL} pages · not upscaled in anime mode`, sub: `ch 12 · ${TOTAL} pages`,
+      name: `${TOTAL} pages · b&w · ${PAGE_SIZE.w}×${PAGE_SIZE.h}`, paused: 'paused',
+      pick: `manga detected · ${SITES.manga.title} · ${TOTAL} pages`,
+      emptyTitle: 'this page is a manga chapter', emptyLine: `ch 12 · ${TOTAL} pages · not upscaled in anime mode`,
+      what: 'a manga reader',
+    },
+    anime: {
+      strip: `video detected · ${VIDEO.h}p`, go: 'switch to anime',
+      title: SITES.video.title, toast: 'Video detected. Switch to anime mode?',
+      tag: 'S1 E12', line: `video · ${VIDEO.h}p · paused in manga mode`, sub: `S1 E12 · ${VIDEO.h}p`,
+      name: `Episode 12 · ${VIDEO.h}p`, paused: 'paused',
+      pick: `video detected · ${SITES.video.title} · ${VIDEO.h}p`,
+      emptyTitle: 'this page has a video', emptyLine: `S1 E12 · ${VIDEO.h}p · paused in manga mode`,
+      what: 'a video page',
+    },
+  };
+  // The B variants (design A is the strip; C is hidden).
+  const B_NAMES = { B1: 'refined card', B2: 'compact row', B3: 'card preview', B4: 'pick a mode', B5: 'empty state' };
+
+  function freshMarks() {
+    return Array.from({ length: LOADED }, (_, i) => (i === 6 ? 'fail' : i < 9 ? 'done' : i < 11 ? 'now' : 'todo'));
+  }
+
+  let state = {
+    page: 'manga',
+    design: 'B3',
+    bar: 'pages', // manga card: how the progress bar is drawn
+    counts: 'tileskey', // manga card: how the four counts are drawn
+    indicator: 'frame', // B designs: what marks the mode chip while a prompt shows
+    settings: { mode: 'anime', preset: 'A', darkenLines: false, thinLines: false, upscale: 'auto' },
+    videoOn: true,
+    playing: true,
+    mangaSiteOn: true, // the reader site's own switch
+    mangaStarted: true, // false for a moment after switching on ("starting…")
+    marks: freshMarks(),
+    current: 0, // page the reader was last sent to
+    samples: [], // GPU ms per frame, last 2 s
+    dismissed: false, // prompt hidden until Reset or a page change
+    done: null, // designs A and B after a switch: { mode, prev }, shown as "now in manga mode · undo" for 4 s
+    never: {}, // host -> true: prompt off for that site until Reset
+  };
+
+  let doc; // the popup iframe's document
+  const $ = (sel) => doc.querySelector(sel);
+  function setText(el, text) { if (el.textContent !== text) el.textContent = text; }
+  /** State changes repaint after the current event: a cancelled checkbox click resets `checked`. */
+  function update(patch) { state = { ...state, ...patch }; setTimeout(render); }
+  function saveSettings(patch) { update({ settings: { ...state.settings, ...patch } }); }
+
+  // ---- popup iframe: popup.css + prompt CSS + popup.html's body ----------------------
+  const frame = document.getElementById('popup');
+  frame.addEventListener('load', init, { once: true });
+  frame.srcdoc = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Anime4Nerd</title><style>${
+    document.getElementById('popup-css').textContent}</style><style>${
+    document.getElementById('prompt-css').textContent}</style></head><body>${
+    document.getElementById('popup-body').innerHTML}</body></html>`;
+
+  // ---- what the content script would report -----------------------------------------
+  function mode() { return state.settings.mode; }
+  function actualScale() { return Math.min(UPSCALE_WANT[state.settings.upscale] ?? 2, MAX_SCALE); }
+  function capNote(scale) {
+    const want = UPSCALE_WANT[state.settings.upscale];
+    return want !== null && scale < want ? ` · ${want}× capped: GPU limit` : '';
+  }
+  function frameMs() {
+    const s = state.settings;
+    return PRESET_MS[s.preset] * (actualScale() === 4 ? 2.1 : 1) + (s.darkenLines ? 0.7 : 0) + (s.thinLines ? 0.9 : 0);
+  }
+  function videoInfo() {
+    if (state.page !== 'video') return null;
+    const running = state.videoOn && mode() !== 'manga';
+    const scale = actualScale();
+    const recent = state.samples.slice(-6);
+    return {
+      enabled: state.videoOn,
+      playing: state.playing,
+      status: !state.videoOn ? 'Off' : running ? 'Active' : 'Waiting',
+      height: VIDEO.h,
+      stats: running && state.samples.length ? {
+        gpuMs: recent.reduce((a, b) => a + b, 0) / recent.length,
+        fps: state.playing ? SOURCE_FPS : 0,
+        samples: state.samples,
+        outputWidth: VIDEO.w * scale,
+        outputHeight: VIDEO.h * scale,
+      } : null,
+    };
+  }
+  function mangaStatus() {
+    if (state.page !== 'manga' || mode() === 'anime') return null; // mode 'anime': no manga card or page map
+    const on = state.mangaSiteOn && state.mangaStarted;
+    return {
+      on,
+      marks: state.marks,
+      total: TOTAL,
+      done: on ? state.marks.filter((m) => m === 'done').length : 0,
+      failed: on ? state.marks.filter((m) => m === 'fail').length : 0,
+      lastError: 'fetch failed',
+    };
+  }
+
+  // ---- popup: presets, pills, mode (as popup.ts) -------------------------------------
+  function buildPresets() {
+    for (const p of PRESETS) {
+      const b = doc.createElement('button');
+      b.type = 'button';
+      b.className = 'tile';
+      b.dataset.preset = p.value;
+      b.setAttribute('role', 'menuitemradio');
+      const name = doc.createElement('b');
+      name.textContent = p.label;
+      const desc = doc.createElement('small');
+      desc.textContent = PRESET_DESC[p.value];
+      b.append(name, desc);
+      b.addEventListener('click', () => saveSettings({ preset: p.value }));
+      $('#presets').append(b);
+    }
+    for (const b of doc.querySelectorAll('[data-field]')) {
+      b.addEventListener('click', () => saveSettings({ [b.dataset.field]: !state.settings[b.dataset.field] }));
+    }
+    for (const b of doc.querySelectorAll('[data-upscale]')) {
+      b.addEventListener('click', () => saveSettings({ upscale: b.dataset.upscale }));
+    }
+  }
+
+  // ---- popup: tooltips, one box for every [data-tip] (as popup.ts) ----------------------
+  const TIP_DELAY_MS = 400;
+  const TIP_GAP = 4; // px between the tooltip, its element and the popup edge
+  let tipFor = null; // the element the tooltip is shown for, or waiting to be
+  let tipTimer = 0;
+  function setTip(el, text) { if (text) el.dataset.tip = text; else delete el.dataset.tip; }
+  function hideTip() {
+    clearTimeout(tipTimer);
+    tipFor?.removeAttribute('aria-describedby');
+    tipFor = null;
+    $('#tip').hidden = true;
+  }
+  function showTip() {
+    const el = tipFor;
+    const text = el?.dataset.tip;
+    const tip = $('#tip');
+    if (!el || !text || !el.isConnected || el.getAttribute('aria-expanded') === 'true') { hideTip(); return; }
+    tip.textContent = text;
+    tip.hidden = false;
+    // Measure it at the corner: at its last place the popup edge could squeeze its width.
+    tip.style.left = '0';
+    tip.style.top = '0';
+    // An aria-label with the same words is already read: describing it again would say it twice.
+    if (el.getAttribute('aria-label') !== text) el.setAttribute('aria-describedby', 'tip');
+    // Under the element, or above it when there is no room; never past an edge of the popup.
+    const r = el.getBoundingClientRect();
+    const box = doc.body.getBoundingClientRect();
+    const left = Math.min(r.left, box.right - tip.offsetWidth - TIP_GAP);
+    const below = r.bottom + TIP_GAP;
+    const top = below + tip.offsetHeight + TIP_GAP <= box.bottom ? below : r.top - tip.offsetHeight - TIP_GAP;
+    tip.style.left = `${Math.max(box.left + TIP_GAP, left)}px`;
+    tip.style.top = `${Math.max(box.top + TIP_GAP, top)}px`;
+  }
+  function armTip(target, delay) {
+    const el = target?.closest?.('[data-tip]') ?? null;
+    if (el === tipFor) return;
+    hideTip();
+    if (!el) return;
+    tipFor = el;
+    if (delay) tipTimer = setTimeout(showTip, delay); else showTip();
+  }
+  function initTips() {
+    doc.addEventListener('pointerover', (e) => armTip(e.target, TIP_DELAY_MS));
+    doc.addEventListener('pointerout', (e) => { if (tipFor && !(e.relatedTarget && tipFor.contains(e.relatedTarget))) hideTip(); });
+    // Keyboard focus shows it at once; focus that follows a click does not.
+    doc.addEventListener('focusin', (e) => { if (e.target.matches?.(':focus-visible')) armTip(e.target, 0); });
+    doc.addEventListener('focusout', hideTip);
+    doc.addEventListener('pointerdown', hideTip);
+    doc.addEventListener('scroll', hideTip, true);
+    doc.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#tip').hidden) { e.preventDefault(); hideTip(); } });
+  }
+
+  // ---- popup: mode dropdown, a button and a list of the popup's own (as popup.ts) -------
+  // The keyboard focus stays on the button; the highlighted row is its aria-activedescendant.
+  const TYPEAHEAD_MS = 500;
+  let modeOpts = [];
+  let modeActive = 0; // the highlighted row while the list is open
+  let typed = '';
+  let typedAt = 0;
+  function paintMode(m) {
+    const btn = $('#mode');
+    btn.value = m;
+    setText(btn, m);
+    for (const o of modeOpts) o.setAttribute('aria-selected', String(o.dataset.mode === m));
+  }
+  function setModeActive(i) {
+    modeActive = Math.max(0, Math.min(modeOpts.length - 1, i));
+    modeOpts.forEach((o, n) => o.classList.toggle('active', n === modeActive));
+    $('#mode').setAttribute('aria-activedescendant', modeOpts[modeActive].id);
+  }
+  function openModeList(open) {
+    const list = $('#mode-list');
+    if (open === !list.hidden) return;
+    list.hidden = !open;
+    $('#mode').setAttribute('aria-expanded', String(open));
+    if (open) {
+      hideTip();
+      setModeActive(modeOpts.findIndex((o) => o.dataset.mode === $('#mode').value));
+    } else {
+      $('#mode').removeAttribute('aria-activedescendant');
+      typed = '';
+    }
+  }
+  function pickMode(i) {
+    const m = modeOpts[i].dataset.mode;
+    openModeList(false);
+    if (m === $('#mode').value) return;
+    paintMode(m);
+    saveSettings({ mode: m });
+  }
+  function modeOptAt(e) { return modeOpts.indexOf(e.target.closest('[role="option"]')); }
+  /** Arrows, Home and End move the highlight (opening the list first); letters jump to a name. */
+  function onModeKey(e) {
+    const open = !$('#mode-list').hidden;
+    const at = open ? modeActive : modeOpts.findIndex((o) => o.dataset.mode === $('#mode').value);
+    let to = -1;
+    if (e.key === 'Escape') {
+      if (!open) return;
+      e.stopPropagation();
+      openModeList(false);
+    } else if (e.key === 'ArrowDown') to = open ? at + 1 : at;
+    else if (e.key === 'ArrowUp') to = open ? at - 1 : at;
+    else if (e.key === 'Home') to = 0;
+    else if (e.key === 'End') to = modeOpts.length - 1;
+    else if (e.key.length === 1 && e.key !== ' ' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      typed = e.timeStamp - typedAt > TYPEAHEAD_MS ? e.key.toLowerCase() : typed + e.key.toLowerCase();
+      typedAt = e.timeStamp;
+      // The same letter again goes to the next name that starts with it ("a": auto, then anime).
+      const repeat = [...typed].every((ch) => ch === typed[0]);
+      const want = repeat ? typed[0] : typed;
+      for (let n = 0; n < modeOpts.length && to < 0; n += 1) {
+        const i = (at + n + (repeat ? 1 : 0)) % modeOpts.length;
+        if (modeOpts[i].dataset.mode.startsWith(want)) to = i;
+      }
+      if (to < 0) return;
+    } else return; // Enter and Space reach the button as a click
+    e.preventDefault();
+    if (to >= 0) { openModeList(true); setModeActive(to); }
+  }
+  function initMode() {
+    const btn = $('#mode');
+    const list = $('#mode-list');
+    modeOpts = [...list.querySelectorAll('[role="option"]')];
+    // A click from the keyboard (Enter, Space: detail 0) on the open list picks the highlighted row.
+    btn.addEventListener('click', (e) => {
+      const open = !list.hidden;
+      if (open && e.detail === 0) pickMode(modeActive); else openModeList(!open);
+    });
+    btn.addEventListener('keydown', onModeKey);
+    btn.addEventListener('blur', () => openModeList(false));
+    doc.addEventListener('pointerdown', (e) => { if (!$('#modeChip').contains(e.target)) openModeList(false); });
+    list.addEventListener('mousedown', (e) => e.preventDefault()); // a press on a row must not take the focus off the button
+    list.addEventListener('pointermove', (e) => { const i = modeOptAt(e); if (i >= 0 && i !== modeActive) setModeActive(i); });
+    list.addEventListener('click', (e) => { const i = modeOptAt(e); if (i >= 0) pickMode(i); });
+  }
+
+  function paintSettings() {
+    const s = state.settings;
+    paintMode(s.mode);
+    setText($('#presetName'), PRESETS.find((p) => p.value === s.preset).label);
+    for (const b of doc.querySelectorAll('[data-preset]')) b.setAttribute('aria-checked', String(b.dataset.preset === s.preset));
+    for (const b of doc.querySelectorAll('[data-field]')) b.setAttribute('aria-checked', String(s[b.dataset.field]));
+    for (const b of doc.querySelectorAll('[data-upscale]')) b.setAttribute('aria-checked', String(b.dataset.upscale === s.upscale));
+  }
+
+  // ---- popup: video card (markup of buildCard, texts of cardState / patchCard) --------
+  let card = null;
+  function buildCard() {
+    const el = doc.createElement('div');
+    el.className = 'source';
+    el.innerHTML = `
+    <div class="line"><div class="title"></div><label class="switch"><input type="checkbox" /></label></div>
+    <div class="episode"><span class="tag"></span><span class="epname"></span></div>
+    <div class="meta"></div>
+    <div class="hr"></div>
+    <div class="state"></div>`;
+    const q = (s) => el.querySelector(s);
+    const flip = () => { if (mode() !== 'manga') update({ videoOn: !state.videoOn }); }; // manga mode: switch is locked
+    // Same wiring as popup.ts buildCard: flip on press, not on release.
+    const sw = q('.switch');
+    sw.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); flip(); });
+    sw.addEventListener('click', (e) => e.preventDefault());
+    el.addEventListener('pointerdown', (e) => { if (e.button === 0) flip(); });
+    q('input').addEventListener('keydown', (e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); flip(); } });
+    return { el, cb: q('input'), title: q('.title'), tag: q('.tag'), epName: q('.epname'), meta: q('.meta'), state: q('.state') };
+  }
+  function cardState(v) {
+    if (mode() === 'manga') return { cls: 'dim', text: '● Paused: manga mode' };
+    if (!v.enabled) return { cls: 'off', text: '● Off · tap to turn on' };
+    return v.playing ? { cls: 'ok', text: '● Upscaling' } : { cls: 'dim', text: '● Paused' };
+  }
+  function paintCard(v) {
+    if (!v) { if (card) { card.el.remove(); card = null; } return; }
+    if (!card) { card = buildCard(); $('#sources').append(card.el); }
+    const host = SITES.video.host;
+    setText(card.title, SITES.video.title);
+    setText(card.tag, 'S1 E12');
+    setText(card.epName, 'Episode 12');
+    const scale = v.stats ? Math.round(v.stats.outputHeight / v.height) : 2;
+    const out = v.stats ? `${v.stats.outputWidth}×${v.stats.outputHeight}` : `${v.height * 2}p`;
+    setText(card.meta, `${host} · ${v.height}p → ${out} (${scale}×)${v.stats ? capNote(scale) : ''}`);
+    setTip(card.meta, `stream: cdn.${host}`);
+    const st = cardState(v);
+    setText(card.state, st.text);
+    card.state.className = `state ${st.cls}`;
+    const paused = mode() === 'manga';
+    card.cb.disabled = paused;
+    card.el.classList.toggle('paused', paused);
+    card.cb.checked = v.enabled;
+    card.el.classList.toggle('on', v.enabled);
+  }
+
+  // ---- popup: performance panel (paintPerf, GPU-timer path) ---------------------------
+  const barEls = [];
+  let limitEl;
+  function buildBars() {
+    limitEl = doc.createElement('s');
+    for (let i = 0; i < BARS; i += 1) { const b = doc.createElement('i'); barEls.push(b); $('#bars').append(b); }
+    $('#bars').append(limitEl);
+  }
+  function paintPerf(v) {
+    const perf = { verdict: $('#verdict'), load: $('#k-load'), ms: $('#k-ms'), fps: $('#k-fps'), avg: $('#k-avg'), limit: $('#k-limit'), late: $('#k-late'), legend: $('#legend') };
+    const f = (n, d = 1) => (n === null ? '—' : n.toFixed(d));
+    if (!v || !v.enabled) {
+      for (const el of [perf.load, perf.ms, perf.fps, perf.avg, perf.limit, perf.late]) { setText(el, '—'); el.className = ''; }
+      setText(perf.verdict, '● off'); perf.verdict.className = 'verdict dim';
+      for (const bar of barEls) { bar.className = 'empty'; bar.style.height = '1px'; }
+      limitEl.style.display = 'none';
+      setText(perf.legend, v ? 'turn the video on to start measuring' : 'no video');
+      return;
+    }
+    const s = v.stats;
+    const live = !!s && v.playing && s.fps > 0;
+    const budget = 1000 / SOURCE_FPS;
+    const samples = state.samples; // kept while paused, as lastSamples
+    const avg = samples.length ? samples.reduce((a, b) => a + b, 0) / samples.length : null;
+    const peak = samples.length ? Math.max(...samples) : null;
+    const late = samples.length ? samples.filter((ms) => ms > budget).length : null;
+    const gpuMs = s ? s.gpuMs : null;
+    const load = live && gpuMs !== null ? gpuMs / budget : null;
+
+    setText(perf.load, load === null ? '—' : `${Math.round(load * 100)}%`);
+    perf.load.className = load === null ? '' : load > 1 ? 'bad' : load > 0.8 ? 'warn' : 'ok';
+    setText(perf.ms, gpuMs === null ? '—' : `${f(gpuMs)} ms`);
+    setText(perf.fps, live ? `${s.fps.toFixed(0)} fps` : 'paused');
+    setText(perf.avg, avg === null ? '—' : `${f(avg, 0)} · ${f(peak, 0)}`);
+    setText(perf.limit, `${f(budget, 0)} ms`);
+    setText(perf.late, late === null ? '—' : `${late} / 2 s`);
+    perf.late.className = late ? (late > 3 ? 'bad' : 'warn') : '';
+
+    let vc = 'dim'; let vt = '● paused';
+    if (live) {
+      if (load > 1) { vc = 'bad'; vt = '● dropping frames'; } else if (load > 0.8) { vc = 'warn'; vt = '● near limit'; } else { vc = 'ok'; vt = '● keeping up'; }
+    }
+    setText(perf.verdict, vt);
+    perf.verdict.className = `verdict ${vc}`;
+
+    const scale = Math.max(budget, peak ?? 0, 1);
+    const shown = samples.slice(-BARS);
+    for (let i = 0; i < BARS; i += 1) {
+      const idx = i - (BARS - shown.length);
+      const b = barEls[i];
+      if (idx < 0) { b.className = 'empty'; b.style.height = '1px'; continue; }
+      const ms = shown[idx];
+      b.className = `${ms > budget ? 'over' : ''}${live ? '' : ' stale'}`;
+      b.style.height = `${Math.max(4, Math.round((ms / scale) * 100))}%`;
+    }
+    limitEl.style.display = '';
+    limitEl.style.bottom = `${Math.round((budget / scale) * 100)}%`;
+    setText(perf.legend, samples.length ? `last 2 s · dashed = limit · red = late${live ? '' : ' · last run'}` : 'no measurements yet');
+  }
+
+  // ---- popup: manga card and page map (paintMangaCard, paintPageMap) ------------------
+  function fmtTime(ms) {
+    const sec = ms / 1000;
+    if (sec < 9.95) return `${sec.toFixed(1)} s`;
+    return sec < 59.5 ? `${Math.round(sec)} s` : `${Math.round(sec / 60)} min`;
+  }
+  function paintMangaCard(s) {
+    const el = $('#manga-card');
+    el.hidden = !s;
+    $('#upscale').hidden = !!s; // manga pages are always 2×
+    if (!s) return;
+    const on = state.mangaSiteOn;
+    const loaded = s.marks.length;
+    const n = s.total;
+    el.classList.toggle('on', on);
+    $('#manga-switch input').checked = on;
+    setText($('#manga-title'), SITES.manga.title);
+    setTip($('#manga-title'), 'Detected: reader layout · 18 tall images · page counter');
+    setText($('#manga-tag'), 'ch 12');
+    const upscaled = on && s.done > 0;
+    const size = upscaled ? `${PAGE_SIZE.w * 2}×${PAGE_SIZE.h * 2}` : `${PAGE_SIZE.w}×${PAGE_SIZE.h}`;
+    setText($('#manga-name'), `${n} pages · b&w · ${size}`);
+    setTip($('#manga-name'), `${PAGE_SIZE.w}×${PAGE_SIZE.h}${upscaled ? ` → ${PAGE_SIZE.w * 2}×${PAGE_SIZE.h * 2}` : ''} · pages from img.${SITES.manga.host}`);
+    // Off or starting: one line. Otherwise a segmented bar and four counts.
+    const idle = !on ? '● off · switch on to upscale this chapter' : !s.on ? '● starting…' : '';
+    $('#manga-state').hidden = !idle;
+    $('#manga-state').className = `state ${on ? 'dim' : 'off'}`;
+    setText($('#manga-state'), idle);
+    $('#manga-prog').hidden = !!idle;
+    if (idle) return;
+    const counts = { done: 0, now: 0, fail: 0, wait: 0 };
+    for (let i = 0; i < n; i += 1) { const mk = s.marks[i]; counts[mk === 'done' || mk === 'now' || mk === 'fail' ? mk : 'wait'] += 1; }
+    for (const k of Object.keys(counts)) {
+      $(`#mc-bar .${k}`).style.flexGrow = String(counts[k]);
+      const col = $(`.mc-counts [data-k="${k}"]`);
+      setText(col.querySelector('b'), String(counts[k]));
+      col.classList.toggle('zero', counts[k] === 0);
+    }
+    const strip = $('#mc-pages');
+    while (strip.children.length < n) strip.append(doc.createElement('i'));
+    for (let i = 0; i < n; i += 1) { const mk = s.marks[i]; const c = mk === 'done' || mk === 'now' || mk === 'fail' ? mk : ''; if (strip.children[i].className !== c) strip.children[i].className = c; }
+    setText($('#mc-pct'), `${Math.round(100 * counts.done / n)}%`);
+    $('#mc-bar').setAttribute('aria-label', `${counts.done} of ${n} pages upscaled`);
+    setTip($('.mc-counts [data-k="fail"]'), counts.fail ? `last error: ${s.lastError}` : '');
+    setTip(el, 'Alt+M compares a page with its original');
+  }
+
+  function paintPageMap(s) {
+    $('#pmap').hidden = !s;
+    if (!s) return;
+    const grid = $('#pmap-grid');
+    const wanted = state.mangaSiteOn;
+    const on = wanted && s.on;
+    const n = s.total;
+    for (let i = grid.children.length; i < n; i += 1) {
+      const cell = doc.createElement('button');
+      cell.type = 'button';
+      cell.tabIndex = -1;
+      cell.textContent = String(i + 1);
+      grid.append(cell);
+    }
+    grid.classList.toggle('long', n > PMAP_COLS * PMAP_ROWS);
+    if (!grid.querySelector('[tabindex="0"]') && grid.firstElementChild) grid.firstElementChild.tabIndex = 0;
+    const reachable = s.marks.length + LOADING;
+    const counts = { done: 0, now: 0, fail: 0, wait: 0 };
+    for (let i = 0; i < n; i += 1) {
+      const mark = on ? s.marks[i] : undefined;
+      const st = mark === 'done' || mark === 'now' || mark === 'fail' ? mark : 'wait';
+      counts[st] += 1;
+      const cell = grid.children[i];
+      const cls = st === 'wait' ? 'pcell' : `pcell ${st}`;
+      if (cell.className !== cls) cell.className = cls;
+      const there = i < reachable;
+      const label = there ? `go to page ${i + 1}, ${wanted ? CELL_WORD[st] : 'off'}` : `page ${i + 1}, not loaded yet`;
+      if (cell.dataset.tip !== label) { cell.dataset.tip = label; cell.setAttribute('aria-label', label); }
+      const page = there ? String(i) : '';
+      if (cell.dataset.page !== page) {
+        cell.dataset.page = page;
+        if (there) cell.removeAttribute('aria-disabled'); else cell.setAttribute('aria-disabled', 'true');
+      }
+    }
+    setText($('#pmap-count'), `● ${counts.done} / ${n}`);
+    $('#pmap-count').className = `verdict ${!on ? 'dim' : counts.fail ? 'warn' : 'ok'}`;
+    const per = on ? PAGE_MS : null;
+    const left = s.marks.filter((mk) => mk === 'now' || mk === 'todo').length + LOADING;
+    setText($('#pmap-per'), per === null ? UNKNOWN : fmtTime(per));
+    $('#pmap-per').className = per === null ? '' : 'ok';
+    setText($('#pmap-left'), per === null || !left ? UNKNOWN : `~${fmtTime(per * left)}`);
+    setTip($('#pmap-left'), per === null || !left ? '' : 'at most: several pages are worked on at once');
+  }
+
+  function initMangaCard() {
+    const grid = $('#pmap-grid');
+    grid.addEventListener('click', (e) => {
+      const cell = e.target.closest('.pcell');
+      if (cell && cell.dataset.page) gotoPage(Number(cell.dataset.page));
+    });
+    const steps = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -PMAP_COLS, ArrowDown: PMAP_COLS };
+    grid.addEventListener('keydown', (e) => {
+      const step = steps[e.key];
+      const from = Array.prototype.indexOf.call(grid.children, e.target);
+      if (step === undefined || from < 0) return;
+      e.preventDefault();
+      grid.children[from + step]?.focus();
+    });
+    grid.addEventListener('focusin', (e) => {
+      const cell = e.target.closest('.pcell');
+      if (!cell) return;
+      for (const el of grid.querySelectorAll('[tabindex="0"]')) el.tabIndex = -1;
+      cell.tabIndex = 0;
+    });
+    $('#manga-card').addEventListener('click', (e) => {
+      e.preventDefault();
+      const want = !state.mangaSiteOn;
+      update({ mangaSiteOn: want, mangaStarted: !want });
+      if (want) setTimeout(() => update({ mangaStarted: true }), 500);
+    });
+  }
+
+  // ---- popup: the rest of refresh() ---------------------------------------------------
+  function refresh() {
+    const v = videoInfo();
+    const manga = mangaStatus();
+    paintCard(v);
+    paintMangaCard(manga);
+    paintPageMap(manga);
+    $('#empty').hidden = !!v || !!manga;
+    const reading = !!manga && !v;
+    setText($('#nowLabel'), reading ? 'reading now' : 'playing now');
+    $('#perf').hidden = reading; // a reader: the page map stands in for the performance panel
+    const hint = $('#hint');
+    hint.classList.toggle('manga', reading);
+    if (!reading) paintPerf(v);
+
+    const active = !!v && v.status === 'Active' && v.enabled;
+    const mangaBusy = reading && manga.on && manga.done > 0;
+    const preset = state.settings.preset.toLowerCase();
+    setText(hint, reading ? (mangaBusy ? `manga · ${preset}` : 'manga')
+      : !v ? 'off' : active ? `on · ${preset}` : !v.enabled ? 'off' : mode() === 'manga' ? 'paused' : 'starting');
+    hint.classList.toggle('on', active || mangaBusy);
+    const perPage = reading && state.mangaSiteOn && manga.on ? PAGE_MS : null;
+    const gpuMs = v && v.enabled && v.stats ? v.stats.gpuMs : null;
+    const gpu = $('#gpuchip');
+    setText(gpu, perPage !== null ? `${fmtTime(perPage)} / page` : gpuMs !== null ? `gpu ${gpuMs.toFixed(1)} ms` : 'gpu —');
+    gpu.classList.toggle('on', perPage !== null || gpuMs !== null);
+    const d = new Date();
+    setText($('#clock'), `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
+  }
+
+  // ---- prompt designs -----------------------------------------------------------------
+  /** The mode to offer when mode and page disagree, else null. */
+  function promptKind() {
+    if (state.page === 'manga' && mode() === 'anime') return 'manga';
+    if (state.page === 'video' && mode() === 'manga') return 'anime';
+    return null;
+  }
+  function paintPrompt() {
+    const kind = promptKind();
+    const host = SITES[state.page].host;
+    const isB = state.design in B_NAMES;
+    const off = !isB && !!state.never[host]; // "don't ask on this site" belongs to designs A and C only
+    const show = !!kind && !state.dismissed && !off;
+    const t = PROMPT[kind ?? 'manga'];
+    const showB = show && isB;
+    // After a switch: a short confirmation with an undo, unless the mode was changed by hand since.
+    const switched = state.done && state.done.mode === mode() ? state.done : null;
+    const done = state.design === 'A' ? switched : null;
+    setText($('#mp-strip-text'), done ? `now in ${done.mode} mode` : t.strip);
+    setTip($('#mp-strip-text'), done ? '' : t.strip); // the line is cut when it is long
+    setText($('#mp-strip-go'), t.go);
+    $('#mp-strip-go').hidden = $('#mp-strip-auto').hidden = $('#mp-strip-x').hidden = !!done;
+    $('#mp-strip-undo').hidden = !done;
+    setText(document.getElementById('mp-toast-msg'), t.toast);
+    $('#mp-strip').hidden = !(done || (show && state.design === 'A'));
+    document.getElementById('mp-toast').hidden = !(show && state.design === 'C');
+
+    // Designs B1 to B5.
+    for (const node of doc.querySelectorAll('[data-t]')) {
+      setText(node, t[node.dataset.t]);
+      if (node.classList.contains('mp-line')) setTip(node, t[node.dataset.t]); // cut when long
+    }
+    const swapsCard = showB && kind === 'anime'; // on a video page a B prompt stands in for the paused video card
+    for (const id of Object.keys(B_NAMES)) {
+      const box = $(`#mp-${id.toLowerCase()}`);
+      box.hidden = !(showB && state.design === id);
+          }
+    for (const seg of doc.querySelectorAll('.mp-seg [data-mode]')) {
+      const suggested = seg.dataset.mode === kind;
+      seg.setAttribute('aria-pressed', String(seg.dataset.mode === mode()));
+      seg.classList.toggle('mp-suggest', suggested);
+      setTip(seg, suggested ? 'suggested for this page' : '');
+      seg.setAttribute('aria-label', suggested ? `${seg.dataset.mode}, suggested` : seg.dataset.mode);
+    }
+    $('#sources').hidden = swapsCard;
+    if (showB) $('#empty').hidden = true; // "No video found yet" would contradict the prompt
+    const bDone = isB ? switched : null;
+    $('#mp-done').hidden = !bDone;
+    if (bDone) setText($('#mp-done-text'), `now in ${bDone.mode} mode`);
+    const chip = $('#modeChip');
+    chip.classList.toggle('mp-ind-dot', showB && state.indicator === 'dot');
+    chip.classList.toggle('mp-ind-underline', showB && state.indicator === 'underline');
+    for (const k of ['frame', 'edge', 'corner', 'beat']) chip.classList.toggle('mp-ind-' + k, showB && state.indicator === k);
+    const word = showB && state.indicator === 'word';
+    $('#hint').classList.toggle('mp-ind-word', word);
+    if (word) setText($('#hint'), kind + ' found');
+    const hintChip = $('#mp-hint');
+    hintChip.hidden = !(showB && state.indicator === 'arrow');
+    setText(hintChip, `→ ${kind ?? ''}`);
+    hintChip.setAttribute('aria-label', `${t.go} mode`);
+
+    const status = document.getElementById('demo-status');
+    const name = isB ? `${state.design} (${B_NAMES[state.design]})` : state.design;
+    const why = switched && (done || bDone) ? `design ${name} confirming the switch to ${switched.mode}`
+      : !kind ? `not needed: mode "${mode()}" fits this page`
+      : off ? `off for ${host} until reset`
+      : state.dismissed ? 'dismissed until reset or page change'
+      : `design ${name} showing: mode "${mode()}" on ${t.what}`;
+    status.replaceChildren('Prompt: ', Object.assign(document.createElement('b'), { textContent: why }));
+  }
+  const DONE_MS = 4000;
+  let doneTimer = 0;
+  /** Esc inside a prompt hides it until Reset or a page change (the real popup: until it reopens). */
+  function onStripKey(e) {
+    if (e.key !== 'Escape' || !e.target.closest('#mp-strip, #mp-done, .mp-b')) return;
+    e.preventDefault();
+    clearTimeout(doneTimer);
+    $('#mode').focus();
+    // state.done outlives a mode change made by hand: go by what is showing.
+    const confirming = state.done && state.done.mode === mode();
+    update(confirming ? { done: null } : { done: null, dismissed: true });
+  }
+  function onPromptAct(e) {
+    const btn = e.target.closest('[data-act], .mp-seg [data-mode]');
+    if (!btn) return;
+    const kind = promptKind();
+    const act = btn.dataset.act;
+    const inStrip = !!btn.closest('#mp-strip');
+    const inPopup = btn.ownerDocument === doc; // designs A and B; C sits on the site page
+    const to = btn.dataset.mode ?? (act === 'switch' ? kind : act === 'auto' ? 'auto' : null);
+    if (to === mode()) return; // B4: the segment that is already selected
+    if (to && inPopup) {
+      // Designs A and B: switch, then confirm with an undo for about 4 seconds.
+      clearTimeout(doneTimer);
+      doneTimer = setTimeout(() => update({ done: null }), DONE_MS);
+      update({ done: { mode: to, prev: mode() }, settings: { ...state.settings, mode: to } });
+    } else if (to) saveSettings({ mode: to });
+    else if (act === 'undo' && state.done) {
+      clearTimeout(doneTimer);
+      update({ done: null, settings: { ...state.settings, mode: state.done.prev } });
+    }
+    else if (act === 'dismiss') update({ dismissed: true });
+    else if (act === 'never') update({ never: { ...state.never, [SITES[state.page].host]: true } });
+    // Once render() (queued by update) has hidden the prompt, the pressed button is gone:
+    // keep keyboard focus on a stable control.
+    setTimeout(() => {
+      if (state.done && state.done.mode === mode() && inStrip) { $('#mp-strip-undo').focus(); return; }
+      if (!btn.closest('[hidden]')) return;
+      const next = btn.ownerDocument === document
+        ? document.querySelector(`[data-design="${state.design}"]`)
+        : btn.ownerDocument.querySelector('#mode');
+      next?.focus();
+    });
+  }
+
+  // ---- fake site page -------------------------------------------------------------------
+  const view = document.getElementById('site-view');
+  let builtPage = '';
+  function el(tag, cls, text) {
+    const node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text) node.textContent = text;
+    return node;
+  }
+  function buildSite() {
+    builtPage = state.page;
+    view.scrollTop = 0;
+    document.getElementById('site-url').textContent = SITES[state.page].url;
+    if (state.page === 'manga') {
+      const reader = el('div', 'site-reader');
+      const head = el('h2', 'site-heading', SITES.manga.title);
+      head.append(el('small', '', `Chapter 12 · ${TOTAL} pages`));
+      reader.append(head);
+      for (let i = 0; i < LOADED + LOADING; i += 1) {
+        const fig = el('figure', 'site-page');
+        const art = el('div', `site-art p${i % 3}`);
+        art.append(el('i'), el('i'), el('i'));
+        const cap = el('figcaption');
+        cap.append(el('span', 'site-num', `page ${i + 1}`), el('span', 'site-tag'));
+        fig.append(art, cap);
+        reader.append(fig);
+      }
+      view.replaceChildren(reader);
+    } else {
+      const watch = el('div', 'site-watch');
+      const video = el('div', 'site-video');
+      const play = el('button', 'site-play');
+      play.type = 'button';
+      play.addEventListener('click', () => update({ playing: !state.playing }));
+      const progress = el('div', 'site-progress');
+      progress.append(el('i'));
+      video.append(el('span', 'site-badge'), play, progress);
+      const head = el('h2', 'site-heading', SITES.video.title);
+      head.append(el('small', '', 'Season 1 · Episode 12 · 1080p'));
+      const eps = el('div', 'site-eps');
+      for (let n = 9; n <= 14; n += 1) eps.append(el('span', n === 12 ? 'cur' : '', `Episode ${n}`));
+      watch.append(video, head, eps);
+      view.replaceChildren(watch);
+    }
+  }
+  function paintSite() {
+    if (builtPage !== state.page) buildSite();
+    if (state.page === 'manga') {
+      const active = mode() !== 'anime' && state.mangaSiteOn && state.mangaStarted;
+      view.querySelectorAll('.site-page').forEach((fig, i) => {
+        const loading = i >= LOADED;
+        const mark = loading ? 'loading' : active ? state.marks[i] : 'todo';
+        const cls = `site-page ${mark}${i === state.current ? ' current' : ''}`;
+        if (fig.className !== cls) fig.className = cls;
+        const orig = `${PAGE_SIZE.w}×${PAGE_SIZE.h}`;
+        setText(fig.querySelector('.site-tag'), mark === 'loading' ? 'loading…'
+          : mark === 'done' ? `upscaled 2× · ${PAGE_SIZE.w * 2}×${PAGE_SIZE.h * 2}`
+          : mark === 'now' ? 'upscaling…' : mark === 'fail' ? 'failed' : active ? `${orig} · queued` : `${orig} · not upscaled`);
+      });
+    } else {
+      const v = videoInfo();
+      const running = v.status === 'Active';
+      view.querySelector('.site-video').classList.toggle('on', running);
+      const scale = actualScale();
+      setText(view.querySelector('.site-badge'), mode() === 'manga' ? 'not upscaled · paused: manga mode'
+        : !v.enabled ? 'not upscaled · off'
+        : `anime4nerd · ${VIDEO.h}p → ${VIDEO.w * scale}×${VIDEO.h * scale}${state.playing ? '' : ' · paused'}`);
+      setText(view.querySelector('.site-play'), state.playing ? 'pause' : 'play');
+    }
+  }
+  /** What a page-map cell does: scroll the reader to that page and mark it. */
+  function gotoPage(index) {
+    const fig = view.querySelectorAll('.site-page')[index];
+    if (!fig) return;
+    const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    view.scrollTo({ top: fig.offsetTop - view.offsetTop - 12, behavior: smooth ? 'smooth' : 'auto' });
+    update({ current: index });
+  }
+
+  // ---- demo controls ----------------------------------------------------------------------
+  function paintControls() {
+    for (const b of document.querySelectorAll('[data-page]')) b.setAttribute('aria-pressed', String(b.dataset.page === state.page));
+    for (const b of document.querySelectorAll('[data-design]')) b.setAttribute('aria-pressed', String(b.dataset.design === state.design));
+    for (const b of document.querySelectorAll('[data-ind]')) b.setAttribute('aria-pressed', String(b.dataset.ind === state.indicator));
+    for (const b of document.querySelectorAll('[data-counts]')) b.setAttribute('aria-pressed', String(b.dataset.counts === state.counts));
+    doc.querySelector('.mc-counts').className = `mc-counts mc-${state.counts}`;
+    doc.querySelector('#manga-prog').className = `mc-prog mc-bar-${state.bar}`;
+    for (const b of document.querySelectorAll('[data-bar]')) b.setAttribute('aria-pressed', String(b.dataset.bar === state.bar));
+  }
+  function initControls() {
+    for (const b of document.querySelectorAll('[data-page]')) {
+      b.addEventListener('click', () => {
+        if (b.dataset.page !== state.page) update({ page: b.dataset.page, dismissed: false, done: null, marks: freshMarks(), current: 0, samples: [], mangaStarted: true });
+      });
+    }
+    // A dismissed prompt comes back when another design is picked, so they can be compared.
+    for (const b of document.querySelectorAll('[data-design]')) b.addEventListener('click', () => update({ design: b.dataset.design, dismissed: false, done: null }));
+    for (const b of document.querySelectorAll('[data-ind]')) b.addEventListener('click', () => update({ indicator: b.dataset.ind }));
+    for (const b of document.querySelectorAll('[data-counts]')) b.addEventListener('click', () => update({ counts: b.dataset.counts }));
+    for (const b of document.querySelectorAll('[data-bar]')) b.addEventListener('click', () => update({ bar: b.dataset.bar }));
+    // Test only: filler panels make the popup taller than 600px, to look at its scrollbar.
+    const setTall = (on) => {
+      doc.querySelectorAll('.demo-filler').forEach((el) => el.remove());
+      if (on) for (let i = 1; i <= 2; i += 1) {
+        const p = doc.createElement('section'); p.className = 'panel demo-filler';
+        p.innerHTML = '<div class="panel-head"><span>test filler ' + i + '</span><span>not in the extension</span></div><div style="height:90px"></div>';
+        doc.body.append(p);
+      }
+      for (const b of document.querySelectorAll('[data-tall]')) b.setAttribute('aria-pressed', String((b.dataset.tall === '1') === on));
+      const fd = doc.querySelector('.sb-fade'); if (fd) doc.body.append(fd);
+      sizeFrame();
+    };
+    for (const b of document.querySelectorAll('[data-tall]')) b.addEventListener('click', () => setTall(b.dataset.tall === '1'));
+    setTall(false);
+    // Test only: scrollbar looks.
+    const setSb = (k) => {
+      doc.querySelector('.sb-fade')?.remove();
+      if (k === 'fade') {
+        const fade = doc.createElement('div'); fade.className = 'sb-fade'; doc.body.append(fade);
+        const sync = () => fade.classList.toggle('end', doc.body.scrollTop + doc.body.clientHeight >= doc.body.scrollHeight - 2);
+        doc.body.onscroll = sync; sync();
+      }
+      for (const b of document.querySelectorAll('[data-sb]')) b.setAttribute('aria-pressed', String(b.dataset.sb === k));
+    };
+    for (const b of document.querySelectorAll('[data-sb]')) b.addEventListener('click', () => setSb(b.dataset.sb));
+    setSb('plain');
+    document.getElementById('demo-reset').addEventListener('click', () => update({ dismissed: false, never: {} }));
+  }
+
+  function sizeFrame() {
+    const full = doc.body.scrollHeight;
+    const h = `${Math.min(full, POPUP_MAX_HEIGHT)}px`;
+    if (frame.style.height !== h) frame.style.height = h;
+    const label = document.getElementById('demo-height');
+    setText(label, full > POPUP_MAX_HEIGHT ? `${full} px · over ${POPUP_MAX_HEIGHT}, scrolls` : `380 × ${full} px`);
+    label.className = full > POPUP_MAX_HEIGHT ? 'over' : '';
+  }
+
+  function render() {
+    paintSettings();
+    refresh();
+    paintPrompt();
+    paintSite();
+    paintControls();
+    sizeFrame();
+  }
+
+  // ---- simulation: frame times while a video plays, pages finishing while a reader is on ----
+  let ticks = 0;
+  function simulate() {
+    ticks += 1;
+    let next = {};
+    if (state.page === 'video' && state.videoOn && state.playing && mode() !== 'manga') {
+      const base = frameMs();
+      const fresh = Array.from({ length: 12 }, () => base * (0.9 + Math.random() * 0.2) * (Math.random() < 0.04 ? 3.4 : 1));
+      next = { samples: [...state.samples, ...fresh].slice(-BARS) };
+    }
+    if (ticks % 2 === 0 && state.page === 'manga' && mode() !== 'anime' && state.mangaSiteOn && state.mangaStarted) {
+      const marks = [...state.marks];
+      const finished = marks.indexOf('now');
+      if (finished >= 0) marks[finished] = 'done';
+      while (marks.filter((m) => m === 'now').length < 2 && marks.includes('todo')) marks[marks.indexOf('todo')] = 'now';
+      next = { ...next, marks };
+    }
+    state = { ...state, ...next };
+    render();
+  }
+
+  function init() {
+    doc = frame.contentDocument;
+    buildPresets();
+    initTips();
+    initMode();
+    buildBars();
+    initMangaCard();
+    initControls();
+    doc.addEventListener('click', onPromptAct);
+    doc.addEventListener('keydown', onStripKey);
+    document.addEventListener('click', onPromptAct);
+    $('#report').addEventListener('click', (e) => e.preventDefault()); // the real chip opens the report page
+    render();
+    setInterval(simulate, 500); // the popup's own refresh interval
+  }
+})();
+</script>
+</body>
+</html>

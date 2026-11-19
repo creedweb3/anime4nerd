@@ -5,7 +5,7 @@
 // rebuild on resize, fall back to plain video on any GPU error.
 
 import {
-  Message, Settings, Sources, Status, VideoInfo, chainKey,
+  Message, Settings, Sources, Status, Suggest, VideoInfo, chainKey,
   loadSettings, loadSources, onSettingsChanged, onSourcesChanged, requestedScale, sourceKey,
 } from './settings';
 import type { Anime4kRenderer } from './gpu';
@@ -156,7 +156,7 @@ class VideoUpscaler {
     const seeking = () => { this.stopLoop(); if (this.canvas) this.canvas.hidden = true; };
     const report = () => { this.sync(); this.onUpdate(); };
     this.listeners = [
-      ['loadeddata', report], ['playing', report], ['pause', report], ['seeked', sync], ['seeking', seeking],
+      ['loadeddata', report], ['playing', report], ['pause', () => { this.freezeSamples(); report(); }], ['seeked', sync], ['seeking', seeking],
       ['resize', reset], ['emptied', reset], ['loadstart', reset], ['error', reset],
       ['enterpictureinpicture', sync], ['leavepictureinpicture', sync],
     ];
@@ -195,9 +195,25 @@ class VideoUpscaler {
       enabled: this.enabled,
       status: this.status,
       message: this.message.slice(0, 200),
-      stats: this.renderer && this.status === 'Active' ? { ...this.renderer.stats(), sourceFps: this.sourceFps } : null,
+      stats: this.currentStats(),
       media: mediaSessionMeta(),
     };
+  }
+
+  /** Frame times of the last 2 s of playback, kept while paused (they would age out one by one). */
+  private frozenSamples: number[] = [];
+
+  private freezeSamples() {
+    const s = this.renderer && this.status === 'Active' ? this.renderer.stats().samples : [];
+    if (s.length) this.frozenSamples = s;
+  }
+
+  /** Renderer stats; while paused, the graph is the one from the moment playback stopped. */
+  private currentStats() {
+    if (!this.renderer || this.status !== 'Active') { this.frozenSamples = []; return null; }
+    const s = this.renderer.stats();
+    const playing = !this.video.paused && !this.video.ended;
+    return { ...s, samples: playing ? s.samples : this.frozenSamples, sourceFps: this.sourceFps };
   }
 
   setEnabled(on: boolean) {
@@ -218,12 +234,17 @@ class VideoUpscaler {
   configure(s: Settings) {
     const chainChanged = chainKey(s) !== chainKey(this.settings) || s.upscale !== this.settings.upscale;
     this.settings = s;
-    if (chainChanged) this.teardown();
+    if (chainChanged || this.mangaOnly()) this.teardown();
     this.sync();
   }
 
+  /** Mode 'manga': videos are left alone. The Firefox build has no manga mode. */
+  private mangaOnly(): boolean {
+    return !__FIREFOX__ && this.settings.mode === 'manga';
+  }
+
   highlight(on: boolean) {
-    this.video.style.outline = on ? '3px solid #7c5cff' : '';
+    this.video.style.outline = on ? '3px solid #fff' : '';
     this.video.style.outlineOffset = on ? '-3px' : '';
   }
 
@@ -275,9 +296,11 @@ class VideoUpscaler {
   private sync() {
     if (this.dead) return;
     // Tells src/fullscreen-redirect.ts (page world) to fullscreen this video's container instead.
-    this.video.toggleAttribute('data-a4k-on', this.enabled);
+    this.video.toggleAttribute('data-a4k-on', this.enabled && !this.mangaOnly());
     if (!this.enabled) { this.stopLoop(); if (this.canvas) this.canvas.hidden = true; this.setStatus('Off'); this.probeFps(); return; }
     this.stopProbe();
+    // configure() has already dropped the renderer and its canvas; nothing is built while this holds.
+    if (this.mangaOnly()) { this.stopLoop(); this.setStatus('Suspended', 'Paused: manga mode.'); return; }
     if (this.throttled) {
       this.setStatus('Waiting', `Anime4K runs on at most ${MAX_ACTIVE_RENDERERS} videos per page at once. Play this video to give it priority.`);
       return;
@@ -305,11 +328,6 @@ class VideoUpscaler {
 
   private async start() {
     const v = this.video;
-    const src = uploadSize(v);
-    if (src.h > 1600 || src.w > 2880) {
-      this.fail(`Source is ${src.h}p; up to 1440p is supported (2× output would need too much GPU memory).`);
-      return;
-    }
     this.starting = true;
     this.width = v.videoWidth;
     this.height = v.videoHeight;
@@ -599,6 +617,7 @@ class VideoUpscaler {
    */
   private controlBarLift(c: HTMLCanvasElement): number {
     const v = this.video;
+    if (!v.isConnected) return 0; // a removed video's root is itself: no elementsFromPoint
     const root = v.getRootNode() as Document | ShadowRoot;
     const r = c.getBoundingClientRect();
     if (r.height < 50) return 0;
@@ -628,6 +647,7 @@ class VideoUpscaler {
    */
   private coversOverlay(c: HTMLCanvasElement): boolean {
     const v = this.video;
+    if (!v.isConnected) return false; // a removed video's root is itself: no elementsFromPoint
     const root = v.getRootNode() as Document | ShadowRoot;
     const r = c.getBoundingClientRect();
     // Rows reach close to the edges: control bars and subtitles sit in the bottom tenth.
@@ -1005,6 +1025,9 @@ function shutdown() {
   observer?.disconnect();
   if (scanTimer !== null) window.clearInterval(scanTimer);
   if (watchTimer !== null) window.clearInterval(watchTimer);
+  if (suggestTimer !== null) window.clearInterval(suggestTimer);
+  document.removeEventListener('visibilitychange', checkSuggestion);
+  window.removeEventListener('pageshow', onPageShow);
   window.removeEventListener('pagehide', reportWatch);
   for (const u of upscalers.values()) u.destroy();
   upscalers.clear();
@@ -1014,6 +1037,53 @@ function shutdown() {
 
 /** Manga mode (local prototype, Chrome build only). */
 let manga: MangaMode | null = null;
+
+// --- mode suggestion (Chrome build only) -----------------------------------------
+// The background badges the toolbar icon while the mode leaves this frame's content alone: a
+// manga reader in mode 'anime', a video in mode 'manga'. In mode 'anime' this is the only manga
+// work done: the page is measured (detection), nothing is fetched, drawn or changed.
+const SUGGEST_FIRST_MS = 1000;
+const SUGGEST_MS = 5000;
+let suggestTimer: number | null = null;
+let suggested: Suggest | 'reader' | null = null;
+
+function checkSuggestion() {
+  if (stopped || !settings) return;
+  let kind: Suggest | 'reader' | null = null;
+  if (settings.mode === 'anime') {
+    if (document.hidden) return; // measured again when the tab is shown
+    if (manga?.isReader()) kind = 'manga';
+  } else if (settings.mode === 'manga') {
+    // A reader is what mode 'manga' is for. It is reported too: the popup offers anime mode only
+    // when no frame of the tab has a reader, and the badge must follow the same rule.
+    if (manga?.isReader()) kind = 'reader';
+    else if (upscalers.size) kind = 'anime';
+  }
+  if (kind === suggested) return;
+  suggested = kind;
+  try {
+    if (contextAlive()) chrome.runtime.sendMessage({ type: 'a4k-suggest', kind } satisfies Message).catch(() => {});
+  } catch { /* context gone: the next scan shuts this copy down */ }
+}
+/**
+ * The page removed an iframe: its script is gone without a word and no navigation event reports
+ * it, so the background is told to forget the frames that no longer exist.
+ */
+function onMutations(records: MutationRecord[]) {
+  queueScan();
+  if (__FIREFOX__) return;
+  const frameGone = records.some((r) => [...r.removedNodes].some((n) => n instanceof Element && (n.matches('iframe, frame') || !!n.querySelector('iframe, frame'))));
+  if (!frameGone) return;
+  try {
+    if (contextAlive()) chrome.runtime.sendMessage({ type: 'a4k-frames-gone' } satisfies Message).catch(() => {});
+  } catch { /* context gone: the next scan shuts this copy down */ }
+}
+/** A page restored from the back/forward cache: the background forgot it when the tab navigated. */
+function onPageShow(e: PageTransitionEvent) {
+  if (!e.persisted) return;
+  suggested = null;
+  checkSuggestion();
+}
 
 // --- fullscreen menu -------------------------------------------------------------
 /** True if `node` is `outer` or inside it, crossing shadow-root boundaries. */
@@ -1059,7 +1129,12 @@ function fullscreenTarget(): { u: VideoUpscaler; container: Element | ShadowRoot
 }
 
 const menu = new FullscreenMenu(() => fullscreenTarget()?.u.info() ?? null, () => settings);
-function syncMenu() { if (!stopped) menu.mount(fullscreenTarget()?.container ?? null); }
+// Not offered in mode 'manga': its switch and presets would do nothing to a video there.
+function syncMenu() {
+  if (stopped) return;
+  const videosOff = !__FIREFOX__ && settings?.mode === 'manga';
+  menu.mount(videosOff ? null : fullscreenTarget()?.container ?? null);
+}
 
 chrome.runtime.onMessage.addListener((msg: Message, _sender, respond) => {
   if (stopped) return false; // a stopped copy must not answer for the live one
@@ -1070,6 +1145,7 @@ chrome.runtime.onMessage.addListener((msg: Message, _sender, respond) => {
     return true;
   }
   if (msg?.type === 'a4k-manga-status') { respond(manga?.status() ?? null); return true; }
+  if (msg?.type === 'a4k-manga-goto') { manga?.goto(msg.index); return false; }
   if (msg?.type === 'a4k-highlight') {
     for (const u of upscalers.values()) u.highlight(u.id === msg.id);
     respond(true);
@@ -1087,8 +1163,14 @@ if (!window.__a4kLoaded) {
   (async () => {
   [settings, sources] = await Promise.all([loadSettings(), loadSources()]);
   if (stopped) return;
-  onSettingsChanged((s) => { if (stopped) return; settings = s; for (const u of upscalers.values()) u.configure(s); manga?.refresh(); notify(); });
-  if (!__FIREFOX__) manga = startManga(() => settings, loadGpu);
+  onSettingsChanged((s) => { if (stopped) return; settings = s; for (const u of upscalers.values()) u.configure(s); manga?.refresh(); syncMenu(); notify(); if (!__FIREFOX__) checkSuggestion(); });
+  if (!__FIREFOX__) {
+    manga = startManga(() => settings, loadGpu);
+    window.setTimeout(checkSuggestion, SUGGEST_FIRST_MS);
+    suggestTimer = window.setInterval(checkSuggestion, SUGGEST_MS);
+    document.addEventListener('visibilitychange', checkSuggestion);
+    window.addEventListener('pageshow', onPageShow);
+  }
   onSourcesChanged((s) => {
     if (stopped) return;
     sources = s;
@@ -1100,7 +1182,7 @@ if (!window.__a4kLoaded) {
   // An iframe whose outer page goes fullscreen, and F11, only show up as a resize.
   window.addEventListener('resize', syncMenu);
   document.addEventListener('mousemove', () => menu.wake(), { passive: true });
-  observer = new MutationObserver(queueScan);
+  observer = new MutationObserver(onMutations);
   observer.observe(document.documentElement, { childList: true, subtree: true });
   scan();
   // Videos that become visible later (lazy players) are picked up by periodic rescans.

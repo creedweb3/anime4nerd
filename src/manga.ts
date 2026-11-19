@@ -12,7 +12,7 @@
 
 import { chainKey, type Settings } from './settings';
 import type { RenderSource } from './gpu';
-import { MANGA_PROTOCOL, loadMangaSites, onMangaSitesChanged } from './manga-sites';
+import { MANGA_PROTOCOL, type MangaSites, loadMangaSites, onMangaSitesChanged } from './manga-sites';
 import {
   Detection, PageImage, PageSlot, ReaderUi, classifyPage, isChapterNavText, looksLikeChapterList, parsePageCounter,
 } from './manga-detect';
@@ -36,7 +36,8 @@ const CHAPTER_IN_OPTION = /(?:chapter|chap|ch|episode|ep)\.?\s*#?(\d+(?:\.\d+)?)
 const COLOUR_SHARE = 0.005;
 const COLOUR_SPREAD = 14; // max-min channel difference that counts as "colour"
 
-type PageMark = 'done' | 'fail' | 'todo';
+/** 'now': being downloaded, rendered or encoded for the first time. */
+export type PageMark = 'done' | 'fail' | 'now' | 'todo';
 
 /** Everything the popup shows about manga on this frame. */
 export interface MangaStatus {
@@ -44,6 +45,8 @@ export interface MangaStatus {
   kind: Detection['kind']; // 'images': a supported reader; 'canvas': a reader we cannot read; null: not manga
   meta: MangaMeta;
   marks: PageMark[]; // one per loaded page, top to bottom
+  first: number; // chapter page (from 0) that marks[0] is: above 0 on a reader showing one page at a time
+  loading: number; // pages on the page after the loaded ones whose image has not arrived yet
   total: number; // pages in the chapter (page counter, or loaded + still loading)
   reasons: string[]; // why the page counts as manga
   current: number | null; // index of the page in the middle of the screen
@@ -93,7 +96,7 @@ interface PageState {
   pending: string | null; // settings of a render still encoding (not queued again meanwhile)
 }
 
-export interface MangaMode { refresh(): void; stop(): void; status(): MangaStatus }
+export interface MangaMode { refresh(): void; stop(): void; status(): MangaStatus; goto(index: unknown): void; isReader(): boolean }
 
 function textOf(sel: string): string {
   const el = document.querySelector(sel);
@@ -103,8 +106,8 @@ function textOf(sel: string): string {
 export function startManga(getSettings: () => Settings, loadGpu: () => Promise<GpuModule>): MangaMode {
   const states = new Map<HTMLImageElement, PageState>();
   const queue = new Set<HTMLImageElement>();
-  let detected: { kind: Detection['kind']; pages: HTMLImageElement[]; meta: MangaMeta; total: number; reasons: string[]; slots: HTMLImageElement[] } = {
-    kind: null, pages: [], meta: { series: null, volume: null, chapter: null, chapterTitle: null }, total: 0, reasons: [], slots: [],
+  let detected: { kind: Detection['kind']; pages: HTMLImageElement[]; meta: MangaMeta; total: number; reasons: string[]; slots: HTMLImageElement[]; counter: ReaderUi['counter'] } = {
+    kind: null, pages: [], meta: { series: null, volume: null, chapter: null, chapterTitle: null }, total: 0, reasons: [], slots: [], counter: null,
   };
   let enabled = false;
   let showOriginal = false;
@@ -180,7 +183,7 @@ export function startManga(getSettings: () => Settings, loadGpu: () => Promise<G
     const ref = d.pages[0];
     const slots = ref ? slotEls.filter((_, i) => Math.abs(placeholders[i].renderedWidth - ref.renderedWidth) <= ref.renderedWidth * 0.08
       && Math.abs(placeholders[i].left - ref.left) <= ref.renderedWidth * 0.08) : [];
-    detected = { kind: d.kind, pages, meta, total: d.total, reasons: d.reasons, slots };
+    detected = { kind: d.kind, pages, meta, total: d.total, reasons: d.reasons, slots, counter: ui.counter };
     return detected;
   }
 
@@ -528,14 +531,14 @@ export function startManga(getSettings: () => Settings, loadGpu: () => Promise<G
   }
 
   function status(): MangaStatus {
-    const { kind, pages, meta, total, reasons } = enabled ? detected : detect(); // when on, scan() keeps it fresh
+    const { kind, pages, meta, total, reasons, slots, counter } = enabled ? detected : detect(); // when on, scan() keeps it fresh
     const mid = innerHeight / 2;
     let current: number | null = null;
-    const marks = pages.map((img, i) => {
+    const marks = pages.map((img, i): PageMark => {
       const r = img.getBoundingClientRect();
       if (current === null && r.top <= mid && r.bottom >= mid) current = i;
       const st = states.get(img);
-      return st?.error ? 'fail' : st?.outUrl ? 'done' : 'todo';
+      return st?.error ? 'fail' : st?.outUrl ? 'done' : st && (img === rendering || st.pending) ? 'now' : 'todo';
     });
     const p0 = pages[0];
     const first = p0 ? states.get(p0) : undefined;
@@ -548,6 +551,9 @@ export function startManga(getSettings: () => Settings, loadGpu: () => Promise<G
       kind,
       meta,
       marks,
+      // A reader that keeps a single page on the page: its counter says which page of the chapter that is.
+      first: counter && pages.length === 1 && !slots.length ? Math.max(0, Math.min(counter.current, total) - 1) : 0,
+      loading: slots.length,
       total: Math.max(total, marks.length),
       reasons,
       current,
@@ -565,15 +571,35 @@ export function startManga(getSettings: () => Settings, loadGpu: () => Promise<G
     };
   }
 
+  /**
+   * The popup's page map: scroll to a page, counted from 0 in the order status() reports them
+   * (loaded pages, then the slots still loading). The index comes from a message, so anything
+   * that is not a page of this reader is ignored.
+   */
+  function goto(index: unknown) {
+    if (stopped || typeof index !== 'number' || !Number.isInteger(index) || index < 0) return;
+    const { kind, pages, slots } = enabled ? detected : detect();
+    if (kind !== 'images') return;
+    const img = index < pages.length ? pages[index] : slots[index - pages.length];
+    if (!img?.isConnected) return;
+    const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    img.scrollIntoView({ block: 'start', behavior: calm ? 'auto' : 'smooth' });
+  }
+
   // Each frame runs only if its own host is switched on. A reader inside an iframe from another
   // host is switched on by the popup together with the address-bar site, so a third-party frame
   // (an ad) on a switched-on site never gets the background image fetch.
-  void loadMangaSites().then((s) => setEnabled(s[location.hostname] === true));
-  onMangaSitesChanged((s) => setEnabled(s[location.hostname] === true));
+  // Mode 'anime' overrides the site switch: nothing is upscaled and upscaled pages are restored.
+  let siteOn = false;
+  const apply = () => setEnabled(siteOn && getSettings().mode !== 'anime');
+  const onSites = (s: MangaSites) => { siteOn = s[location.hostname] === true; apply(); };
+  void loadMangaSites().then(onSites);
+  onMangaSitesChanged(onSites);
 
   return {
     /** Settings changed: re-render pages made with older settings, and retry failed ones. */
     refresh() {
+      apply();
       if (!enabled) return;
       for (const [img, st] of states) {
         if (st.error) st.error = null;
@@ -583,5 +609,8 @@ export function startManga(getSettings: () => Settings, loadGpu: () => Promise<G
     },
     stop() { setEnabled(false); stopped = true; io.disconnect(); },
     status,
+    goto,
+    /** Whether this frame shows a supported reader. Only measures the page: nothing is fetched, drawn or changed. */
+    isReader: () => !stopped && (enabled ? detected : detect()).kind === 'images',
   };
 }

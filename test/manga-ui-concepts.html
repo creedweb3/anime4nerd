@@ -1,0 +1,612 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Anime4Nerd: manga mode concepts</title>
+<style>
+/* ---- copied from src/popup.css (only the rules this preview uses) ---------- */
+:root {
+  color-scheme: dark;
+  --bg: #0b0b0b;
+  --panel: #111;
+  --line: #262626;
+  --line2: #3a3a3a;
+  --fg: #e4e4e4;
+  --dim: #8d8d8d;
+  --faint: #585858;
+  --on: #fff;
+  --bar: #d0d0d0;
+  --bar-dim: #3c3c3c;
+  --ok: #9fd3a8;
+  --warn: #e3c58a;
+  --bad: #e39a9a;
+  --g: 159, 211, 168;
+  --r: 227, 154, 154;
+}
+* { box-sizing: border-box; }
+
+/* popup.css puts these on body; here they sit on .popup so three popups fit one page */
+.popup {
+  width: 380px;
+  padding: 10px;
+  background: var(--bg);
+  color: var(--fg);
+  font: 12px/1.5 "JetBrains Mono", "Cascadia Mono", "Fira Code", Consolas, ui-monospace, monospace;
+}
+
+.bar { display: flex; gap: 4px; margin-bottom: 6px; }
+.chip {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--dim);
+  padding: 3px 8px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.chip.grow { flex: 1; }
+.chip.on { color: var(--on); border-color: var(--line2); }
+.chip.bug { display: flex; align-items: center; padding: 3px 6px; }
+
+.panel {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 10px;
+  margin-bottom: 6px;
+}
+.panel:last-of-type { margin-bottom: 0; }
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  color: var(--faint);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  margin-bottom: 6px;
+}
+
+.source {
+  border: 1px solid var(--line);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  user-select: none;
+  position: relative;
+  overflow: hidden;
+  transition: background 0.12s, border-color 0.12s;
+  background: linear-gradient(135deg, rgba(var(--r), 0.14), rgba(var(--r), 0.02) 60%, transparent) var(--bg);
+  border-color: rgba(var(--r), 0.5);
+}
+.source.on {
+  background: linear-gradient(135deg, rgba(var(--g), 0.16), rgba(var(--g), 0.02) 60%, transparent) var(--bg);
+  border-color: rgba(var(--g), 0.6);
+}
+.line { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.title { font-size: 14px; font-weight: 600; line-height: 1.3; }
+.episode { opacity: 0.85; }
+.tag {
+  display: inline-block;
+  border: 1px solid rgba(var(--r), 0.4);
+  padding: 1px 6px;
+  font-size: 10px;
+  color: rgba(var(--r), 0.85);
+  transition: color 0.12s, border-color 0.12s;
+  vertical-align: 2px;
+  white-space: nowrap;
+  margin-right: 4px;
+}
+.source.on .tag { border-color: rgba(var(--g), 0.5); color: rgb(var(--g)); }
+.meta { color: var(--faint); font-size: 11px; }
+.hr { border-top: 1px solid var(--line); margin: 2px 0; }
+.state { font-size: 12px; }
+.state.ok { color: var(--ok); }
+
+.switch { flex: none; display: flex; align-items: center; padding: 8px 0 8px 12px; margin: -8px 0 -8px 0; cursor: pointer; }
+.switch input {
+  appearance: none;
+  width: 36px;
+  height: 20px;
+  border: 1px solid rgba(var(--r), 0.45);
+  background: var(--bg);
+  position: relative;
+  cursor: pointer;
+  margin: 2px 0 0;
+}
+.switch input::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: rgba(var(--r), 0.75);
+  transition: left 0.08s, background 0.08s;
+}
+.switch input:checked { border-color: rgba(var(--g), 0.6); }
+.switch input:checked::after { left: 18px; background: rgb(var(--g)); }
+.switch:hover input { border-color: var(--on); }
+
+.verdict { text-transform: none; letter-spacing: 0; font-size: 11px; }
+.verdict.ok { color: var(--ok); }
+.kv { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.kv div { border: 1px solid var(--line); padding: 3px 8px; min-height: 40px; }
+.kv span {
+  display: block;
+  color: var(--faint);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.kv b { display: block; font-size: 14px; font-weight: 600; white-space: nowrap; line-height: 1.4; }
+.kv b.ok { color: var(--ok); }
+
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.tile {
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--dim);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  padding: 5px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+}
+.tile small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 10px; color: var(--faint); }
+.tile:hover { border-color: var(--line2); }
+.tile b { color: var(--fg); font-size: 12px; font-weight: 600; }
+.tile[aria-checked="true"] { background: #1a1a1a; border-color: var(--on); }
+.tile[aria-checked="true"] b::before { content: "▸ "; color: var(--on); }
+
+.pills { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.pill {
+  border: 1px solid var(--line2);
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  font-size: 11px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.pill::before { content: "+ "; }
+.pill[aria-checked="true"] { background: var(--on); color: #000; border-color: var(--on); }
+.pill[aria-checked="true"]::before { content: "✓ "; }
+.pill[role="radio"]::before, .pill[role="radio"][aria-checked="true"]::before { content: none; }
+.pills-label { color: var(--faint); font-size: 11px; align-self: center; margin-right: auto; }
+
+.manga-card .episode { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.manga-card .tag { vertical-align: baseline; margin-right: 0; flex: none; }
+.manga-card .epname { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+/* ---- preview page (not part of the extension) ------------------------------ */
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  padding: 28px 24px 48px;
+  background: #1a1a1a;
+  color: var(--fg);
+  font: 12px/1.5 "JetBrains Mono", "Cascadia Mono", "Fira Code", Consolas, ui-monospace, monospace;
+}
+h1 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+.intro { margin: 0 0 28px; color: var(--dim); font-size: 11px; max-width: 70ch; }
+.concepts { display: flex; flex-wrap: wrap; gap: 40px 36px; align-items: flex-start; }
+.concept { min-width: 0; max-width: 100%; }
+.label, .sub {
+  margin: 0 0 8px;
+  color: var(--dim);
+  font-size: 9px;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+.label b { color: var(--on); font-weight: 600; margin-right: 8px; }
+.sub { color: var(--faint); margin-bottom: 6px; }
+.stage { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+.takeaway { margin: 12px 0 0; color: var(--dim); font-size: 11px; max-width: 60ch; }
+.popup { box-shadow: 0 0 0 1px var(--line2), 0 24px 40px -18px #000; }
+.popup.dimmed { zoom: 0.7; opacity: 0.55; }
+button:focus-visible, .switch input:focus-visible { outline: 1px solid var(--on); outline-offset: 2px; }
+
+/* concept A: video | manga switch, built from the popup's pills */
+.modes { display: flex; margin-bottom: 6px; }
+.modes .pill { flex: 1; padding: 5px 10px; text-align: center; background: var(--panel); }
+.modes .pill + .pill { margin-left: -1px; }
+.modes .pill[aria-checked="true"] { background: var(--on); position: relative; }
+.prog-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.prog { height: 6px; background: var(--bar-dim); }
+.prog i { display: block; height: 100%; background: rgb(var(--g)); }
+.toggle-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: var(--dim); font-size: 11px; min-height: 24px; }
+
+/* concept B: reader page mock + floating bar (visual language of src/fullscreen-menu.ts) */
+.rbar, .fs-panel { font-family: "JetBrains Mono", "Cascadia Mono", Consolas, ui-monospace, monospace; }
+.reader { position: relative; width: 340px; max-width: 100%; height: 540px; overflow: hidden; background: #202020; border: 1px solid var(--line2); }
+.reader-top { padding: 6px 10px; background: #2a2a2a; color: #a8a8a8; font-size: 10px; }
+.sheet {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  grid-auto-rows: 46px;
+  gap: 6px;
+  width: 280px;
+  margin: 12px auto 0;
+  padding: 12px;
+  background: #ecebe6;
+  transition: filter 0.12s;
+}
+.pnl { border: 2px solid #1b1b1b; background: linear-gradient(160deg, #cfcfcb, #8e8e8a); }
+.pnl.w2 { grid-column: span 2; }
+.pnl.w3 { grid-column: span 3; }
+.pnl.w4 { grid-column: span 4; }
+.pnl.w6 { grid-column: span 6; }
+.pnl.h2 { grid-row: span 2; }
+.pnl.h3 { grid-row: span 3; }
+.reader.original .sheet { filter: blur(1.6px) contrast(0.8); }
+.view-tag { position: absolute; top: 34px; left: 8px; padding: 1px 6px; border: 1px solid rgba(159,211,168,.6); background: rgba(11,11,11,.85); color: #9fd3a8; font-size: 10px; }
+.reader.original .view-tag { border-color: #e3c58a; color: #e3c58a; }
+.rbar { position: absolute; right: 10px; bottom: 10px; display: flex; align-items: stretch; border: 1px solid #3a3a3a; background: rgba(11,11,11,.85); color: #8d8d8d; font-size: 11px; box-shadow: 0 24px 40px -18px #000; }
+.rbar > * { padding: 6px 9px; border: 0; border-left: 1px solid #3a3a3a; }
+.rbar > :first-child { border-left: 0; }
+.rbar-id { color: #e4e4e4; font-weight: 600; }
+.rbar-btn { background: transparent; color: #e4e4e4; font: inherit; cursor: pointer; touch-action: none; }
+.rbar-btn:hover, .rbar-btn[aria-pressed="true"] { background: #fff; color: #000; }
+
+.fs-panel { width: 260px; max-width: 100%; padding: 10px; border: 1px solid #3a3a3a; background: rgba(11,11,11,.94); display: grid; gap: 8px; box-shadow: 0 24px 40px -18px #000; }
+.fs-status { display: grid; gap: 6px; padding: 8px; border: 1px solid rgba(227,154,154,.45);
+  background: linear-gradient(135deg, rgba(227,154,154,.14), rgba(227,154,154,.02) 60%, transparent) #0b0b0b; }
+.fs-status.on { border-color: rgba(159,211,168,.6);
+  background: linear-gradient(135deg, rgba(159,211,168,.16), rgba(159,211,168,.02) 60%, transparent) #0b0b0b; }
+.fs-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.fs-meta { color: #8d8d8d; font-size: 11px; margin-top: -2px; }
+.fs-switch { flex: none; width: 36px; height: 20px; padding: 0; position: relative; border: 1px solid rgba(227,154,154,.45); background: #0b0b0b; cursor: pointer; }
+.fs-switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; background: rgba(227,154,154,.75); transition: left .08s, background .08s; }
+.fs-switch[aria-checked="true"] { border-color: rgba(159,211,168,.6); }
+.fs-switch[aria-checked="true"]::after { left: 18px; background: #9fd3a8; }
+.fs-switch:hover { border-color: #e4e4e4; }
+.fs-label { color: #585858; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; margin-top: 2px; }
+.fs-opts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.fs-opt { border: 1px solid #3a3a3a; background: transparent; color: #8d8d8d; padding: 3px 0; font: inherit; font-size: 11px; text-align: center; cursor: pointer; }
+.fs-opt:hover { color: #e4e4e4; }
+.fs-opt[aria-checked="true"] { background: #fff; border-color: #fff; color: #000; }
+
+/* concept C: page map */
+.chip.manga { color: rgb(var(--g)); border-color: rgba(var(--g), 0.5); }
+.map { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; margin-bottom: 8px; }
+.cell {
+  aspect-ratio: 3 / 4;
+  padding: 0;
+  border: 1px solid var(--line2);
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  font-size: 9px;
+  cursor: pointer;
+  transition: transform 0.08s, filter 0.08s, border-color 0.08s;
+}
+.cell.done { background: rgb(var(--g)); border-color: rgb(var(--g)); color: #0b0b0b; }
+.cell.now { border-color: var(--on); color: var(--on); }
+.cell.fail { background: var(--bad); border-color: var(--bad); color: #0b0b0b; }
+.cell:hover { border-color: var(--on); filter: brightness(1.15); transform: translateY(-2px); }
+.kv.two { grid-template-columns: repeat(2, 1fr); }
+.legend { margin-top: 8px; color: var(--dim); font-size: 10px; white-space: nowrap; }
+.key { display: inline-block; width: 8px; height: 8px; margin: 0 4px 0 8px; border: 1px solid var(--line2); vertical-align: -1px; }
+.key:first-child { margin-left: 0; }
+.key.done { background: rgb(var(--g)); border-color: rgb(var(--g)); }
+.key.now { border-color: var(--on); }
+.key.fail { background: var(--bad); border-color: var(--bad); }
+</style>
+</head>
+<body>
+<h1>manga mode: three concepts</h1>
+<p class="intro">Design preview only, with sample data. Controls toggle so you can feel them; nothing here talks to the extension.</p>
+
+<!-- preset panel, shared by every popup mock (filled into data-slot="preset" by the script) -->
+<template id="preset-panel">
+  <section class="panel">
+    <div class="panel-head"><span>preset</span><span data-preset-name>A+A</span></div>
+    <div class="grid" role="radiogroup" aria-label="preset">
+      <button type="button" class="tile" role="radio" aria-checked="false"><b>Mode A</b><small>Most 1080p</small></button>
+      <button type="button" class="tile" role="radio" aria-checked="false"><b>Mode B</b><small>Soft restore</small></button>
+      <button type="button" class="tile" role="radio" aria-checked="false"><b>Mode C</b><small>Denoise</small></button>
+      <button type="button" class="tile" role="radio" aria-checked="true"><b>A+A</b><small>Stronger restore</small></button>
+      <button type="button" class="tile" role="radio" aria-checked="false"><b>B+B</b><small>Double soft</small></button>
+      <button type="button" class="tile" role="radio" aria-checked="false"><b>C+A</b><small>Denoise+A</small></button>
+    </div>
+    <div class="pills">
+      <button type="button" class="pill" role="switch" aria-checked="true">darken lines</button>
+      <button type="button" class="pill" role="switch" aria-checked="false">thin lines</button>
+    </div>
+    <div class="pills" role="radiogroup" aria-label="upscale" data-video-only>
+      <span class="pills-label">upscale</span>
+      <button type="button" class="pill" role="radio" aria-checked="true">auto</button>
+      <button type="button" class="pill" role="radio" aria-checked="false">2×</button>
+      <button type="button" class="pill" role="radio" aria-checked="false">4×</button>
+    </div>
+  </section>
+</template>
+
+<main class="concepts">
+
+  <!-- ======================= A: mode switch ======================= -->
+  <section class="concept" aria-labelledby="label-a">
+    <h2 class="label" id="label-a"><b>a</b>mode switch</h2>
+    <div class="stage">
+      <div>
+        <p class="sub">manga selected (click the switch)</p>
+        <div class="popup">
+          <header class="bar">
+            <span class="chip">anime4k</span>
+            <span class="chip on" id="a-hint">manga · aa</span>
+            <span class="chip grow" id="a-gpu">0.4 s / page</span>
+            <span class="chip">21:04</span>
+            <span class="chip bug" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M5.5 4.5a2.5 2.5 0 0 1 5 0"/><rect x="4.5" y="5" width="7" height="8" rx="3.5"/><path d="M8 7.5V13M2 9h2.5M11.5 9H14M2.5 5l2 1.5M13.5 5l-2 1.5M2.5 13l2-1.5M13.5 13l-2-1.5"/></svg></span>
+          </header>
+          <div class="modes" role="radiogroup" aria-label="What to upscale">
+            <button type="button" class="pill" role="radio" aria-checked="false" data-view-btn="video">video</button>
+            <button type="button" class="pill" role="radio" aria-checked="true" data-view-btn="manga">manga</button>
+          </div>
+
+          <div data-view="manga">
+            <section class="panel">
+              <div class="panel-head"><span>reading now</span><span>mangadot.net</span></div>
+              <div class="source manga-card on">
+                <div class="line"><div class="title">One Piece</div></div>
+                <div class="episode"><span class="tag">ch 1120</span><span class="epname">24 pages · b&amp;w · mangadot.net</span></div>
+                <div class="hr"></div>
+                <div class="prog-head"><span class="state ok">● 12 / 24 pages</span><span class="meta">1 in progress · 1 failed</span></div>
+                <div class="prog" role="progressbar" aria-label="Pages upscaled" aria-valuemin="0" aria-valuemax="24" aria-valuenow="12"><i style="width:50%"></i></div>
+                <div class="meta">0.4 s per page · about 5 s left</div>
+                <div class="hr"></div>
+                <div class="toggle-row"><span>show originals</span><label class="switch"><input type="checkbox" aria-label="Show originals" /></label></div>
+                <div class="toggle-row"><span>on for this site</span><label class="switch"><input type="checkbox" checked data-card aria-label="On for this site" /></label></div>
+              </div>
+            </section>
+            <div data-slot="preset" data-manga></div>
+          </div>
+
+          <div data-view="video" hidden></div>
+        </div>
+      </div>
+
+      <div>
+        <p class="sub">video selected</p>
+        <div class="popup dimmed" inert>
+          <header class="bar">
+            <span class="chip">anime4k</span>
+            <span class="chip on">on · aa</span>
+            <span class="chip grow">gpu 5.2 ms</span>
+            <span class="chip">21:04</span>
+            <span class="chip bug" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M5.5 4.5a2.5 2.5 0 0 1 5 0"/><rect x="4.5" y="5" width="7" height="8" rx="3.5"/><path d="M8 7.5V13M2 9h2.5M11.5 9H14M2.5 5l2 1.5M13.5 5l-2 1.5M2.5 13l2-1.5M13.5 13l-2-1.5"/></svg></span>
+          </header>
+          <div class="modes" role="radiogroup" aria-label="What to upscale (video selected)">
+            <button type="button" class="pill" role="radio" aria-checked="true">video</button>
+            <button type="button" class="pill" role="radio" aria-checked="false">manga</button>
+          </div>
+          <div data-video-src>
+            <section class="panel">
+              <div class="panel-head"><span>playing now</span><span></span></div>
+              <div class="source on">
+                <div class="line"><div class="title">Sample Anime</div><label class="switch"><input type="checkbox" checked data-card aria-label="Upscale this video" /></label></div>
+                <div class="episode"><span class="tag">ep 12</span><span>1920×1080 → 3840×2160</span></div>
+                <div class="hr"></div>
+                <div class="state ok">● active</div>
+              </div>
+            </section>
+            <section class="panel">
+              <div class="panel-head"><span>performance</span><span class="verdict ok">● smooth</span></div>
+              <div class="kv">
+                <div><span>GPU</span><b class="ok">31%</b></div>
+                <div><span>Per frame</span><b>5.2 ms</b></div>
+                <div><span>Output</span><b>24 fps</b></div>
+                <div><span>Avg · peak</span><b>5.0 · 7.9</b></div>
+                <div><span>Frame limit</span><b>41.7 ms</b></div>
+                <div><span>Late frames</span><b>0</b></div>
+              </div>
+            </section>
+            <div data-slot="preset"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="takeaway">Best at: a clear home for manga-only settings. Cost: one more control; video stats hide while reading.</p>
+  </section>
+
+  <!-- ======================= B: reader bar on the page ======================= -->
+  <section class="concept" aria-labelledby="label-b">
+    <h2 class="label" id="label-b"><b>b</b>reader bar on the page</h2>
+    <div class="stage">
+      <div>
+        <p class="sub">on the reader page (hover or hold the control)</p>
+        <div class="reader" id="reader">
+          <div class="reader-top">mangadot.net · One Piece · chapter 1120</div>
+          <div class="sheet" aria-hidden="true">
+            <div class="pnl w4 h2"></div><div class="pnl w2 h3"></div>
+            <div class="pnl w2"></div><div class="pnl w2"></div>
+            <div class="pnl w3 h2"></div><div class="pnl w3 h2"></div>
+            <div class="pnl w6 h2"></div>
+          </div>
+          <div class="sheet" aria-hidden="true">
+            <div class="pnl w6 h2"></div>
+            <div class="pnl w3 h2"></div><div class="pnl w3 h2"></div>
+          </div>
+          <span class="view-tag" id="view-tag" aria-live="polite">upscaled 2x</span>
+          <div class="rbar" role="group" aria-label="Anime4Nerd reader bar">
+            <span class="rbar-id">a4n</span>
+            <span aria-label="12 of 24 pages upscaled">12 / 24</span>
+            <span>2x</span>
+            <button type="button" class="rbar-btn" id="hold" aria-pressed="false">hold to compare</button>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <p class="sub">bar expanded</p>
+        <div class="fs-panel" role="group" aria-label="Anime4Nerd reader panel">
+          <div class="fs-status on">
+            <div class="fs-row"><b>One Piece</b><button type="button" class="fs-switch" role="switch" aria-checked="true" aria-label="Upscale manga on this site"></button></div>
+            <div class="fs-meta">ch 1120 · mangadot.net · 2x</div>
+          </div>
+          <div class="fs-label">mode</div>
+          <div class="fs-opts" role="radiogroup" aria-label="mode">
+            <button type="button" class="fs-opt" role="radio" aria-checked="false">A</button>
+            <button type="button" class="fs-opt" role="radio" aria-checked="false">B</button>
+            <button type="button" class="fs-opt" role="radio" aria-checked="false">C</button>
+            <button type="button" class="fs-opt" role="radio" aria-checked="true">A+A</button>
+            <button type="button" class="fs-opt" role="radio" aria-checked="false">B+B</button>
+            <button type="button" class="fs-opt" role="radio" aria-checked="false">C+A</button>
+          </div>
+          <div class="fs-row"><span>show originals</span><button type="button" class="fs-switch" role="switch" aria-checked="false" aria-label="Show originals" data-originals></button></div>
+          <div class="fs-label">progress</div>
+          <div class="prog" role="progressbar" aria-label="Pages upscaled" aria-valuemin="0" aria-valuemax="24" aria-valuenow="12"><i style="width:50%"></i></div>
+          <div class="fs-meta">12 / 24 pages · 1 in progress · 1 failed</div>
+          <div class="fs-meta">0.4 s per page · about 5 s left</div>
+        </div>
+      </div>
+    </div>
+    <p class="takeaway">Best at: control and compare without leaving the page. Cost: sits over the artwork; needs care per site.</p>
+  </section>
+
+  <!-- ======================= C: page map ======================= -->
+  <section class="concept" aria-labelledby="label-c">
+    <h2 class="label" id="label-c"><b>c</b>page map</h2>
+    <div class="stage">
+      <div>
+        <p class="sub">popup when a reader is detected</p>
+        <div class="popup">
+          <header class="bar">
+            <span class="chip">anime4k</span>
+            <span class="chip manga">manga</span>
+            <span class="chip grow">0.4 s / page</span>
+            <span class="chip">21:04</span>
+            <span class="chip bug" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M5.5 4.5a2.5 2.5 0 0 1 5 0"/><rect x="4.5" y="5" width="7" height="8" rx="3.5"/><path d="M8 7.5V13M2 9h2.5M11.5 9H14M2.5 5l2 1.5M13.5 5l-2 1.5M2.5 13l2-1.5M13.5 13l-2-1.5"/></svg></span>
+          </header>
+          <section class="panel">
+            <div class="panel-head"><span>reading now</span><span>mangadot.net</span></div>
+            <div class="source manga-card on">
+              <div class="line"><div class="title">One Piece</div><label class="switch"><input type="checkbox" checked data-card aria-label="Upscale manga pages on this site" /></label></div>
+              <div class="episode"><span class="tag">ch 1120</span><span class="epname">24 pages · b&amp;w · mode A+A</span></div>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><span>page map</span><span class="verdict ok">● 12 / 24</span></div>
+            <div class="map" role="group" aria-label="Pages in this chapter">
+              <button type="button" class="cell done" title="go to page 1" aria-label="Page 1, upscaled">1</button>
+              <button type="button" class="cell done" title="go to page 2" aria-label="Page 2, upscaled">2</button>
+              <button type="button" class="cell done" title="go to page 3" aria-label="Page 3, upscaled">3</button>
+              <button type="button" class="cell done" title="go to page 4" aria-label="Page 4, upscaled">4</button>
+              <button type="button" class="cell done" title="go to page 5" aria-label="Page 5, upscaled">5</button>
+              <button type="button" class="cell done" title="go to page 6" aria-label="Page 6, upscaled">6</button>
+              <button type="button" class="cell fail" title="go to page 7" aria-label="Page 7, failed">7</button>
+              <button type="button" class="cell done" title="go to page 8" aria-label="Page 8, upscaled">8</button>
+              <button type="button" class="cell done" title="go to page 9" aria-label="Page 9, upscaled">9</button>
+              <button type="button" class="cell done" title="go to page 10" aria-label="Page 10, upscaled">10</button>
+              <button type="button" class="cell done" title="go to page 11" aria-label="Page 11, upscaled">11</button>
+              <button type="button" class="cell done" title="go to page 12" aria-label="Page 12, upscaled">12</button>
+              <button type="button" class="cell done" title="go to page 13" aria-label="Page 13, upscaled">13</button>
+              <button type="button" class="cell now" title="go to page 14" aria-label="Page 14, in progress">14</button>
+              <button type="button" class="cell" title="go to page 15" aria-label="Page 15, waiting">15</button>
+              <button type="button" class="cell" title="go to page 16" aria-label="Page 16, waiting">16</button>
+              <button type="button" class="cell" title="go to page 17" aria-label="Page 17, waiting">17</button>
+              <button type="button" class="cell" title="go to page 18" aria-label="Page 18, waiting">18</button>
+              <button type="button" class="cell" title="go to page 19" aria-label="Page 19, waiting">19</button>
+              <button type="button" class="cell" title="go to page 20" aria-label="Page 20, waiting">20</button>
+              <button type="button" class="cell" title="go to page 21" aria-label="Page 21, waiting">21</button>
+              <button type="button" class="cell" title="go to page 22" aria-label="Page 22, waiting">22</button>
+              <button type="button" class="cell" title="go to page 23" aria-label="Page 23, waiting">23</button>
+              <button type="button" class="cell" title="go to page 24" aria-label="Page 24, waiting">24</button>
+            </div>
+            <div class="kv two">
+              <div><span>Per page</span><b class="ok">0.4 s</b></div>
+              <div><span>Left</span><b>5 s</b></div>
+            </div>
+            <div class="legend"><i class="key done"></i>done 12<i class="key now"></i>in progress 1<i class="key fail"></i>failed 1<i class="key"></i>empty 10</div>
+          </section>
+          <div data-slot="preset" data-manga></div>
+        </div>
+      </div>
+    </div>
+    <p class="takeaway">Best at: every page's state at a glance, jump straight to a failure. Cost: a taller popup.</p>
+  </section>
+
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  // Fill the shared preset panel into each popup mock (manga pages are always 2x: no upscale row).
+  var tpl = document.getElementById('preset-panel');
+  document.querySelectorAll('[data-slot="preset"]').forEach(function (slot) {
+    var panel = tpl.content.cloneNode(true);
+    if (slot.hasAttribute('data-manga')) {
+      panel.querySelectorAll('[data-video-only]').forEach(function (el) { el.remove(); });
+    }
+    slot.replaceWith(panel);
+  });
+
+  // Concept A: the video view of the live popup is a copy of the dimmed one.
+  var videoView = document.querySelector('[data-view="video"]');
+  var mangaView = document.querySelector('[data-view="manga"]');
+  document.querySelector('[data-video-src]').childNodes.forEach(function (node) {
+    videoView.appendChild(node.cloneNode(true));
+  });
+
+  // Concept B: hold-to-compare and the "show originals" switch both drive the page mock.
+  var reader = document.getElementById('reader');
+  var viewTag = document.getElementById('view-tag');
+  var hold = document.getElementById('hold');
+  var held = false;
+  var pinned = false;
+  function paintReader() {
+    var original = held || pinned;
+    reader.classList.toggle('original', original);
+    viewTag.textContent = original ? 'original' : 'upscaled 2x';
+    hold.setAttribute('aria-pressed', String(held));
+  }
+  function setHeld(value) { held = value; paintReader(); }
+  hold.addEventListener('pointerenter', function () { setHeld(true); });
+  hold.addEventListener('pointerdown', function () { setHeld(true); });
+  hold.addEventListener('pointerleave', function () { setHeld(false); });
+  hold.addEventListener('pointercancel', function () { setHeld(false); });
+  hold.addEventListener('pointerup', function (e) { if (e.pointerType !== 'mouse') setHeld(false); });
+  hold.addEventListener('keydown', function (e) { if (e.key === ' ' || e.key === 'Enter') setHeld(true); });
+  hold.addEventListener('keyup', function () { setHeld(false); });
+  hold.addEventListener('blur', function () { setHeld(false); });
+
+  // Generic demo behaviour: radio groups pick one, switches flip.
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('button[role]');
+    if (!btn) return;
+    var role = btn.getAttribute('role');
+    if (role === 'radio') {
+      btn.parentElement.querySelectorAll('[role="radio"]').forEach(function (other) {
+        other.setAttribute('aria-checked', String(other === btn));
+      });
+      var nameEl = btn.classList.contains('tile') && btn.closest('.panel').querySelector('[data-preset-name]');
+      if (nameEl) nameEl.textContent = btn.querySelector('b').textContent;
+      var view = btn.getAttribute('data-view-btn');
+      if (view) {
+        mangaView.hidden = view !== 'manga';
+        videoView.hidden = view !== 'video';
+        document.getElementById('a-hint').textContent = view === 'manga' ? 'manga · aa' : 'on · aa';
+        document.getElementById('a-gpu').textContent = view === 'manga' ? '0.4 s / page' : 'gpu 5.2 ms';
+      }
+    } else if (role === 'switch') {
+      var on = btn.getAttribute('aria-checked') !== 'true';
+      btn.setAttribute('aria-checked', String(on));
+      var status = btn.closest('.fs-status');
+      if (status) status.classList.toggle('on', on);
+      if (btn.hasAttribute('data-originals')) { pinned = on; paintReader(); }
+    }
+  });
+
+  // A card's own on/off switch recolours the card, as in the real popup.
+  document.addEventListener('change', function (e) {
+    if (!e.target.hasAttribute('data-card')) return;
+    e.target.closest('.source').classList.toggle('on', e.target.checked);
+  });
+})();
+</script>
+</body>
+</html>

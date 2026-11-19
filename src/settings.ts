@@ -30,8 +30,22 @@ export function capNote(u: Upscale, actualScale: number): string {
   return want !== null && actualScale < want ? ` · ${want}× capped: GPU limit` : '';
 }
 
+/**
+ * What the extension works on: 'auto' is videos and detected manga readers, 'anime' is videos
+ * only, 'manga' is manga readers only. The Firefox build has no manga mode and reads it as 'auto'.
+ */
+export type Mode = 'auto' | 'anime' | 'manga';
+/**
+ * The mode a suggestion offers (Chrome build): the mode leaves this page's content alone (mode
+ * 'anime' on a manga reader, mode 'manga' on a page with a video), so the popup offers to switch
+ * and the toolbar icon gets a small per-tab badge.
+ */
+export type Suggest = 'manga' | 'anime';
+export const MODES: Mode[] = ['auto', 'anime', 'manga'];
+
 /** Global rendering settings (apply to every enabled source). */
 export interface Settings {
+  mode: Mode;
   preset: Preset;
   darkenLines: boolean;
   thinLines: boolean;
@@ -58,6 +72,7 @@ const SOURCES_KEY = 'anime4k-sources';
 export function normalize(raw: unknown): Settings {
   const t = (raw && typeof raw === 'object' ? raw : {}) as Partial<Settings>;
   return {
+    mode: MODES.includes(t.mode as Mode) ? (t.mode as Mode) : 'auto',
     preset: PRESETS.some((p) => p.value === t.preset) ? (t.preset as Preset) : 'A',
     darkenLines: t.darkenLines === true,
     thinLines: t.thinLines === true,
@@ -174,5 +189,12 @@ export type Message =
   | { type: 'a4k-rate'; action: RateAction; level: number }
   // content -> background (manga mode): fetch an image the page will not let us read
   | { type: 'a4k-fetch-image'; url: string }
+  // content -> background: this frame has a manga reader in mode 'anime' ('manga'), a video in
+  // mode 'manga' ('anime'), a reader in mode 'manga' ('reader': the mode fits the tab, so a video
+  // in another frame is not offered), or none of these any more (null); see Suggest
+  | { type: 'a4k-suggest'; kind: Suggest | 'reader' | null }
+  | { type: 'a4k-frames-gone' }
   // popup -> content (manga mode): pages found / upscaled / failed in this frame
-  | { type: 'a4k-manga-status' };
+  | { type: 'a4k-manga-status' }
+  // popup -> content (manga mode): scroll the reader to a page, counted from 0
+  | { type: 'a4k-manga-goto'; index: number };

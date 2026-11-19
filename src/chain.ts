@@ -1,6 +1,5 @@
 // Anime4K shader chains: which mpv shader files a mode runs, and laying their passes out
-// (sizes, reads, shared textures) for a given source. The renderer (gpu.ts) and its memory
-// estimate build from the same plan.
+// (sizes, reads, shared textures) for a given source. The renderer (gpu.ts) builds from the plan.
 
 import clampHighlights from './shaders/Anime4K_Clamp_Highlights.glsl';
 import restoreVL from './shaders/Anime4K_Restore_CNN_VL.glsl';
@@ -42,9 +41,6 @@ export class SourceSizeChanged extends Error {
   constructor() { super('Source frame size changed.'); this.name = 'SourceSizeChanged'; }
 }
 
-/** Largest final output, in pixels (8K UHD); bigger frames risk exhausting GPU memory. */
-export const MAX_OUTPUT_PX = 7680 * 4320;
-
 /** The Anime4K shaders bundled into gpu.js, by file name. */
 const ANIME4K_SHADERS: Record<string, string> = {
   'Anime4K_Clamp_Highlights.glsl': clampHighlights,
@@ -73,9 +69,6 @@ function anime4kFiles(s: Settings, scale: number): string[] {
   if (s.thinLines) files.push('Anime4K_Thin_HQ.glsl');
   return files;
 }
-
-/** GPU memory budget for one renderer's textures; above it the scale halves (never below 2x). */
-export const MAX_TEXTURE_BYTES = 2 * 1024 ** 3;
 
 /** The texture every pass hooks: the RGB frame. */
 export const HOOK = 'MAIN';
@@ -117,7 +110,6 @@ function sizeResolver(get: (name: string) => Size | undefined, w: number, h: num
 /**
  * A chain laid out for one source size, before any GL object exists: which passes run, the
  * size of every texture they write, and what each pass reads. Texture 0 is the video frame.
- * Both the memory estimate and the real build use it, so they cannot disagree.
  */
 export interface PlanStep {
   pass: HookPass;
@@ -181,18 +173,6 @@ export function poolTextures(plan: Plan, ownFinal = false): { slotOf: number[]; 
     live.push(s.out);
   });
   return { slotOf, slots };
-}
-
-/**
- * Texture bytes a chain will allocate: the video frame (RGBA8) plus the pooled RGBA16F slots.
- * `reuse`: also what frame reuse adds (gpu-reuse.ts): the previous frame, an unshared final
- * texture, and a stencil buffer per pass size (counted as 4 bytes a pixel, as drivers store it).
- */
-export function estimateBytes(passes: HookPass[], w: number, h: number, scale: number, reuse = false): number {
-  const { slots } = poolTextures(planChain(passes, w, h, scale), reuse);
-  const sizes = new Map(slots.slice(1).map((s) => [`${s.w}x${s.h}`, s.w * s.h * 4]));
-  const extra = reuse ? w * h * 4 + [...sizes.values()].reduce((n, b) => n + b, 0) : 0;
-  return w * h * 4 + extra + slots.slice(1).reduce((n, s) => n + s.w * s.h * 8, 0);
 }
 
 /** A playing video, or a still image (manga pages) that render() uploads the same way. */

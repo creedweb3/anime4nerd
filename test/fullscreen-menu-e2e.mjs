@@ -61,10 +61,10 @@ const results = [];
 const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ` (${detail})` : ''}`); };
 
 const ctx = await chromium.launchPersistentContext(fs.mkdtempSync(path.join(os.tmpdir(), 'a4k-fsm-prof-')), {
-  headless: false,
+  headless: !process.env.A4K_SHOW, // headless by default; A4K_SHOW=1 opens a real window
   executablePath: exe,
   viewport: { width: 1280, height: 720 },
-  // A real window, parked off-screen so it does not pop up; A4K_SHOW=1 shows it.
+  // Headless (new headless mode loads extensions). A4K_SHOW=1 opens a real window.
   args: process.env.A4K_SHOW ? [] : ['--window-position=-32000,-32000'],
 });
 try {

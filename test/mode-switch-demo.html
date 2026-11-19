@@ -1,0 +1,513 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Anime4Nerd: mode switch demo</title>
+<style>
+/* ---- copied from src/popup.css (only the rules this preview uses) ---------- */
+:root {
+  color-scheme: dark;
+  --bg: #0b0b0b;
+  --panel: #111;
+  --line: #262626;
+  --line2: #3a3a3a;
+  --fg: #e4e4e4;
+  --dim: #8d8d8d;
+  --faint: #585858;
+  --on: #fff;
+  --bar: #d0d0d0;
+  --bar-dim: #3c3c3c;
+  --ok: #9fd3a8;
+  --warn: #e3c58a;
+  --bad: #e39a9a;
+  --g: 159, 211, 168;
+  --r: 227, 154, 154;
+}
+* { box-sizing: border-box; }
+
+/* popup.css puts these on body; here they sit on .popup so twelve popups fit one page */
+.popup {
+  width: 380px;
+  padding: 10px;
+  background: var(--bg);
+  color: var(--fg);
+  font: 12px/1.5 "JetBrains Mono", "Cascadia Mono", "Fira Code", Consolas, ui-monospace, monospace;
+}
+
+.bar { display: flex; gap: 4px; margin-bottom: 6px; }
+.chip {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--dim);
+  padding: 3px 8px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.chip.grow { flex: 1; }
+.chip.on { color: var(--on); border-color: var(--line2); }
+.chip.bug { display: flex; align-items: center; padding: 3px 6px; }
+
+.panel {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 10px;
+  margin-bottom: 6px;
+}
+.panel:last-of-type { margin-bottom: 0; }
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  color: var(--faint);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  margin-bottom: 6px;
+}
+
+.source {
+  border: 1px solid var(--line);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  user-select: none;
+  position: relative;
+  overflow: hidden;
+  transition: background 0.12s, border-color 0.12s;
+  background: linear-gradient(135deg, rgba(var(--r), 0.14), rgba(var(--r), 0.02) 60%, transparent) var(--bg);
+  border-color: rgba(var(--r), 0.5);
+}
+.source.on {
+  background: linear-gradient(135deg, rgba(var(--g), 0.16), rgba(var(--g), 0.02) 60%, transparent) var(--bg);
+  border-color: rgba(var(--g), 0.6);
+}
+.line { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.title { font-size: 14px; font-weight: 600; line-height: 1.3; }
+.episode { opacity: 0.85; }
+.tag {
+  display: inline-block;
+  border: 1px solid rgba(var(--r), 0.4);
+  padding: 1px 6px;
+  font-size: 10px;
+  color: rgba(var(--r), 0.85);
+  transition: color 0.12s, border-color 0.12s;
+  vertical-align: 2px;
+  white-space: nowrap;
+  margin-right: 4px;
+}
+.source.on .tag { border-color: rgba(var(--g), 0.5); color: rgb(var(--g)); }
+.hr { border-top: 1px solid var(--line); margin: 2px 0; }
+.state { font-size: 12px; }
+.state.ok { color: var(--ok); }
+.state.off { color: rgba(var(--r), 0.9); }
+
+.switch { flex: none; display: flex; align-items: center; padding: 8px 0 8px 12px; margin: -8px 0 -8px 0; cursor: pointer; }
+.switch input {
+  appearance: none;
+  width: 36px;
+  height: 20px;
+  border: 1px solid rgba(var(--r), 0.45);
+  background: var(--bg);
+  position: relative;
+  cursor: pointer;
+  margin: 2px 0 0;
+}
+.switch input::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: rgba(var(--r), 0.75);
+  transition: left 0.08s, background 0.08s;
+}
+.switch input:checked { border-color: rgba(var(--g), 0.6); }
+.switch input:checked::after { left: 18px; background: rgb(var(--g)); }
+.switch:hover input { border-color: var(--on); }
+
+.empty { color: var(--faint); margin: 0; font-size: 11px; }
+
+.manga-card .episode { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.manga-card .tag { vertical-align: baseline; margin-right: 0; flex: none; }
+.manga-card .epname { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+/* ---- preview page (not part of the extension) ------------------------------ */
+body {
+  margin: 0;
+  padding: 28px 24px 48px;
+  background: #1a1a1a;
+  color: var(--fg);
+  font: 12px/1.5 "JetBrains Mono", "Cascadia Mono", "Fira Code", Consolas, ui-monospace, monospace;
+}
+h1 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+.intro { margin: 0 0 28px; color: var(--dim); font-size: 11px; max-width: 90ch; }
+.concept { margin-bottom: 44px; }
+.label, .sub {
+  margin: 0 0 8px;
+  color: var(--dim);
+  font-size: 9px;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+.label b { color: var(--on); font-weight: 600; margin-right: 8px; }
+.sub { color: var(--faint); margin-bottom: 6px; text-transform: none; letter-spacing: 0.04em; font-size: 10px; }
+.stage { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; margin-top: 12px; }
+.mock { margin: 0; }
+.takeaway { margin: 12px 0 0; color: var(--dim); font-size: 11px; }
+.popup { box-shadow: 0 0 0 1px var(--line2), 0 24px 40px -18px #000; }
+button:focus-visible, .switch input:focus-visible { outline: 2px solid var(--on); outline-offset: 2px; position: relative; z-index: 1; }
+button:disabled { cursor: not-allowed; }
+
+/* design 1: mode chips with state dots */
+.mode-chip { display: flex; align-items: center; gap: 5px; font: inherit; font-size: 10px; cursor: pointer; }
+.mode-chip:hover:enabled { border-color: var(--dim); }
+.mode-chip[aria-pressed="true"] { color: var(--on); border-color: var(--line2); }
+.mode-chip:disabled { color: var(--faint); opacity: 0.6; }
+.dot { width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--dim); background: transparent; flex: none; }
+.mode-chip[aria-pressed="true"] .dot { background: rgb(var(--g)); border-color: rgb(var(--g)); }
+
+/* design 2: joined two-segment switch (each segment is its own toggle) */
+.bar.tight { margin-bottom: 3px; align-items: stretch; }
+.mode-label { align-self: center; color: var(--faint); font-size: 9px; text-transform: uppercase; letter-spacing: 0.16em; margin-right: 2px; }
+.segs { display: flex; }
+.seg {
+  border: 1px solid var(--line2);
+  background: var(--panel);
+  color: var(--dim);
+  font: inherit;
+  font-size: 10px;
+  padding: 3px 8px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.seg + .seg { margin-left: -1px; }
+.seg::before { content: "– "; }
+.seg[aria-pressed="true"] { background: var(--on); border-color: var(--on); color: #000; position: relative; }
+.seg[aria-pressed="true"]::before { content: "✓ "; }
+.seg:hover:enabled { border-color: var(--on); position: relative; }
+.seg:disabled { color: var(--faint); opacity: 0.6; }
+.seg:disabled::before { content: none; }
+.mode-caption { margin: 0 0 6px; padding-top: 3px; border-top: 1px solid var(--line); color: var(--faint); font-size: 9px; letter-spacing: 0.06em; }
+
+/* design 3: full-width mode row; each half is one switch button */
+.mode-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
+.mode-half {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--dim);
+  font: inherit;
+  text-align: left;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.mode-half[aria-checked="true"] { border-color: rgba(var(--g), 0.6); }
+.mode-half:hover:enabled { border-color: var(--on); }
+.mode-text { display: flex; flex-direction: column; min-width: 0; }
+.mode-name { color: var(--fg); font-weight: 600; }
+.mode-desc { color: var(--faint); font-size: 10px; }
+.mode-word { font-size: 10px; color: rgba(var(--r), 0.9); }
+.mode-half[aria-checked="true"] .mode-word { color: var(--ok); }
+.mode-knob { flex: none; width: 36px; height: 20px; border: 1px solid rgba(var(--r), 0.45); background: var(--bg); position: relative; }
+.mode-knob::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: rgba(var(--r), 0.75);
+  transition: transform 0.08s, background 0.08s;
+}
+.mode-half[aria-checked="true"] .mode-knob { border-color: rgba(var(--g), 0.6); }
+.mode-half[aria-checked="true"] .mode-knob::after { transform: translateX(16px); background: rgb(var(--g)); }
+.mode-half:disabled { opacity: 0.5; }
+.mode-half:disabled .mode-word { color: var(--faint); }
+.mode-half:disabled .mode-knob { border-color: var(--line2); }
+.mode-half:disabled .mode-knob::after { background: var(--bar-dim); }
+</style>
+</head>
+<body>
+<h1>design preview: sample data, nothing here talks to the extension</h1>
+<p class="intro">Three ways to make "anime" and "manga" real per-site switches in the popup header. Every control toggles, in its own mock only. The modes are independent: on a page with both a video and manga pages, both can be on.</p>
+
+<main>
+  <section class="concept" aria-labelledby="design-1">
+    <h2 class="label" id="design-1"><b>1</b>two mode chips with state dots</h2>
+    <p class="sub">filled dot = on for this site · hollow dot = off · dimmed, no dot = nothing of that kind on this page</p>
+    <p class="sub">chips changed: the status chip keeps only the preset letter (on/off moved to the mode chips); manga time reads "0.4 s/page".</p>
+    <div class="stage">
+      <figure class="mock">
+        <figcaption class="sub">video page · anime on · no manga pages here</figcaption>
+        <div class="popup" data-anime="on" data-manga="na">
+          <header class="bar"><button class="chip mode-chip" type="button" data-mode="anime" aria-label="anime mode, on for this site" title="upscales video: click to switch anime mode on or off for this site" aria-pressed="true"><i class="dot"></i>anime</button><button class="chip mode-chip" type="button" data-mode="manga" aria-label="manga mode, not available: no manga pages on this page" disabled title="no manga pages on this page" aria-pressed="false">manga</button><span class="chip" title="preset: mode a">a</span><span class="chip grow" data-gpu="short">gpu 5.2 ms</span><span class="chip">21:04</span><span class="chip bug" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M5.5 4.5a2.5 2.5 0 0 1 5 0"/><rect x="4.5" y="5" width="7" height="8" rx="3.5"/><path d="M8 7.5V13M2 9h2.5M11.5 9H14M2.5 5l2 1.5M13.5 5l-2 1.5M2.5 13l2-1.5M13.5 13l-2-1.5"/></svg></span></header>
+          <section class="panel">
+            <div class="panel-head"><span>playing now</span><span></span></div>
+            <div class="source on" data-card="anime">
+              <div class="line"><div class="title">Sample Anime</div><label class="switch"><input type="checkbox" checked aria-label="Upscale this video" /></label></div>
+              <div class="episode"><span class="tag">ep 12</span><span>1920×1080 → 3840×2160</span></div>
+              <div class="hr"></div>
+              <div class="state ok" data-state>● active</div>
+            </div>
+          </section>
+        </div>
+      </figure>
+      <figure class="mock">
+        <figcaption class="sub">manga reader · manga on · no video here</figcaption>
+        <div class="popup" data-anime="na" data-manga="on">
+          <header class="bar"><button class="chip mode-chip" type="button" data-mode="anime" aria-label="anime mode, not available: no video on this page" disabled title="no video on this page" aria-pressed="false">anime</button><button class="chip mode-chip" type="button" data-mode="manga" aria-label="manga mode, on for this site" title="upscales pages: click to switch manga mode on or off for this site" aria-pressed="true"><i class="dot"></i>manga</button><span class="chip" title="preset: mode a">a</span><span class="chip grow" data-gpu="short">0.4 s/page</span><span class="chip">21:04</span><span class="chip bug" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M5.5 4.5a2.5 2.5 0 0 1 5 0"/><rect x="4.5" y="5" width="7" height="8" rx="3.5"/><path d="M8 7.5V13M2 9h2.5M11.5 9H14M2.5 5l2 1.5M13.5 5l-2 1.5M2.5 13l2-1.5M13.5 13l-2-1.5"/></svg></span></header>
+          <section class="panel">
+            <div class="panel-head"><span>reading now</span><span>mangadot.net</span></div>
+            <div class="source manga-card on" data-card="manga">
+              <div class="line"><div class="title">One Piece</div><label class="switch"><input type="checkbox" checked aria-label="Upscale manga pages on this site" /></label></div>
+              <div class="episode"><span class="tag">ch 1120</span><span class="epname">24 pages · b&amp;w · 2000×2798</span></div>
+              <div class="hr"></div>
+              <div class="state ok" data-state>● 12 / 24 pages</div>
+            </div>
+          </section>
+        </div>
+      </figure>
+      <figure class="mock">
+        <figcaption class="sub">manga reader · manga off · no video here</figcaption>
+        <div class="popup" data-anime="na" data-manga="off">
+          <header class="bar"><button class="chip mode-chip" type="button" data-mode="anime" aria-label="anime mode, not available: no video on this page" disabled title="no video on this page" aria-pressed="false">anime</button><button class="chip mode-chip" type="button" data-mode="manga" aria-label="manga mode, off for this site" title="upscales pages: click to switch manga mode on or off for this site" aria-pressed="false"><i class="dot"></i>manga</button><span class="chip" title="preset: mode a">a</span><span class="chip grow" data-gpu="short">gpu —</span><span class="chip">21:04</span><span class="chip bug" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M5.5 4.5a2.5 2.5 0 0 1 5 0"/><rect x="4.5" y="5" width="7" height="8" rx="3.5"/><path d="M8 7.5V13M2 9h2.5M11.5 9H14M2.5 5l2 1.5M13.5 5l-2 1.5M2.5 13l2-1.5M13.5 13l-2-1.5"/></svg></span></header>
+          <section class="panel">
+            <div class="panel-head"><span>reading now</span><span>mangadot.net</span></div>
+            <div class="source manga-card" data-card="manga">
+              <div class="line"><div class="title">One Piece</div><label class="switch"><input type="checkbox" aria-label="Upscale manga pages on this site" /></label></div>
+              <div class="episode"><span class="tag">ch 1120</span><span class="epname">24 pages · b&amp;w · 2000×2798</span></div>
+              <div class="hr"></div>
+              <div class="state off" data-state>○ off for this site</div>
+            </div>
+          </section>
+        </div>
+      </figure>
+      <figure class="mock">
+        <figcaption class="sub">page with no video and no manga pages</figcaption>
+        <div class="popup" data-anime="na" data-manga="na">
+          <header class="bar"><button class="chip mode-chip" type="button" data-mode="anime" aria-label="anime mode, not available: no video on this page" disabled title="no video on this page" aria-pressed="false">anime</button><button class="chip mode-chip" type="button" data-mode="manga" aria-label="manga mode, not available: no manga pages on this page" disabled title="no manga pages on this page" aria-pressed="false">manga</button><span class="chip" title="preset: mode a">a</span><span class="chip grow" data-gpu="short">gpu —</span><span class="chip">21:04</span><span class="chip bug" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M5.5 4.5a2.5 2.5 0 0 1 5 0"/><rect x="4.5" y="5" width="7" height="8" rx="3.5"/><path d="M8 7.5V13M2 9h2.5M11.5 9H14M2.5 5l2 1.5M13.5 5l-2 1.5M2.5 13l2-1.5M13.5 13l-2-1.5"/></svg></span></header>
+          <section class="panel">
+            <div class="panel-head"><span>playing now</span><span></span></div>
+            <p class="empty">No video or manga pages found on this page.</p>
+          </section>
+        </div>
+      </figure>
+    </div>
+    <p class="takeaway">Best at: smallest change, fits the existing bar. Cost: dots are subtle; nothing says what each mode does.</p>
+  </section>
+
+  <section class="concept" aria-labelledby="design-2">
+    <h2 class="label" id="design-2"><b>2</b>joined mode switch</h2>
+    <p class="sub">one control, two segments · each lights up on its own (✓ on, – off) · dimmed = nothing of that kind on this page</p>
+    <p class="sub">chips changed: the status chip keeps only the preset letter; manga time reads "0.4 s/page"; one caption line added under the bar.</p>
+    <div class="stage">
+      <figure class="mock">
+        <figcaption class="sub">video page · anime on · no manga pages here</figcaption>
+        <div class="popup" data-anime="on" data-manga="na">
+          <header class="bar tight"><span class="mode-label" id="mode-label-5">mode</span><div class="segs" role="group" aria-labelledby="mode-label-5"><button class="seg" type="button" data-mode="anime" aria-label="anime mode, on for this site" title="upscales video: click to switch anime mode on or off for this site" aria-pressed="true">anime</button><button class="seg" type="button" data-mode="manga" aria-label="manga mode, not available: no manga pages on this page" disabled title="no manga pages on this page" aria-pressed="false">manga</button></div><span class="chip" title="preset: mode a">a</span><span class="chip grow" data-gpu="short">gpu 5.2 ms</span><span class="chip">21:04</span><span class="chip bug" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M5.5 4.5a2.5 2.5 0 0 1 5 0"/><rect x="4.5" y="5" width="7" height="8" rx="3.5"/><path d="M8 7.5V13M2 9h2.5M11.5 9H14M2.5 5l2 1.5M13.5 5l-2 1.5M2.5 13l2-1.5M13.5 13l-2-1.5"/></svg></span></header>
+          <p class="mode-caption">anime: video · manga: pages</p>
+          <section class="panel">
+            <div class="panel-head"><span>playing now</span><span></span></div>
+            <div class="source on" data-card="anime">
+              <div class="line"><div class="title">Sample Anime</div><label class="switch"><input type="checkbox" checked aria-label="Upscale this video" /></label></div>
+              <div class="episode"><span class="tag">ep 12</span><span>1920×1080 → 3840×2160</span></div>
+              <div class="hr"></div>
+              <div class="state ok" data-state>● active</div>
+            </div>
+          </section>
+        </div>
+      </figure>
+      <figure class="mock">
+        <figcaption class="sub">manga reader · manga on · no video here</figcaption>
+        <div class="popup" data-anime="na" data-manga="on">
+          <header class="bar tight"><span class="mode-label" id="mode-label-6">mode</span><div class="segs" role="group" aria-labelledby="mode-label-6"><button class="seg" type="button" data-mode="anime" aria-label="anime mode, not available: no video on this page" disabled title="no video on this page" aria-pressed="false">anime</button><button class="seg" type="button" data-mode="manga" aria-label="manga mode, on for this site" title="upscales pages: click to switch manga mode on or off for this site" aria-pressed="true">manga</button></div><span class="chip" title="preset: mode a">a</span><span class="chip grow" data-gpu="short">0.4 s/page</span><span class="chip">21:04</span><span class="chip bug" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M5.5 4.5a2.5 2.5 0 0 1 5 0"/><rect x="4.5" y="5" width="7" height="8" rx="3.5"/><path d="M8 7.5V13M2 9h2.5M11.5 9H14M2.5 5l2 1.5M13.5 5l-2 1.5M2.5 13l2-1.5M13.5 13l-2-1.5"/></svg></span></header>
+          <p class="mode-caption">anime: video · manga: pages</p>
+          <section class="panel">
+            <div class="panel-head"><span>reading now</span><span>mangadot.net</span></div>
+            <div class="source manga-card on" data-card="manga">
+              <div class="line"><div class="title">One Piece</div><label class="switch"><input type="checkbox" checked aria-label="Upscale manga pages on this site" /></label></div>
+              <div class="episode"><span class="tag">ch 1120</span><span class="epname">24 pages · b&amp;w · 2000×2798</span></div>
+              <div class="hr"></div>
+              <div class="state ok" data-state>● 12 / 24 pages</div>
+            </div>
+          </section>
+        </div>
+      </figure>
+      <figure class="mock">
+        <figcaption class="sub">manga reader · manga off · no video here</figcaption>
+        <div class="popup" data-anime="na" data-manga="off">
+          <header class="bar tight"><span class="mode-label" id="mode-label-7">mode</span><div class="segs" role="group" aria-labelledby="mode-label-7"><button class="seg" type="button" data-mode="anime" aria-label="anime mode, not available: no video on this page" disabled title="no video on this page" aria-pressed="false">anime</button><button class="seg" type="button" data-mode="manga" aria-label="manga mode, off for this site" title="upscales pages: click to switch manga mode on or off for this site" aria-pressed="false">manga</button></div><span class="chip" title="preset: mode a">a</span><span class="chip grow" data-gpu="short">gpu —</span><span class="chip">21:04</span><span class="chip bug" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M5.5 4.5a2.5 2.5 0 0 1 5 0"/><rect x="4.5" y="5" width="7" height="8" rx="3.5"/><path d="M8 7.5V13M2 9h2.5M11.5 9H14M2.5 5l2 1.5M13.5 5l-2 1.5M2.5 13l2-1.5M13.5 13l-2-1.5"/></svg></span></header>
+          <p class="mode-caption">anime: video · manga: pages</p>
+          <section class="panel">
+            <div class="panel-head"><span>reading now</span><span>mangadot.net</span></div>
+            <div class="source manga-card" data-card="manga">
+              <div class="line"><div class="title">One Piece</div><label class="switch"><input type="checkbox" aria-label="Upscale manga pages on this site" /></label></div>
+              <div class="episode"><span class="tag">ch 1120</span><span class="epname">24 pages · b&amp;w · 2000×2798</span></div>
+              <div class="hr"></div>
+              <div class="state off" data-state>○ off for this site</div>
+            </div>
+          </section>
+        </div>
+      </figure>
+      <figure class="mock">
+        <figcaption class="sub">page with no video and no manga pages</figcaption>
+        <div class="popup" data-anime="na" data-manga="na">
+          <header class="bar tight"><span class="mode-label" id="mode-label-8">mode</span><div class="segs" role="group" aria-labelledby="mode-label-8"><button class="seg" type="button" data-mode="anime" aria-label="anime mode, not available: no video on this page" disabled title="no video on this page" aria-pressed="false">anime</button><button class="seg" type="button" data-mode="manga" aria-label="manga mode, not available: no manga pages on this page" disabled title="no manga pages on this page" aria-pressed="false">manga</button></div><span class="chip" title="preset: mode a">a</span><span class="chip grow" data-gpu="short">gpu —</span><span class="chip">21:04</span><span class="chip bug" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M5.5 4.5a2.5 2.5 0 0 1 5 0"/><rect x="4.5" y="5" width="7" height="8" rx="3.5"/><path d="M8 7.5V13M2 9h2.5M11.5 9H14M2.5 5l2 1.5M13.5 5l-2 1.5M2.5 13l2-1.5M13.5 13l-2-1.5"/></svg></span></header>
+          <p class="mode-caption">anime: video · manga: pages</p>
+          <section class="panel">
+            <div class="panel-head"><span>playing now</span><span></span></div>
+            <p class="empty">No video or manga pages found on this page.</p>
+          </section>
+        </div>
+      </figure>
+    </div>
+    <p class="takeaway">Best at: one control, two modes, with a caption explaining them. Cost: lit segments can still look like tabs.</p>
+  </section>
+
+  <section class="concept" aria-labelledby="design-3">
+    <h2 class="label" id="design-3"><b>3</b>mode row under the bar</h2>
+    <p class="sub">each half: name, what it does, state in words, and a switch · the whole half is the button</p>
+    <p class="sub">chips changed: the "anime4k" name chip is gone; status, gpu/time, clock and bug-report chips are as today.</p>
+    <div class="stage">
+      <figure class="mock">
+        <figcaption class="sub">video page · anime on · no manga pages here</figcaption>
+        <div class="popup" data-anime="on" data-manga="na">
+          <header class="bar"><span class="chip on" data-hint>on · a</span><span class="chip grow" data-gpu="long">gpu 5.2 ms</span><span class="chip">21:04</span><span class="chip bug" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M5.5 4.5a2.5 2.5 0 0 1 5 0"/><rect x="4.5" y="5" width="7" height="8" rx="3.5"/><path d="M8 7.5V13M2 9h2.5M11.5 9H14M2.5 5l2 1.5M13.5 5l-2 1.5M2.5 13l2-1.5M13.5 13l-2-1.5"/></svg></span></header>
+          <div class="mode-row" role="group" aria-label="modes"><button class="mode-half" role="switch" type="button" data-mode="anime" aria-label="anime mode, on for this site" title="upscales video: click to switch anime mode on or off for this site" aria-checked="true"><span class="mode-text"><span class="mode-name">anime</span><span class="mode-desc">upscales video</span><span class="mode-word" data-word>on</span></span><span class="mode-knob" aria-hidden="true"></span></button><button class="mode-half" role="switch" type="button" data-mode="manga" aria-label="manga mode, not available: no manga pages on this page" disabled title="no manga pages on this page" aria-checked="false"><span class="mode-text"><span class="mode-name">manga</span><span class="mode-desc">upscales pages</span><span class="mode-word" data-word>not on this page</span></span><span class="mode-knob" aria-hidden="true"></span></button></div>
+          <section class="panel">
+            <div class="panel-head"><span>playing now</span><span></span></div>
+            <div class="source on" data-card="anime">
+              <div class="line"><div class="title">Sample Anime</div><label class="switch"><input type="checkbox" checked aria-label="Upscale this video" /></label></div>
+              <div class="episode"><span class="tag">ep 12</span><span>1920×1080 → 3840×2160</span></div>
+              <div class="hr"></div>
+              <div class="state ok" data-state>● active</div>
+            </div>
+          </section>
+        </div>
+      </figure>
+      <figure class="mock">
+        <figcaption class="sub">manga reader · manga on · no video here</figcaption>
+        <div class="popup" data-anime="na" data-manga="on">
+          <header class="bar"><span class="chip on" data-hint>manga · a</span><span class="chip grow" data-gpu="long">0.4 s / page</span><span class="chip">21:04</span><span class="chip bug" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M5.5 4.5a2.5 2.5 0 0 1 5 0"/><rect x="4.5" y="5" width="7" height="8" rx="3.5"/><path d="M8 7.5V13M2 9h2.5M11.5 9H14M2.5 5l2 1.5M13.5 5l-2 1.5M2.5 13l2-1.5M13.5 13l-2-1.5"/></svg></span></header>
+          <div class="mode-row" role="group" aria-label="modes"><button class="mode-half" role="switch" type="button" data-mode="anime" aria-label="anime mode, not available: no video on this page" disabled title="no video on this page" aria-checked="false"><span class="mode-text"><span class="mode-name">anime</span><span class="mode-desc">upscales video</span><span class="mode-word" data-word>not on this page</span></span><span class="mode-knob" aria-hidden="true"></span></button><button class="mode-half" role="switch" type="button" data-mode="manga" aria-label="manga mode, on for this site" title="upscales pages: click to switch manga mode on or off for this site" aria-checked="true"><span class="mode-text"><span class="mode-name">manga</span><span class="mode-desc">upscales pages</span><span class="mode-word" data-word>on</span></span><span class="mode-knob" aria-hidden="true"></span></button></div>
+          <section class="panel">
+            <div class="panel-head"><span>reading now</span><span>mangadot.net</span></div>
+            <div class="source manga-card on" data-card="manga">
+              <div class="line"><div class="title">One Piece</div><label class="switch"><input type="checkbox" checked aria-label="Upscale manga pages on this site" /></label></div>
+              <div class="episode"><span class="tag">ch 1120</span><span class="epname">24 pages · b&amp;w · 2000×2798</span></div>
+              <div class="hr"></div>
+              <div class="state ok" data-state>● 12 / 24 pages</div>
+            </div>
+          </section>
+        </div>
+      </figure>
+      <figure class="mock">
+        <figcaption class="sub">manga reader · manga off · no video here</figcaption>
+        <div class="popup" data-anime="na" data-manga="off">
+          <header class="bar"><span class="chip" data-hint>off</span><span class="chip grow" data-gpu="long">gpu —</span><span class="chip">21:04</span><span class="chip bug" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M5.5 4.5a2.5 2.5 0 0 1 5 0"/><rect x="4.5" y="5" width="7" height="8" rx="3.5"/><path d="M8 7.5V13M2 9h2.5M11.5 9H14M2.5 5l2 1.5M13.5 5l-2 1.5M2.5 13l2-1.5M13.5 13l-2-1.5"/></svg></span></header>
+          <div class="mode-row" role="group" aria-label="modes"><button class="mode-half" role="switch" type="button" data-mode="anime" aria-label="anime mode, not available: no video on this page" disabled title="no video on this page" aria-checked="false"><span class="mode-text"><span class="mode-name">anime</span><span class="mode-desc">upscales video</span><span class="mode-word" data-word>not on this page</span></span><span class="mode-knob" aria-hidden="true"></span></button><button class="mode-half" role="switch" type="button" data-mode="manga" aria-label="manga mode, off for this site" title="upscales pages: click to switch manga mode on or off for this site" aria-checked="false"><span class="mode-text"><span class="mode-name">manga</span><span class="mode-desc">upscales pages</span><span class="mode-word" data-word>off</span></span><span class="mode-knob" aria-hidden="true"></span></button></div>
+          <section class="panel">
+            <div class="panel-head"><span>reading now</span><span>mangadot.net</span></div>
+            <div class="source manga-card" data-card="manga">
+              <div class="line"><div class="title">One Piece</div><label class="switch"><input type="checkbox" aria-label="Upscale manga pages on this site" /></label></div>
+              <div class="episode"><span class="tag">ch 1120</span><span class="epname">24 pages · b&amp;w · 2000×2798</span></div>
+              <div class="hr"></div>
+              <div class="state off" data-state>○ off for this site</div>
+            </div>
+          </section>
+        </div>
+      </figure>
+      <figure class="mock">
+        <figcaption class="sub">page with no video and no manga pages</figcaption>
+        <div class="popup" data-anime="na" data-manga="na">
+          <header class="bar"><span class="chip" data-hint>off</span><span class="chip grow" data-gpu="long">gpu —</span><span class="chip">21:04</span><span class="chip bug" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M5.5 4.5a2.5 2.5 0 0 1 5 0"/><rect x="4.5" y="5" width="7" height="8" rx="3.5"/><path d="M8 7.5V13M2 9h2.5M11.5 9H14M2.5 5l2 1.5M13.5 5l-2 1.5M2.5 13l2-1.5M13.5 13l-2-1.5"/></svg></span></header>
+          <div class="mode-row" role="group" aria-label="modes"><button class="mode-half" role="switch" type="button" data-mode="anime" aria-label="anime mode, not available: no video on this page" disabled title="no video on this page" aria-checked="false"><span class="mode-text"><span class="mode-name">anime</span><span class="mode-desc">upscales video</span><span class="mode-word" data-word>not on this page</span></span><span class="mode-knob" aria-hidden="true"></span></button><button class="mode-half" role="switch" type="button" data-mode="manga" aria-label="manga mode, not available: no manga pages on this page" disabled title="no manga pages on this page" aria-checked="false"><span class="mode-text"><span class="mode-name">manga</span><span class="mode-desc">upscales pages</span><span class="mode-word" data-word>not on this page</span></span><span class="mode-knob" aria-hidden="true"></span></button></div>
+          <section class="panel">
+            <div class="panel-head"><span>playing now</span><span></span></div>
+            <p class="empty">No video or manga pages found on this page.</p>
+          </section>
+        </div>
+      </figure>
+    </div>
+    <p class="takeaway">Best at: most explicit; name, purpose, state and switch together. Cost: about 70px taller, and repeats the card's switch.</p>
+  </section>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  var CARD_ON = { anime: '● active', manga: '● 12 / 24 pages' };
+  var CARD_OFF = '○ off for this site';
+
+  // Redraw one popup mock from its data-anime / data-manga state ("on", "off" or "na").
+  function paint(popup) {
+    var state = { anime: popup.dataset.anime, manga: popup.dataset.manga };
+
+    popup.querySelectorAll('button[data-mode]').forEach(function (btn) {
+      var mode = btn.dataset.mode;
+      if (state[mode] === 'na') return;
+      var on = state[mode] === 'on';
+      btn.setAttribute(btn.getAttribute('role') === 'switch' ? 'aria-checked' : 'aria-pressed', String(on));
+      btn.setAttribute('aria-label', mode + ' mode, ' + (on ? 'on' : 'off') + ' for this site');
+      var word = btn.querySelector('[data-word]');
+      if (word) word.textContent = on ? 'on' : 'off';
+    });
+
+    var card = popup.querySelector('[data-card]');
+    if (card) {
+      var kind = card.dataset.card;
+      var cardOn = state[kind] === 'on';
+      card.classList.toggle('on', cardOn);
+      card.querySelector('.switch input').checked = cardOn;
+      var stateEl = card.querySelector('[data-state]');
+      stateEl.className = 'state ' + (cardOn ? 'ok' : 'off');
+      stateEl.textContent = cardOn ? CARD_ON[kind] : CARD_OFF;
+    }
+
+    var hint = popup.querySelector('[data-hint]');
+    if (hint) {
+      var text = state.anime === 'on' ? 'on · a' : state.manga === 'on' ? 'manga · a' : 'off';
+      hint.textContent = text;
+      hint.classList.toggle('on', text !== 'off');
+    }
+
+    var gpu = popup.querySelector('[data-gpu]');
+    if (state.anime === 'on') gpu.textContent = 'gpu 5.2 ms';
+    else if (state.manga === 'on') gpu.textContent = gpu.dataset.gpu === 'short' ? '0.4 s/page' : '0.4 s / page';
+    else gpu.textContent = 'gpu —';
+    // As in the real popup: the gpu/time chip is lit while something is being upscaled.
+    gpu.classList.toggle('on', state.anime === 'on' || state.manga === 'on');
+  }
+
+  document.querySelectorAll('.popup').forEach(paint);
+
+  // A mode control in the header flips that mode in its own mock only.
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-mode]');
+    if (!btn || btn.disabled) return;
+    var popup = btn.closest('.popup');
+    var mode = btn.dataset.mode;
+    popup.dataset[mode] = popup.dataset[mode] === 'on' ? 'off' : 'on';
+    paint(popup);
+  });
+
+  // The card's own switch stays in step with the header control.
+  document.addEventListener('change', function (e) {
+    var card = e.target.closest('[data-card]');
+    if (!card) return;
+    var popup = card.closest('.popup');
+    popup.dataset[card.dataset.card] = e.target.checked ? 'on' : 'off';
+    paint(popup);
+  });
+})();
+</script>
+</body>
+</html>

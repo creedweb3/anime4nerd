@@ -299,3 +299,52 @@ function pixels(src: CanvasImageSource, w: number, h: number): Picture {
   setFrameReuse(true);
   return out;
 };
+
+// Manga pages at 2x and at 4x, as they would look on screen: both results are scaled to each
+// display width the way the browser scales an <img>, then compared. `crop` keeps the 4x render
+// inside the memory budget. Returns, per width, how much 4x differs from 2x and 2x from the
+// untouched page, plus PNG crops at the first and last width for looking at.
+(window as any).a4kMangaScale = async (url: string, preset: Preset, widths: number[], crop = 800): Promise<unknown> => {
+  setFrameReuse(false);
+  const page = await loadBitmap(url);
+  const side = Math.min(crop, page.width, page.height);
+  const input = await createImageBitmap(page, Math.floor((page.width - side) / 2), Math.floor((page.height - side) / 3), side, side);
+  const render = async (scale: 2 | 4) => {
+    const c = document.createElement('canvas');
+    const settings: Settings = { preset, darkenLines: false, thinLines: false, upscale: scale === 2 ? '2x' : '4x' };
+    const r = await createAnime4kRenderer(input, c, settings, () => {}, scale);
+    r.render(input);
+    const copy = document.createElement('canvas'); copy.width = c.width; copy.height = c.height;
+    copy.getContext('2d')!.drawImage(c, 0, 0);
+    r.destroy();
+    return copy;
+  };
+  const two = await render(2);
+  const four = await render(4);
+  const shown = (src: CanvasImageSource, w: number) => {
+    const c = document.createElement('canvas'); c.width = w; c.height = w;
+    const cg = c.getContext('2d', { willReadFrequently: true })!;
+    cg.imageSmoothingQuality = 'high';
+    cg.drawImage(src, 0, 0, w, w);
+    return c;
+  };
+  const differ = (a: HTMLCanvasElement, b: HTMLCanvasElement) => {
+    const p = a.getContext('2d')!.getImageData(0, 0, a.width, a.height).data;
+    const q = b.getContext('2d')!.getImageData(0, 0, b.width, b.height).data;
+    let sum = 0; let big = 0;
+    for (let i = 0; i < p.length; i += 4) { const d = (Math.abs(p[i] - q[i]) + Math.abs(p[i + 1] - q[i + 1]) + Math.abs(p[i + 2] - q[i + 2])) / 3; sum += d; if (d > 8) big += 1; }
+    return { mean: +(sum / (p.length / 4)).toFixed(2), changed: +(100 * big / (p.length / 4)).toFixed(2) };
+  };
+  const rows = [];
+  const crops: Record<string, string> = {};
+  for (const w of widths) {
+    const a = shown(input, w); const b = shown(two, w); const c = shown(four, w);
+    rows.push({ shownAt: +(w / side).toFixed(2), offVs2x: differ(a, b), twoVs4x: differ(b, c) });
+    if (w === widths[0] || w === widths[widths.length - 1]) {
+      const cut = (src: HTMLCanvasElement) => { const k = document.createElement('canvas'); k.width = 420; k.height = 300; k.getContext('2d')!.drawImage(src, Math.floor(src.width * 0.3), Math.floor(src.height * 0.3), 420, 300, 0, 0, 420, 300); return k.toDataURL('image/png'); };
+      crops[`w${w}-off`] = cut(a); crops[`w${w}-2x`] = cut(b); crops[`w${w}-4x`] = cut(c);
+    }
+  }
+  setFrameReuse(true);
+  return { input: `${side}x${side}`, out2: `${two.width}x${two.height}`, out4: `${four.width}x${four.height}`, rows, crops };
+};

@@ -6,9 +6,9 @@
 // as a whole if any one frame (chrome://, the web store, a PDF viewer) refuses scripts.
 // The content script guards against running twice.
 
-import { markUpdated, restoreBadge } from './whats-new';
+import { markUpdated, onWhatsNewChanged, pendingWhatsNew, restoreBadge } from './whats-new';
 import { RateAction, addWatch, applyAction, markReturning, updateRate } from './rate-prompt';
-import type { Message } from './settings';
+import type { Message, Suggest } from './settings';
 import { addressBlocked, isMetadataHost, isPrivateHost } from './private-host';
 import { uninstallUrl } from './site-links';
 
@@ -54,7 +54,13 @@ chrome.runtime.onMessage.addListener((msg: Message, sender, respond) => {
   if (sender.id !== chrome.runtime.id) return false;
   if (msg?.type === 'a4k-watch') void updateRate((s) => addWatch(s, msg.seconds, msg.episodes)).catch(() => {});
   else if (msg?.type === 'a4k-rate' && RATE_ACTIONS.includes(msg.action)) void updateRate((s) => applyAction(s, msg.action, msg.level)).catch(() => {});
-  else if (!__FIREFOX__ && msg?.type === 'a4k-fetch-image') {
+  else if (!__FIREFOX__ && msg?.type === 'a4k-suggest') {
+    const { tab, frameId } = sender;
+    const kind = msg.kind === 'manga' || msg.kind === 'anime' || msg.kind === 'reader' ? msg.kind : null;
+    if (tab?.id !== undefined && frameId !== undefined) updateSuggestions((m) => withFrame(m, `${tab.id}:${frameId}`, kind));
+  } else if (!__FIREFOX__ && msg?.type === 'a4k-frames-gone') {
+    if (sender.tab?.id !== undefined) forgetGoneFrames(sender.tab.id);
+  } else if (!__FIREFOX__ && msg?.type === 'a4k-fetch-image') {
     if (!sender.tab?.url || sender.frameId === undefined) { respond({ error: 'Only page frames may ask.' }); return false; }
     // The asking frame's own origin decides the local-address exemption, not the tab around it.
     const frame = `${sender.tab.id}:${sender.documentId}`;
@@ -124,7 +130,91 @@ function updateFrameIps(change: (m: FrameIps) => FrameIps): void {
   }).catch(() => {});
 }
 
-const withoutTab = (m: FrameIps, tabId: number): FrameIps => Object.fromEntries(Object.entries(m).filter(([k]) => !k.startsWith(`${tabId}:`)));
+const withoutTab = <T>(m: Record<string, T>, tabId: number): Record<string, T> => Object.fromEntries(Object.entries(m).filter(([k]) => !k.startsWith(`${tabId}:`)));
+
+// ---- mode suggestion badge (Chrome) ------------------------------------------------------
+// Page scripts say when the mode leaves their frame's content alone (content.ts); the tab then
+// gets a one-letter badge on the toolbar icon, so the user notices without opening the popup.
+// The badge is set for the tab only. While the "what's new" badge is pending it is held back,
+// and clearing it (text: null) falls back to the global badge, so NEW is never hidden or lost.
+
+const SUGGESTIONS = 'a4k-suggest';
+/** `${tabId}:${frameId}` -> the mode that frame's content needs, or 'reader': a reader the mode fits. */
+type Suggestions = Record<string, Suggest | 'reader'>;
+const BADGE: Record<Suggest, { text: string; title: string }> = {
+  manga: { text: 'M', title: 'Anime4Nerd · manga detected · open to switch to manga mode' },
+  anime: { text: 'V', title: 'Anime4Nerd · video detected · open to switch to anime mode' },
+};
+let suggestWrite: Promise<unknown> = Promise.resolve();
+
+function withFrame(m: Suggestions, key: string, kind: Suggest | 'reader' | null): Suggestions {
+  const { [key]: _old, ...rest } = m;
+  return kind ? { ...rest, [key]: kind } : rest;
+}
+
+const tabsOf = (m: Suggestions) => Object.keys(m).map((k) => parseInt(k, 10));
+
+/** Shows or clears the badge of each given tab: shown unless NEW is pending. */
+async function paintBadges(tabIds: Set<number>, m: Suggestions): Promise<void> {
+  if (!tabIds.size) return;
+  const held = await pendingWhatsNew();
+  const defaultTitle = chrome.runtime.getManifest().action?.default_title ?? '';
+  for (const tabId of tabIds) {
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    if (!tab) continue; // closed
+    // A reader in any frame: mode 'manga' fits the tab, as the popup decides (paintPrompt).
+    const kinds = Object.entries(m).filter(([k]) => k.startsWith(`${tabId}:`)).map(([, v]) => v);
+    const kind = kinds.includes('reader') ? undefined : kinds.find((v) => v !== 'reader');
+    const show = !!kind && !held;
+    await Promise.all(show ? [
+      chrome.action.setBadgeText({ tabId, text: BADGE[kind].text }),
+      // Same monochrome as the popup and the NEW badge.
+      chrome.action.setBadgeBackgroundColor({ tabId, color: '#e4e4e4' }),
+      chrome.action.setBadgeTextColor({ tabId, color: '#0b0b0b' }),
+      chrome.action.setTitle({ tabId, title: BADGE[kind].title }),
+    ] : [
+      // null, not '': the tab goes back to the global badge. The typings do not know it yet.
+      chrome.action.setBadgeText({ tabId, text: null as unknown as string }),
+      chrome.action.setTitle({ tabId, title: defaultTitle }),
+    ]).catch(() => {}); // the tab closed meanwhile
+  }
+}
+
+/**
+ * Applies one change to the stored suggestions and repaints the tabs whose frames it touched
+ * (every tab with a suggestion when nothing was changed); changes run in order.
+ */
+function updateSuggestions(change: (m: Suggestions) => Suggestions): void {
+  suggestWrite = suggestWrite.then(async () => {
+    const cur = ((await chrome.storage.session.get(SUGGESTIONS))[SUGGESTIONS] ?? {}) as Suggestions;
+    const next = change(cur);
+    if (next === cur) { await paintBadges(new Set(tabsOf(cur)), cur); return; }
+    const touched = [...Object.keys(cur), ...Object.keys(next)].filter((k) => cur[k] !== next[k]);
+    if (!touched.length) return;
+    await chrome.storage.session.set({ [SUGGESTIONS]: next });
+    await paintBadges(new Set(touched.map((k) => parseInt(k, 10))), next);
+  }).catch(() => {});
+}
+
+/** Drops what the removed frames of a tab said: a removed iframe sends no navigation event. */
+function forgetGoneFrames(tabId: number): void {
+  void chrome.webNavigation.getAllFrames({ tabId }).then((frames) => {
+    const live = new Set((frames ?? []).map((f) => `${tabId}:${f.frameId}`));
+    updateSuggestions((m) => Object.fromEntries(Object.entries(m).filter(([k]) => !k.startsWith(`${tabId}:`) || live.has(k))));
+  }).catch(() => {});
+}
+
+if (!__FIREFOX__) {
+  // A new page in the tab: the browser drops the tab's badge itself; forget what the old page said.
+  chrome.webNavigation.onCommitted.addListener((d) => {
+    updateSuggestions((m) => (d.frameId === 0 ? withoutTab(m, d.tabId) : withFrame(m, `${d.tabId}:${d.frameId}`, null)));
+  });
+  chrome.tabs.onRemoved.addListener((tabId) => updateSuggestions((m) => withoutTab(m, tabId)));
+  // A discarded tab comes back under a new id; its page reports again when it loads.
+  chrome.tabs.onReplaced.addListener((_added, removed) => updateSuggestions((m) => withoutTab(m, removed)));
+  // NEW became pending or was seen: every badge is decided again.
+  onWhatsNewChanged(() => updateSuggestions((m) => m));
+}
 
 interface Hop { ip: string | null; next?: string }
 interface PendingFetch { id?: string; settle: (hop: Hop) => void; done: Promise<void> }

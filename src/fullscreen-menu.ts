@@ -48,11 +48,14 @@ function coversControl(root: Document | ShadowRoot, self: Element, x: number, y:
 }
 
 const CSS = `
-:host { all: initial; position: fixed; top: 16px; right: 16px; z-index: 2147483647;
+:host { all: initial; color-scheme: dark; position: fixed; top: 16px; right: 16px; z-index: 2147483647;
   font: 12px/1.5 "JetBrains Mono", "Cascadia Mono", Consolas, ui-monospace, monospace; color: #e4e4e4; }
-.wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; transition: opacity .2s; }
+.wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; transition: opacity .2s; user-select: none; -webkit-user-select: none; }
 .wrap.idle:not(.open) { opacity: 0; pointer-events: none; }
 button { font: inherit; color: inherit; cursor: pointer; }
+/* Own focus ring and pressed look, as in the popup: the browser defaults must not show over a video. */
+button:focus-visible { outline: 1px solid #fff; outline-offset: 1px; }
+button:active { filter: brightness(1.25); }
 .toggle { width: 34px; height: 34px; border: 1px solid #3a3a3a; background: rgba(11,11,11,.85); font-size: 16px; line-height: 1; }
 .toggle:hover, .toggle[aria-expanded="true"] { border-color: #e4e4e4; }
 .panel { width: 260px; padding: 10px; border: 1px solid #3a3a3a; background: rgba(11,11,11,.94); display: grid; gap: 8px; box-shadow: 0 24px 40px -18px #000; }
@@ -121,7 +124,7 @@ export class FullscreenMenu {
     this.toggle.className = 'toggle';
     this.toggle.type = 'button';
     this.toggle.textContent = '☰';
-    this.toggle.title = 'Anime4Nerd';
+    this.toggle.setAttribute('aria-label', 'Anime4Nerd'); // not title: its tooltip is drawn by the system
     this.toggle.setAttribute('aria-expanded', 'false');
     this.toggle.addEventListener('click', () => this.setOpen(!this.wrap.classList.contains('open')));
     this.panel.className = 'panel';
@@ -144,7 +147,8 @@ export class FullscreenMenu {
     this.meta.className = 'meta';
     this.perf.className = 'perf';
     this.graph.className = 'graph';
-    this.graph.title = 'GPU time per frame, last 2 s · dashed = frame limit · red = late';
+    this.graph.setAttribute('role', 'img');
+    this.graph.setAttribute('aria-label', 'GPU time per frame, last 2 s · dashed = frame limit · red = late');
 
     this.status.className = 'status';
     this.status.append(head, this.meta, this.perf, this.graph);
@@ -232,6 +236,9 @@ export class FullscreenMenu {
    * mouse is on the button, so it never moves from under the pointer.
    */
   private place() {
+    // The delayed call can land after fullscreen ended and the button was removed; its root
+    // would then be the button itself, which has no elementsFromPoint.
+    if (!this.host.isConnected) return;
     const now = performance.now();
     if (now - this.placedAt < PLACE_EVERY_MS || this.wrap.classList.contains('open') || this.toggle.matches(':hover')) return;
     this.placedAt = now;
@@ -301,7 +308,7 @@ export class FullscreenMenu {
       ? `${live ? s!.fps.toFixed(0) : '—'} / ${fps === null ? '—' : fps.toFixed(0)} fps · ${verdict}`
       : `gpu ${gpu === null ? '—' : `${gpu.toFixed(1)} ms`}${budget === null ? '' : ` / ${budget.toFixed(0)} ms`} · ${verdict}`;
     this.graph.style.display = noTimer ? 'none' : '';
-    this.drawBars(s?.samples ?? [], budget, live);
+    this.drawBars(s?.samples ?? [], budget, live); // while paused, the page keeps the last 2 s of playback
   }
 
   private drawBars(samples: number[], budget: number | null, live: boolean) {

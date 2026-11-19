@@ -1,5 +1,5 @@
 import {
-  Message, PRESETS, Settings, VideoInfo, capNote, frameVerdict, loadSettings, VERDICT_TEXT, onSettingsChanged, onSourcesChanged, saveSettings, setSource,
+  Message, Mode, PRESETS, Settings, Suggest, VideoInfo, capNote, frameVerdict, loadSettings, onSettingsChanged, onSourcesChanged, saveSettings, setSource,
 } from './settings';
 import { EMPTY_META, MediaMeta } from './media-meta';
 import { WHATS_NEW_URL, clearWhatsNew, pendingWhatsNew } from './whats-new';
@@ -11,6 +11,7 @@ import { BROWSER, reportUrl } from './site-links';
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
 const hintEl = $('#hint');
+const modeBtn = $<HTMLButtonElement>('#mode');
 const gpuChip = $('#gpuchip');
 const clockEl = $('#clock');
 const countEl = $('#count');
@@ -22,7 +23,7 @@ const presetsEl = $('#presets');
 $<HTMLAnchorElement>('#report').href = reportUrl(chrome.runtime.getManifest().version, BROWSER);
 const perf = {
   verdict: $('#verdict'), load: $('#k-load'), ms: $('#k-ms'), fps: $('#k-fps'), avg: $('#k-avg'), limit: $('#k-limit'), late: $('#k-late'),
-  bars: $('#bars'), legend: $('#legend'),
+  bars: $('#bars'),
 };
 
 let settings: Settings;
@@ -32,13 +33,14 @@ let pageMeta: MediaMeta = EMPTY_META;
 const BARS = 48;
 
 const lastBudget = new Map<string, number>(); // video id -> last known frame limit (ms)
-const lastSamples = new Map<string, number[]>(); // video id -> last graph, kept while paused
 const pendingToggle = new Map<string, boolean>(); // key -> desired state until storage echoes it
 let pointerBusy = false;
 // Cleared on window, not the card: a press that drags off the card must not leave it set,
 // or patchCard would stop updating checkboxes for the rest of the popup's life.
 for (const ev of ['pointerup', 'pointercancel'] as const) window.addEventListener(ev, () => { pointerBusy = false; });
-let focusId: string | null = null; // which video the performance panel follows
+// The one video card that is open (full); the others are compact rows. The performance panel
+// follows it. Chosen when the popup opens (see pickOpen) and changed only by a click on a compact card.
+let openId: string | null = null;
 
 // --- presets / effects --------------------------------------------------------
 const PRESET_DESC: Record<string, string> = {
@@ -67,8 +69,195 @@ for (const b of document.querySelectorAll<HTMLButtonElement>('[data-field]')) {
 for (const b of document.querySelectorAll<HTMLButtonElement>('[data-upscale]')) {
   b.addEventListener('click', () => { void saveSettings({ upscale: b.dataset.upscale as Settings['upscale'] }); });
 }
+
+// --- tooltips: one box for every [data-tip] (a native title= tooltip is drawn by the system) ---
+const TIP_DELAY_MS = 400;
+const TIP_GAP = 4; // px between the tooltip, its element and the popup edge
+const tipEl = $('#tip');
+let tipFor: HTMLElement | null = null; // the element the tooltip is shown for, or waiting to be
+let tipTimer = 0;
+
+function setTip(el: HTMLElement, text: string) {
+  if (text) el.dataset.tip = text; else delete el.dataset.tip;
+}
+
+const isCut = (el: HTMLElement) => el.scrollWidth > el.clientWidth;
+
+/** The element's tooltip; when its text is cut, the full text comes first. */
+function setCutTip(el: HTMLElement, tip = '') {
+  setTip(el, isCut(el) && el.textContent ? [el.textContent, tip].filter(Boolean).join(' · ') : tip);
+}
+
+function hideTip() {
+  window.clearTimeout(tipTimer);
+  tipFor?.removeAttribute('aria-describedby');
+  tipFor = null;
+  tipEl.hidden = true;
+}
+
+function showTip() {
+  const el = tipFor;
+  const text = el?.dataset.tip;
+  if (!el || !text || !el.isConnected || el.getAttribute('aria-expanded') === 'true') { hideTip(); return; }
+  tipEl.textContent = text;
+  tipEl.hidden = false;
+  // Measure it at the corner: at its last place the popup edge could squeeze its width.
+  tipEl.style.left = '0';
+  tipEl.style.top = '0';
+  // An aria-label with the same words is already read: describing it again would say it twice.
+  if (el.getAttribute('aria-label') !== text) el.setAttribute('aria-describedby', 'tip');
+  // Under the element, or above it when there is no room; never past an edge of the popup.
+  const r = el.getBoundingClientRect();
+  const box = document.body.getBoundingClientRect(); // the popup: body is as wide and as tall as its window
+  const left = Math.min(r.left, box.right - tipEl.offsetWidth - TIP_GAP);
+  const below = r.bottom + TIP_GAP;
+  const top = below + tipEl.offsetHeight + TIP_GAP <= box.bottom ? below : r.top - tipEl.offsetHeight - TIP_GAP;
+  tipEl.style.left = `${Math.max(box.left + TIP_GAP, left)}px`;
+  tipEl.style.top = `${Math.max(box.top + TIP_GAP, top)}px`;
+}
+
+function armTip(target: EventTarget | null, delay: number) {
+  const el = target instanceof Element ? target.closest<HTMLElement>('[data-tip]') : null;
+  if (el === tipFor) return;
+  hideTip();
+  if (!el) return;
+  tipFor = el;
+  if (delay) tipTimer = window.setTimeout(showTip, delay); else showTip();
+}
+
+document.addEventListener('pointerover', (e) => armTip(e.target, TIP_DELAY_MS));
+document.addEventListener('pointerout', (e) => {
+  if (tipFor && !(e.relatedTarget instanceof Node && tipFor.contains(e.relatedTarget))) hideTip();
+});
+// Keyboard focus shows it at once; focus that follows a click does not.
+document.addEventListener('focusin', (e) => { if (e.target instanceof Element && e.target.matches(':focus-visible')) armTip(e.target, 0); });
+document.addEventListener('focusout', hideTip);
+document.addEventListener('pointerdown', hideTip);
+document.addEventListener('scroll', hideTip, true); // capture: scrolling boxes inside the popup too
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || tipEl.hidden) return;
+  e.preventDefault(); // Esc closes the tooltip, not the popup
+  hideTip();
+});
+// The browser's own right-click menu (Back, Reload, Inspect) is not part of the popup.
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// --- mode dropdown: a button and a list of the popup's own (WAI-ARIA select-only combobox) ---
+// The keyboard focus stays on the button; the highlighted row is its aria-activedescendant.
+const TYPEAHEAD_MS = 500;
+const modeList = $('#mode-list');
+const modeOpts = [...modeList.querySelectorAll<HTMLElement>('[role="option"]')];
+let modeActive = 0; // the highlighted row while the list is open
+let typed = '';
+let typedAt = 0;
+
+function paintMode(m: Mode) {
+  modeBtn.value = m;
+  if (modeBtn.textContent !== m) modeBtn.textContent = m;
+  for (const o of modeOpts) o.setAttribute('aria-selected', String(o.dataset.mode === m));
+}
+
+function setModeActive(i: number) {
+  modeActive = Math.max(0, Math.min(modeOpts.length - 1, i));
+  modeOpts.forEach((o, n) => o.classList.toggle('active', n === modeActive));
+  modeBtn.setAttribute('aria-activedescendant', modeOpts[modeActive].id);
+}
+
+function openModeList(open: boolean) {
+  if (open === !modeList.hidden) return;
+  modeList.hidden = !open;
+  modeBtn.setAttribute('aria-expanded', String(open));
+  if (open) {
+    hideTip();
+    document.body.scrollTop = 0; // the list hangs under the chip: a scrolled popup goes to the top first
+    setModeActive(modeOpts.findIndex((o) => o.dataset.mode === modeBtn.value));
+  } else {
+    modeBtn.removeAttribute('aria-activedescendant');
+    typed = '';
+  }
+}
+
+function pickMode(i: number) {
+  const m = modeOpts[i].dataset.mode as Mode;
+  openModeList(false);
+  if (m === modeBtn.value) return;
+  paintMode(m);
+  void saveSettings({ mode: m });
+}
+
+function modeOptAt(e: Event): number {
+  return modeOpts.indexOf((e.target as Element).closest<HTMLElement>('[role="option"]')!);
+}
+
+/** Arrows, Home and End move the highlight (opening the list first); letters jump to a name. */
+function onModeKey(e: KeyboardEvent) {
+  const open = !modeList.hidden;
+  const at = open ? modeActive : modeOpts.findIndex((o) => o.dataset.mode === modeBtn.value);
+  let to = -1;
+  if (e.key === 'Escape') {
+    if (!open) return; // closed: Esc closes the popup as usual
+    e.stopPropagation();
+    openModeList(false);
+  } else if (e.key === 'ArrowDown') to = open ? at + 1 : at;
+  else if (e.key === 'ArrowUp') to = open ? at - 1 : at;
+  else if (e.key === 'Home') to = 0;
+  else if (e.key === 'End') to = modeOpts.length - 1;
+  else if (e.key.length === 1 && e.key !== ' ' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    typed = e.timeStamp - typedAt > TYPEAHEAD_MS ? e.key.toLowerCase() : typed + e.key.toLowerCase();
+    typedAt = e.timeStamp;
+    // The same letter again goes to the next name that starts with it ("a": auto, then anime).
+    const repeat = [...typed].every((ch) => ch === typed[0]);
+    const want = repeat ? typed[0] : typed;
+    for (let n = 0; n < modeOpts.length && to < 0; n += 1) {
+      const i = (at + n + (repeat ? 1 : 0)) % modeOpts.length;
+      if (modeOpts[i].dataset.mode!.startsWith(want)) to = i;
+    }
+    if (to < 0) return;
+  } else return; // Enter and Space reach the button as a click
+  e.preventDefault();
+  if (to >= 0) { openModeList(true); setModeActive(to); }
+}
+
+// The Firefox build has no manga mode: a plain chip stands in and mode stays 'auto'.
+if (__FIREFOX__) {
+  const plain = document.createElement('span');
+  plain.className = 'chip';
+  plain.textContent = 'anime4k';
+  $('#modeChip').replaceWith(plain);
+} else {
+  // A click from the keyboard (Enter, Space: detail 0) on the open list picks the highlighted row.
+  modeBtn.addEventListener('click', (e) => {
+    const open = !modeList.hidden;
+    if (open && e.detail === 0) pickMode(modeActive); else openModeList(!open);
+  });
+  modeBtn.addEventListener('keydown', onModeKey);
+  modeBtn.addEventListener('blur', () => openModeList(false));
+  // A press outside the open list only closes it: caught before any button sees it (capture
+  // phase), and its click is swallowed, so the control under the dimmed popup does not fire.
+  let swallowClick = false;
+  document.addEventListener('pointerdown', (e) => {
+    swallowClick = false; // a press that ended without a click (dragged away) must not eat the next one
+    if (modeList.hidden || $('#modeChip').contains(e.target as Node)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    openModeList(false);
+    swallowClick = true;
+  }, true);
+  document.addEventListener('click', (e) => {
+    if (!swallowClick) return;
+    swallowClick = false;
+    e.preventDefault();
+    e.stopPropagation();
+  }, true);
+  modeList.addEventListener('mousedown', (e) => e.preventDefault()); // a press on a row must not take the focus off the button
+  modeList.addEventListener('pointermove', (e) => { const i = modeOptAt(e); if (i >= 0 && i !== modeActive) setModeActive(i); });
+  modeList.addEventListener('click', (e) => { const i = modeOptAt(e); if (i >= 0) pickMode(i); });
+}
+function mode(): Mode { return __FIREFOX__ || !settings ? 'auto' : settings.mode; }
+
 function paintSettings(s: Settings) {
   settings = s;
+  paintMode(s.mode);
   presetNameEl.textContent = PRESETS.find((p) => p.value === s.preset)?.label ?? s.preset;
   for (const b of presetsEl.querySelectorAll<HTMLButtonElement>('[data-preset]')) {
     b.setAttribute('aria-checked', String(b.dataset.preset === s.preset));
@@ -108,23 +297,45 @@ function labelFor(v: VideoInfo): { title: string; tag: string; episodeName: stri
   let tag = '';
   if (m.episode !== null) tag = m.season !== null ? `S${m.season} E${m.episode}` : `E${m.episode}`;
   let episodeName = m.episodeName && m.episodeName !== title ? m.episodeName : (m.episode === null && m.subtitle ? m.subtitle : '');
+  // No real name ("Episode 12" beside "S1 E12" says the same thing twice): the card shows the quality there.
   if (/^\s*(episode|ep\.?|e)\s*#?\d+\s*$/i.test(episodeName) || episodeName.replace(/\s+/g, '').toLowerCase() === tag.replace(/\s+/g, '').toLowerCase()) episodeName = '';
-  // No real name: say "Episode N" next to the tag rather than leaving the line bare.
-  if (!episodeName && m.episode !== null) episodeName = `Episode ${m.episode}`;
   return { title, tag, episodeName };
 }
 
-/** Card state word: only what the card is doing, no performance verdict. */
-function cardState(v: VideoInfo): { cls: string; text: string } {
-  if (!v.enabled) return { cls: 'off', text: '● Off · tap to turn on' };
+interface CardState { cls: string; text: string; tip: string }
+const UPSCALING = '● Upscaling';
+const NOT_POSSIBLE = '● Not possible';
+
+/** What a video is doing, in a word or two (no performance verdict); the long reason is the tooltip. */
+function cardState(v: VideoInfo): CardState {
+  if (mode() === 'manga') return { cls: 'dim', text: '● Paused', tip: 'Manga mode: videos are not upscaled' };
+  if (!v.enabled) return { cls: 'off', text: '● Off', tip: 'Tap to turn on' };
   switch (v.status) {
-    case 'Active': return v.playing ? { cls: 'ok', text: '● Upscaling' } : { cls: 'dim', text: '● Paused' };
-    case 'Loading': return { cls: 'warn', text: '● Starting…' };
-    case 'Waiting': return { cls: 'dim', text: '● Waiting for video' };
-    case 'Suspended': return { cls: 'dim', text: '● Paused (fullscreen / PiP / hidden tab)' };
-    case 'Unavailable': return { cls: 'bad', text: `● Not possible — ${v.message.toLowerCase()}` };
-    default: return { cls: 'dim', text: '● Off' };
+    case 'Active': return v.playing ? { cls: 'ok', text: UPSCALING, tip: '' } : { cls: 'dim', text: '● Paused', tip: '' };
+    case 'Loading': return { cls: 'warn', text: '● Starting…', tip: '' };
+    case 'Waiting': return { cls: 'dim', text: '● Waiting', tip: 'Waiting for the video to start' };
+    case 'Suspended': return { cls: 'dim', text: '● Suspended', tip: 'Paused while the video is in fullscreen, picture-in-picture or a hidden tab' };
+    case 'Unavailable': return { cls: 'bad', text: NOT_POSSIBLE, tip: v.message };
+    default: return { cls: 'dim', text: '● Off', tip: '' };
   }
+}
+
+/** A few plain words for why a video cannot be upscaled; the full message stays in the tooltip. Unknown reasons: their first clause. */
+function shortReason(message: string): string {
+  if (/cross-origin|CORS/i.test(message)) return 'this site blocks access to its video';
+  if (/texture limit/i.test(message)) return 'too large for this GPU';
+  if (/WebGL|GPU/i.test(message)) return 'the GPU is not available';
+  return message.split(/[.(;:]/)[0].trim().toLowerCase();
+}
+
+/**
+ * The card to open: the video that is upscaling right now; of several, the one that is playing.
+ * Otherwise the video that is playing, otherwise the largest, otherwise the first in the list.
+ */
+function pickOpen(videos: VideoInfo[]): VideoInfo | null {
+  const rank = (v: VideoInfo) => [Number(v.enabled && v.status === 'Active'), Number(v.playing), v.width * v.height];
+  const beats = (a: number[], b: number[]) => { const at = a.findIndex((n, i) => n !== b[i]); return at >= 0 && a[at] > b[at]; };
+  return videos.reduce<VideoInfo | null>((best, v) => (!best || beats(rank(v), rank(best)) ? v : best), null);
 }
 
 function budgetFor(v: VideoInfo): number | null {
@@ -136,9 +347,11 @@ function budgetFor(v: VideoInfo): number | null {
 // --- card: built once per video id, then patched in place ------------------------
 interface Card {
   el: HTMLElement; key: string; cb: HTMLInputElement;
-  title: HTMLElement; episode: HTMLElement; tag: HTMLElement; epName: HTMLElement; meta: HTMLElement; state: HTMLElement;
+  title: HTMLElement; tag: HTMLElement; epName: HTMLElement; meta: HTMLElement; host: HTMLElement; res: HTMLElement; why: HTMLElement;
+  long: { title: string; cut: boolean } | null; // does this title fit on one line: measured once per title
 }
 const cards = new Map<string, Card>();
+let besideReader = false; // a manga reader is on the page: every video card stays compact
 
 function buildCard(v: VideoInfo): Card {
   const el = document.createElement('div');
@@ -147,15 +360,15 @@ function buildCard(v: VideoInfo): Card {
   el.innerHTML = `
     <div class="line"><div class="title"></div><label class="switch"><input type="checkbox" /></label></div>
     <div class="episode"><span class="tag"></span><span class="epname"></span></div>
-    <div class="meta"></div>
-    <div class="hr"></div>
-    <div class="state"></div>`;
+    <div class="meta"><span class="host"></span><span class="res"></span><span class="why"></span></div>`;
   const q = <T extends HTMLElement>(s: string) => el.querySelector(s) as T;
   const card: Card = {
     el, key: v.key, cb: q<HTMLInputElement>('input'),
-    title: q('.title'), episode: q('.episode'), tag: q('.tag'), epName: q('.epname'), meta: q('.meta'), state: q('.state'),
+    title: q('.title'), tag: q('.tag'), epName: q('.epname'), meta: q('.meta'), host: q('.host'), res: q('.res'), why: q('.why'),
+    long: null,
   };
   const flip = (on: boolean) => {
+    if (mode() === 'manga') return; // videos are paused: the switch is disabled
     pendingToggle.set(card.key, on);
     card.cb.checked = on;
     el.classList.toggle('on', on);
@@ -164,33 +377,98 @@ function buildCard(v: VideoInfo): Card {
   const sw = q('.switch');
   sw.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); pointerBusy = true; flip(!card.cb.checked); });
   sw.addEventListener('click', (e) => e.preventDefault());
-  el.addEventListener('pointerdown', (e) => { if (e.button === 0) { pointerBusy = true; flip(!card.cb.checked); } });
+  el.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    // A compact card: its switch alone flips it; a press anywhere else opens it and folds the open one.
+    if (!el.classList.contains('compact')) { pointerBusy = true; flip(!card.cb.checked); } else if (!besideReader) { openId = v.id; void refresh(); }
+  });
   card.cb.addEventListener('keydown', (e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); flip(!card.cb.checked); } });
-  el.addEventListener('mouseenter', () => { focusId = v.id; });
   return card;
 }
 
 function setText(el: HTMLElement, text: string) { if (el.textContent !== text) el.textContent = text; }
 
-function patchCard(c: Card, v: VideoInfo) {
+/** Whether the card's title is cut on one line (the two-line layout would hide that, so it is measured without it). */
+function titleIsLong(c: Card, title: string): boolean {
+  if (c.long?.title !== title) {
+    c.el.classList.remove('two-line');
+    c.long = c.title.clientWidth ? { title, cut: isCut(c.title) } : null; // no width: the cards are hidden
+  }
+  return !!c.long?.cut;
+}
+
+/**
+ * The open card has three rows: title, tag row, info line. Compact cards show the title row only.
+ * - episode name known: "S1 E12" tag + the name; info line "host · 1080p → 3840×2160 (2×)".
+ * - no episode name: the quality stands beside the tag ("1080p" is the tag when there is no
+ *   episode either); info line "host · stream <stream host>".
+ * - no episode at all and a title too long for one line: the title takes two lines and the tag
+ *   row ("1080p" tag, "→ output · host") stands in for the info line.
+ * - not possible: the info line says why in a few words (the resolution means nothing then).
+ * The card is the same height in every case.
+ */
+function patchCard(c: Card, v: VideoInfo, open: boolean) {
   c.key = v.key;
   const { title, tag, episodeName } = labelFor(v);
-  setText(c.title, title);
-  setText(c.tag, tag);
-  c.tag.hidden = !tag;
-  setText(c.epName, episodeName);
-  c.episode.hidden = !tag && !episodeName;
+  const st = cardState(v);
+  const impossible = st.text === NOT_POSSIBLE;
+  const host = tabHost || v.frameHost;
   // Real output size while rendering (2x, or 4x on large displays); 2x is the default before that.
   const outH = v.stats?.outputHeight ?? v.height * 2;
   const out = v.stats ? `${v.stats.outputWidth}×${v.stats.outputHeight}` : pLabel(outH);
   const scale = v.height ? Math.round(outH / v.height) : 0;
-  const capped = v.stats && settings ? capNote(settings.upscale, scale) : '';
-  const res = v.height ? ` · ${pLabel(v.height)} → ${out} (${scale}×)${capped}` : '';
-  setText(c.meta, `${tabHost || v.frameHost}${res}`);
-  c.meta.title = v.frameHost !== tabHost ? `player frame: ${v.frameHost} · stream: ${v.mediaHost}` : `stream: ${v.mediaHost}`;
-  const st = cardState(v);
-  setText(c.state, st.text);
-  c.state.className = `state ${st.cls}`;
+  // " · 32× capped: GPU limit": the card says "· 32× capped", the tooltip says why.
+  const cap = v.stats && settings ? capNote(settings.upscale, scale) : '';
+  const capTip = cap.replace(/^ · /, '');
+  const output = `→ ${out} (${scale}×)${cap.replace(/: .*$/, '')}`;
+  const frames = v.frameHost !== tabHost ? `player frame: ${v.frameHost} · stream: ${v.mediaHost}` : `stream: ${v.mediaHost}`;
+
+  c.el.classList.toggle('compact', !open);
+  c.el.dataset.state = st.cls;
+  setText(c.title, title);
+  let rowTag = tag;
+  let rowText = episodeName;
+  let info = v.height ? ` · ${pLabel(v.height)} ${output}` : '';
+  let layout: '' | 'quality' | 'two-line' = '';
+  if (open && !impossible && !episodeName && v.height) {
+    if (!tag && titleIsLong(c, title)) {
+      layout = 'two-line';
+      rowText = `${output} · ${host}`;
+    } else {
+      layout = 'quality';
+      rowText = tag ? `${pLabel(v.height)} ${output}` : output;
+      info = ` · stream ${v.mediaHost}`;
+    }
+    if (!tag) rowTag = pLabel(v.height);
+  }
+  c.el.classList.toggle('quality', layout === 'quality');
+  c.el.classList.toggle('two-line', layout === 'two-line');
+  setText(c.tag, rowTag);
+  c.tag.hidden = !rowTag;
+  setText(c.epName, rowText);
+  setText(c.host, host);
+  setText(c.res, info);
+  setText(c.why, impossible ? shortReason(v.message) : '');
+  c.host.hidden = c.res.hidden = impossible;
+  c.why.hidden = !impossible;
+
+  if (open) {
+    setTip(c.el, '');
+    setTip(c.title, (layout === 'two-line' ? c.title.scrollHeight > c.title.clientHeight + 1 : isCut(c.title)) ? title : '');
+    setCutTip(c.tag);
+    setCutTip(c.epName, layout ? [layout === 'two-line' ? frames : '', capTip].filter(Boolean).join(' · ') : '');
+    setTip(c.meta, impossible ? v.message : [isCut(c.host) ? host : '', frames, layout ? '' : capTip].filter(Boolean).join(' · '));
+  } else {
+    // Everything the rows would say, and the state the dot stands for.
+    setTip(c.title, '');
+    setTip(c.el, [
+      title, [tag, episodeName].filter(Boolean).join(' '), `${host}${v.height ? ` · ${pLabel(v.height)} → ${out} (${scale}×)${cap}` : ''}`,
+      st.tip ? `${st.text.slice(2)}: ${st.tip}` : st.text.slice(2),
+    ].filter(Boolean).join(' · '));
+  }
+  const paused = mode() === 'manga';
+  c.cb.disabled = paused;
+  c.el.classList.toggle('paused', paused);
   if (!pointerBusy) {
     c.cb.checked = v.enabled;
     c.el.classList.toggle('on', v.enabled);
@@ -219,30 +497,42 @@ function paintFrameTiles(v: VideoInfo, s: NonNullable<VideoInfo['stats']>, live:
   perf.ms.className = perf.avg.className = fv ?? '';
 }
 
+/**
+ * The one status, in the panel's heading: the open card's state in that state's colour; a video
+ * that is behind reads "Near limit" or "Dropping frames" instead of "Upscaling". The tooltip is
+ * the state's long reason and what the graph shows (also the tooltip of the graph).
+ */
+function paintVerdict(st: CardState | null, behind: 'warn' | 'bad' | null, legend: string) {
+  perf.verdict.hidden = !st; // no card: nothing to report
+  setTip(perf.bars, legend);
+  if (!st) return;
+  const late = st.text === UPSCALING ? behind : null;
+  setText(perf.verdict, late === 'warn' ? '● Near limit' : late === 'bad' ? '● Dropping frames' : st.text);
+  perf.verdict.className = `verdict ${late ?? st.cls}`;
+  setTip(perf.verdict, [st.tip, legend].filter(Boolean).join(' · '));
+}
+
 function paintPerf(v: VideoInfo | null) {
   const f = (n: number | null, d = 1) => (n === null ? '—' : n.toFixed(d));
   const noTimer = !!v?.enabled && !!v.stats && !v.stats.timerSupported;
   tiles.forEach((el, i) => setText(el.previousElementSibling as HTMLElement, (noTimer ? FRAME_LABELS : GPU_LABELS)[i]));
-  tiles[0].title = ''; // the manga panel uses it
+  setTip(tiles[0], ''); // the manga panel uses it
   perf.bars.style.display = noTimer ? 'none' : '';
 
   // Off: everything cleared.
   if (!v || !v.enabled) {
     for (const el of [perf.load, perf.ms, perf.avg, perf.limit, perf.late]) { setText(el, '—'); el.className = ''; }
     setText(perf.fps, '—');
-    setText(perf.verdict, '● off'); perf.verdict.className = 'verdict dim';
     for (const bar of barEls) { bar.className = 'empty'; bar.style.height = '1px'; }
     limitEl.style.display = 'none';
-    setText(perf.legend, v ? 'turn the video on to start measuring' : 'no video');
-    if (v) lastSamples.delete(v.id);
+    paintVerdict(v ? cardState(v) : null, null, v ? 'turn the video on to start measuring' : 'no video');
     return;
   }
 
   const s = v.stats;
   const live = !!s && v.playing && s.fps > 0;
   const budget = budgetFor(v);
-  const samples = s && s.samples.length ? s.samples : (lastSamples.get(v.id) ?? []);
-  if (s && s.samples.length) lastSamples.set(v.id, s.samples);
+  const samples = s?.samples ?? []; // while paused, the page keeps the last 2 s of playback
   const avg = samples.length ? samples.reduce((a, b) => a + b, 0) / samples.length : null;
   const peak = samples.length ? Math.max(...samples) : null;
   const late = budget !== null && samples.length ? samples.filter((ms) => ms > budget).length : null;
@@ -259,13 +549,9 @@ function paintPerf(v: VideoInfo | null) {
   perf.late.className = late ? (late > 3 ? 'bad' : 'warn') : '';
   if (noTimer) paintFrameTiles(v, s!, live);
 
-  let vc = 'dim'; let vt = '● paused';
-  if (v.status === 'Unavailable') { vc = 'bad'; vt = '● not possible'; } else if (v.status === 'Loading') { vc = 'warn'; vt = '● starting'; } else if (live) {
-    const fv = load === null && !s!.timerSupported ? frameVerdict(s!.fps, v.sourceFps ?? s!.sourceFps) : null;
-    if (fv) { vc = fv; vt = `● ${VERDICT_TEXT[fv]}`; } else if (load === null) { vc = 'ok'; vt = '● running'; } else if (load > 1) { vc = 'bad'; vt = '● dropping frames'; } else if (load > 0.8) { vc = 'warn'; vt = '● near limit'; } else { vc = 'ok'; vt = '● keeping up'; }
-  }
-  setText(perf.verdict, vt);
-  perf.verdict.className = `verdict ${vc}`;
+  // Behind: from the GPU time against the frame limit, or without a GPU timer from the frames drawn.
+  let speed: 'ok' | 'warn' | 'bad' | null = null;
+  if (live) speed = load !== null ? (load > 1 ? 'bad' : load > 0.8 ? 'warn' : 'ok') : s!.timerSupported ? null : frameVerdict(s!.fps, v.sourceFps ?? s!.sourceFps);
 
   const scale = Math.max(budget ?? 0, peak ?? 0, 1);
   const shown = samples.slice(-BARS);
@@ -279,13 +565,46 @@ function paintPerf(v: VideoInfo | null) {
   }
   limitEl.style.display = budget !== null ? '' : 'none';
   if (budget !== null) limitEl.style.bottom = `${Math.round((budget / scale) * 100)}%`;
-  setText(perf.legend, samples.length ? `last 2 s · dashed = limit · red = late${live ? '' : ' · last run'}` : s && !s.timerSupported ? 'GPU timing not available in this browser' : 'no measurements yet');
+  paintVerdict(cardState(v), speed === 'ok' ? null : speed,
+    samples.length ? `last 2 s · dashed = limit · red = late${live ? '' : ' · last run'}` : s && !s.timerSupported ? 'GPU timing not available in this browser' : 'no measurements yet');
 }
+
+// --- popup size -----------------------------------------------------------------------
+const WINDOW_SETTLE_MS = 400; // longer than the browser takes to resize the popup window to its content
+let cutSince: number | null = null; // since when the window has been lower than body
+let windowHeight = window.innerHeight;
+
+/**
+ * After each repaint. Browser zoom above 100% leaves a window lower than body's 600px limit, and
+ * content under the window's edge could not be reached: the window's height becomes body's
+ * max-height, so body scrolls. It is set only once the window has stayed too low for a while,
+ * that is, has refused to grow: a window that is still growing must not be held small by it.
+ * Then the scrollbar's lane: it is added to the popup's width only while body scrolls. The
+ * content's width does not depend on it, so this cannot flip back and forth.
+ */
+function fitViewport() {
+  const { body } = document;
+  if (!__FIREFOX__) { // Firefox panels size themselves differently and were not measured: body keeps its 600px limit there
+    const room = window.innerHeight + 1; // a body of 543.5px in a window of 543px is not cut
+    if (body.style.maxHeight) { if (body.scrollHeight <= room) body.style.maxHeight = ''; }
+    else if (body.offsetHeight <= room) cutSince = null;
+    else if (cutSince === null) cutSince = performance.now();
+    else if (performance.now() - cutSince >= WINDOW_SETTLE_MS) body.style.maxHeight = `${window.innerHeight}px`;
+  }
+  document.documentElement.classList.toggle('scrolls', body.scrollHeight > body.clientHeight);
+}
+// A new window height (the zoom changed, or the window grew after all): measure again from the start.
+window.addEventListener('resize', () => {
+  if (window.innerHeight === windowHeight) return; // the width alone: the scrollbar's lane came or went
+  windowHeight = window.innerHeight;
+  document.body.style.maxHeight = '';
+  cutSince = null;
+});
 
 // --- refresh ------------------------------------------------------------------------
 let refreshing = false;
 async function refresh() {
-  if (refreshing) return;
+  if (refreshing || !settings) return; // a repaint asked for before the settings are read: start-up does one right after
   refreshing = true;
   try {
     const [found, metas, mangaReplies] = await Promise.all([
@@ -298,19 +617,31 @@ async function refresh() {
 
     const list: { v: VideoInfo; frameId: number }[] = [];
     for (const { frameId, value } of found) for (let v of value) {
+      v = { ...v, id: `${frameId}:${v.id}` }; // a video's own id is unique in its frame only
       const pend = pendingToggle.get(v.key);
       if (pend !== undefined) { if (pend === v.enabled) pendingToggle.delete(v.key); else v = { ...v, enabled: pend }; }
       list.push({ v, frameId });
     }
 
+    const detected = pickManga(mangaReplies);
+    const manga = mode() === 'anime' ? null : detected; // mode 'anime': no manga card or page map
+    // A reader: the page map stands in for the performance panel (also beside a video, whose card
+    // is then compact), and the state chip is the manga tag.
+    const reader = manga?.s.kind === 'images';
+    besideReader = reader;
+    // The open card stays the open card for as long as its video is there: it does not jump.
+    if (!list.some((x) => x.v.id === openId)) openId = pickOpen(list.map((x) => x.v))?.id ?? null;
+    const open = reader ? null : list.find((x) => x.v.id === openId) ?? null;
+
     // Reconcile cards: keep existing nodes, add new, remove gone. No innerHTML churn.
     const seen = new Set<string>();
-    list.forEach(({ v }, i) => {
+    list.forEach((x, i) => {
+      const { v } = x;
       seen.add(v.id);
       let c = cards.get(v.id);
       if (!c) { c = buildCard(v); cards.set(v.id, c); }
-      patchCard(c, v);
       if (sourcesEl.children[i] !== c.el) sourcesEl.insertBefore(c.el, sourcesEl.children[i] ?? null);
+      patchCard(c, v, x === open); // after it is on the page: its texts are measured
     });
     for (const [id, c] of cards) if (!seen.has(id)) { c.el.remove(); cards.delete(id); }
     countEl.textContent = list.length > 1 ? `${list.length} videos` : '';
@@ -320,28 +651,36 @@ async function refresh() {
       injected = true;
       void injectContent(tabId);
     }
-    const manga = pickManga(mangaReplies);
-    try { paintMangaCard(manga); } catch { /* never let the manga card stop the rest of the popup */ }
-    emptyEl.hidden = list.length > 0 || !!manga;
+    try { paintMangaCard(manga); paintPageMap(manga); } catch { /* never let the manga card stop the rest of the popup */ }
+    const offered = __FIREFOX__ ? null : paintPrompt(detected, list.map((x) => x.v));
+    sourcesEl.hidden = offered === 'anime'; // the preview stands in for the paused video cards
+    emptyEl.hidden = list.length > 0 || !!manga || !!offered; // "No video found yet" would contradict the preview
     const reading = !!manga && list.length === 0;
     setText($('#nowLabel'), reading ? 'reading now' : 'playing now');
+    $('#perf').hidden = reader;
+    hintEl.classList.toggle('manga', reading && reader);
 
-    // Performance panel follows: hovered card, else first enabled, else first; manga when no video.
-    const pick = list.find((x) => x.v.id === focusId) ?? list.find((x) => x.v.enabled) ?? list[0] ?? null;
-    if (reading) paintMangaPerf(manga!); else paintPerf(pick?.v ?? null);
+    // The performance panel follows the open card; a manga page without a video gets manga figures.
+    if (reading) paintMangaPerf(manga!); else if (!reader) paintPerf(open?.v ?? null);
+    // Said once: on a video page the performance heading already reads "● Paused", so the preview drops its own.
+    ($('.mp-paused') as HTMLElement | null)?.toggleAttribute('hidden', offered === 'anime');
 
     const active = list.filter((x) => x.v.status === 'Active' && x.v.enabled).length;
     const on = list.filter((x) => x.v.enabled).length;
     let gpuMs: number | null = null;
-    for (const { v } of list) if (v.enabled && v.stats?.gpuMs != null) gpuMs = (gpuMs ?? 0) + v.stats.gpuMs;
+    for (const { v } of list) if (v.enabled && v.playing && v.stats?.gpuMs != null) gpuMs = (gpuMs ?? 0) + v.stats.gpuMs;
+    const paused = gpuMs === null && list.some((x) => x.v.enabled && x.v.status === 'Active') && !list.some((x) => x.v.enabled && x.v.playing);
     const mangaBusy = reading && manga!.s.on && manga!.s.done > 0;
     hintEl.textContent = reading ? (mangaBusy ? `manga · ${settings.preset.toLowerCase()}` : 'manga')
-      : list.length === 0 ? 'off' : active ? `on · ${settings.preset.toLowerCase()}` : on ? 'starting' : 'off';
+      : list.length === 0 ? 'off' : active ? `on · ${settings.preset.toLowerCase()}` : !on ? 'off' : mode() === 'manga' ? 'paused' : 'starting';
     hintEl.classList.toggle('on', active > 0 || mangaBusy);
     // Without GPU timing (Firefox) the chip shows the frame rate drawn instead.
-    const drawn = list.find((x) => x.v.enabled && x.v.stats && !x.v.stats.timerSupported && x.v.stats.fps > 0)?.v.stats;
-    gpuChip.textContent = gpuMs !== null ? `gpu ${gpuMs.toFixed(1)} ms` : drawn ? `${drawn.fps.toFixed(0)} fps` : 'gpu —';
-    gpuChip.classList.toggle('on', gpuMs !== null || !!drawn);
+    const drawn = list.find((x) => x.v.enabled && x.v.playing && x.v.stats && !x.v.stats.timerSupported && x.v.stats.fps > 0)?.v.stats;
+    const perPage = reading && reader && mangaOn() && manga!.s.on ? pageTime(manga!.s) : null;
+    gpuChip.textContent = perPage !== null ? `${fmtTime(perPage)} / page`
+      : gpuMs !== null ? `gpu ${gpuMs.toFixed(1)} ms` : drawn ? `${drawn.fps.toFixed(0)} fps` : paused ? 'paused' : 'gpu —';
+    gpuChip.classList.toggle('on', perPage !== null || gpuMs !== null || !!drawn);
+    fitViewport();
   } finally {
     refreshing = false;
   }
@@ -356,14 +695,16 @@ chrome.runtime.onMessage.addListener((msg: Message) => {
   if (msg?.type === 'a4k-changed') void refresh();
 });
 
-/** Show the post-update banner once: opening the popup counts as seeing it. */
+/** Show the post-update chip once, in place of the clock: opening the popup counts as seeing it. */
 async function showWhatsNew() {
   const version = await pendingWhatsNew().catch(() => null);
   if (!version) return;
   const note = $<HTMLAnchorElement>('#whatsnew');
   note.href = WHATS_NEW_URL;
-  setText($('#whatsnew-ver'), version);
+  note.textContent = `● new v${version}`;
   note.hidden = false;
+  clockEl.replaceWith(note);
+  setCutTip(note, `Updated to v${version} · see what's new`);
   await clearWhatsNew().catch(() => {});
 }
 
@@ -406,7 +747,7 @@ async function injectContent(id: number) {
   await chrome.scripting.executeScript({ target, files: ['content.js'] }).catch(() => {});
 }
 
-interface MangaView { s: MangaStatus; meta: MangaMeta; stale: boolean; frameHost: string | null }
+interface MangaView { s: MangaStatus; meta: MangaMeta; stale: boolean; frameHost: string | null; frameId: number }
 let lastManga: MangaView | null = null; // what the card shows; its frame host is switched on with the site
 
 /** The frame with the reader (most pages; a canvas reader only if no frame has images), and the best title. */
@@ -428,7 +769,7 @@ function pickManga(replies: { frameId: number; value: MangaStatus | null }[]): M
   // The reader is often an iframe with a bare title; the top page usually names the chapter.
   const top = replies.find((r) => r.frameId === 0)?.value?.meta;
   const meta = top?.chapter ? top : best.value.meta.chapter ? best.value.meta : top?.series ? top : best.value.meta;
-  return { s: best.value, meta, stale: best.value.protocol !== MANGA_PROTOCOL, frameHost };
+  return { s: best.value, meta, stale: best.value.protocol !== MANGA_PROTOCOL, frameHost, frameId: best.frameId };
 }
 
 function mangaOn(): boolean { return mangaPending ?? mangaSiteOn; }
@@ -438,50 +779,211 @@ function paintMangaCard(m: MangaView | null) {
   const card = $('#manga-card');
   card.hidden = !m;
   // Manga pages are always 2x, so the upscale row does not apply (and the popup must fit without scrolling).
-  $('#upscale').hidden = !!m && m.s.kind === 'images';
+  $('#upscale').hidden = $('#upscale-head').hidden = !!m && m.s.kind === 'images';
   if (!m) return;
   const { s, meta } = m;
   const on = mangaOn();
-  const loaded = s.marks.length; // pages on the page now
-  const n = s.total; // pages in the chapter, from its page counter or still-loading slots
   card.classList.toggle('on', on && s.kind === 'images');
   card.classList.toggle('unsupported', s.kind === 'canvas' && !on); // an unsupported reader can still be switched off
   $<HTMLInputElement>('#manga-switch input').checked = on && s.kind === 'images';
   setText($('#manga-title'), meta.series ?? mangaHost);
-  $('#manga-title').title = s.reasons.length ? `Detected: ${s.reasons.join(' · ')}` : '';
+  setCutTip($('#manga-title'), s.reasons.length ? `Detected: ${s.reasons.join(' · ')}` : '');
   const tag = $('#manga-tag');
   tag.hidden = !meta.chapter;
-  setText(tag, `${meta.volume ? `vol ${meta.volume} · ` : ''}ch ${meta.chapter ?? ''}`);
+  setText(tag, mangaTag(meta));
+  setCutTip(tag);
   // One line: "9 pages · colour · 2000×2798"; source size and host in the tooltip.
   const upscaled = on && s.done > 0;
-  const size = s.size ? (upscaled ? `${s.size.w * 2}×${s.size.h * 2}` : `${s.size.w}×${s.size.h}`) : '';
-  const mode = s.grey === null ? '' : s.grey ? 'b&w' : 'colour';
   const nameEl = $('#manga-name');
-  setText(nameEl, s.kind === 'canvas' ? 'pages drawn on a canvas'
-    : [meta.chapterTitle, `${n} page${n === 1 ? '' : 's'}`, mode, size].filter(Boolean).join(' · '));
-  nameEl.title = [
+  setText(nameEl, mangaLine(m, upscaled));
+  setCutTip(nameEl, [
     s.size ? `${s.size.w}×${s.size.h}${upscaled ? ` → ${s.size.w * 2}×${s.size.h * 2}` : ''}` : '',
     s.imageHost ? `pages from ${s.imageHost}` : '',
-  ].filter(Boolean).join(' · ');
+  ].filter(Boolean).join(' · '));
 
-  const strip = $('#manga-pages');
-  while (strip.children.length > loaded) strip.lastElementChild!.remove();
-  while (strip.children.length < loaded) strip.append(document.createElement('i'));
-  s.marks.forEach((mk, i) => { strip.children[i].className = `${mk === 'todo' ? '' : mk}${i === s.current ? ' now' : ''}`; });
-
-  let cls = 'ok';
-  let text: string;
-  if (m.stale) { cls = 'warn'; text = '● Anime4Nerd was updated · reload this page to finish'; }
-  else if (s.kind === 'canvas') { cls = 'bad'; text = '● this reader draws pages on a canvas, so they cannot be upscaled yet'; }
+  // Not running: one short line that says why (the long reason is its tooltip). Running: the progress bar and the four counts.
+  let cls = '';
+  let text = '';
+  let why = '';
+  if (m.stale) { cls = 'warn'; text = '● Reload'; why = 'Anime4Nerd was updated: reload this page to finish'; }
+  else if (s.kind === 'canvas') { cls = 'bad'; text = NOT_POSSIBLE; why = 'This reader draws pages on a canvas, so they cannot be upscaled yet'; }
   else if (!on) { cls = 'off'; text = '● off · switch on to upscale this chapter'; }
   else if (!s.on) { cls = 'dim'; text = '● starting…'; }
-  else if (s.failed) { cls = 'warn'; text = `● ${s.done} / ${n} pages · ${s.failed} failed (${s.lastError ?? 'unknown error'})`; }
-  else if (s.done < loaded) text = `● upscaling · ${s.done} / ${n} pages · Alt+M compares`;
-  else if (loaded < n) text = `● ${s.done} / ${n} pages · the rest as they load`;
-  else text = `● ${n} / ${n} pages upscaled · Alt+M compares`;
   const state = $('#manga-state');
+  state.hidden = !text;
   state.className = `state ${cls}`;
   setText(state, text);
+  setCutTip(state, why);
+  $('#manga-prog').hidden = !!text;
+  setTip(card, text ? '' : 'Alt+M compares a page with its original');
+  if (text) return;
+  const states = pageStates(s, true);
+  const counts = countStates(states);
+  paintPageBar(states, counts);
+  for (const k of CELL_STATES) {
+    const box = $(`.mc-counts [data-k="${k}"]`);
+    setText(box.querySelector('b')!, String(counts[k]));
+    box.classList.toggle('zero', counts[k] === 0);
+  }
+  setTip($('.mc-counts [data-k="fail"]'), counts.fail ? `last error: ${s.lastError ?? 'unknown error'}` : '');
+}
+
+function mangaTag(meta: MangaMeta): string {
+  return `${meta.volume ? `vol ${meta.volume} · ` : ''}ch ${meta.chapter ?? ''}`;
+}
+
+/** The card's second line: "9 pages · colour · 2000×2798" (the output size once pages are upscaled). */
+function mangaLine({ s, meta }: MangaView, upscaled: boolean): string {
+  if (s.kind === 'canvas') return 'pages drawn on a canvas';
+  const n = s.total; // pages in the chapter, from its page counter or still-loading slots
+  const size = s.size ? (upscaled ? `${s.size.w * 2}×${s.size.h * 2}` : `${s.size.w}×${s.size.h}`) : '';
+  const colour = s.grey === null ? '' : s.grey ? 'b&w' : 'colour';
+  return [meta.chapterTitle, `${n} page${n === 1 ? '' : 's'}`, colour, size].filter(Boolean).join(' · ');
+}
+
+// --- pages of the chapter: one state each, shared by the card's bar and the page map --------
+const CELL_STATES = ['done', 'now', 'fail', 'wait'] as const;
+type CellState = typeof CELL_STATES[number];
+
+/**
+ * The state of every page of the chapter. The reader's own list (s.marks: the pages on the page
+ * now) can be shorter and start later (s.first; an older page script does not send it). Pages
+ * outside it, and every page while the site is off, are waiting.
+ */
+function pageStates(s: MangaStatus, on: boolean): CellState[] {
+  const first = s.first ?? 0;
+  return Array.from({ length: s.total }, (_, i) => {
+    const mark = on ? s.marks[i - first] : undefined;
+    return mark === 'done' || mark === 'now' || mark === 'fail' ? mark : 'wait';
+  });
+}
+
+function countStates(states: CellState[]): Record<CellState, number> {
+  const counts: Record<CellState, number> = { done: 0, now: 0, fail: 0, wait: 0 };
+  for (const st of states) counts[st] += 1;
+  return counts;
+}
+
+// The card is 312px wide inside: with 2px gaps, 80 blocks are still 1.9px each. More pages than
+// that get one segment per state, as wide as its share of the pages.
+const MC_MAX_BLOCKS = 80;
+const pageBar = $('#mc-pages');
+
+function paintPageBar(states: CellState[], counts: Record<CellState, number>) {
+  const shares = states.length > MC_MAX_BLOCKS;
+  const want = shares ? CELL_STATES.length : states.length;
+  if (pageBar.classList.contains('shares') !== shares) { pageBar.replaceChildren(); pageBar.classList.toggle('shares', shares); }
+  while (pageBar.children.length > want) pageBar.lastElementChild!.remove();
+  while (pageBar.children.length < want) pageBar.append(document.createElement('i'));
+  for (let i = 0; i < want; i += 1) {
+    const block = pageBar.children[i] as HTMLElement;
+    const st = shares ? CELL_STATES[i] : states[i];
+    if (block.className !== st) block.className = st;
+    if (!shares) continue;
+    block.style.flexGrow = String(counts[st]);
+    block.hidden = counts[st] === 0;
+  }
+  pageBar.setAttribute('aria-label', `${counts.done} of ${states.length} pages upscaled`);
+}
+
+// --- page map: one cell per page of the chapter, built once and recoloured in place --------
+const PMAP_COLS = 12; // as in popup.css
+const PMAP_ROWS = 3; // more rows than this scroll inside the map, so the popup stays within its height
+const UNKNOWN = '–';
+const CELL_WORD: Record<CellState, string> = { done: 'done', now: 'in progress', fail: 'failed', wait: 'waiting' };
+const pmap = {
+  panel: $('#pmap'), count: $('#pmap-count'), grid: $('#pmap-grid'), per: $('#pmap-per'), left: $('#pmap-left'),
+};
+
+/** Start to shown for one page; the GPU pass alone until a whole page has been timed. */
+function pageTime(s: MangaStatus): number | null { return s.pageMs ?? s.perPageMs ?? null; }
+
+function fmtTime(ms: number): string {
+  const sec = ms / 1000;
+  if (sec < 9.95) return `${sec.toFixed(1)} s`;
+  return sec < 59.5 ? `${Math.round(sec)} s` : `${Math.round(sec / 60)} min`;
+}
+
+function paintPageMap(m: MangaView | null) {
+  const show = !!m && m.s.kind === 'images';
+  pmap.panel.hidden = !show;
+  if (!show) return;
+  const { s } = m;
+  const wanted = mangaOn();
+  const on = wanted && s.on;
+  const n = s.total;
+  while (pmap.grid.children.length > n) pmap.grid.lastElementChild!.remove();
+  for (let i = pmap.grid.children.length; i < n; i += 1) {
+    const cell = document.createElement('button');
+    cell.type = 'button';
+    cell.tabIndex = -1;
+    cell.textContent = String(i + 1);
+    pmap.grid.append(cell);
+  }
+  pmap.grid.classList.toggle('long', n > PMAP_COLS * PMAP_ROWS);
+  // One tab stop for the whole map (the arrow keys move inside it): a long chapter must not put
+  // hundreds of Tab presses before the presets.
+  if (!pmap.grid.querySelector('[tabindex="0"]') && pmap.grid.firstElementChild) (pmap.grid.firstElementChild as HTMLElement).tabIndex = 0;
+  // Cells stand for chapter pages; the reader's own list (loaded pages, then those still loading)
+  // can be shorter and start later. An older page script sends neither figure.
+  const first = s.first ?? 0;
+  const reachable = s.marks.length + (s.loading ?? 0);
+
+  const states = pageStates(s, on);
+  const counts = countStates(states);
+  for (let i = 0; i < n; i += 1) {
+    const at = i - first;
+    const state = states[i];
+    const cell = pmap.grid.children[i] as HTMLElement;
+    const cls = state === 'wait' ? 'pcell' : `pcell ${state}`;
+    if (cell.className !== cls) cell.className = cls;
+    // A page the reader has not put on the page cannot be scrolled to: same look, not a control.
+    const there = at >= 0 && at < reachable;
+    const label = there ? `go to page ${i + 1}, ${wanted ? CELL_WORD[state] : 'off'}` : `page ${i + 1}, not loaded yet`;
+    if (cell.dataset.tip !== label) { cell.dataset.tip = label; cell.setAttribute('aria-label', label); }
+    const page = there ? String(at) : '';
+    if (cell.dataset.page !== page) {
+      cell.dataset.page = page;
+      if (there) cell.removeAttribute('aria-disabled'); else cell.setAttribute('aria-disabled', 'true');
+    }
+  }
+
+  setText(pmap.count, `● ${counts.done} / ${n}`);
+  pmap.count.className = `verdict ${!on ? 'dim' : counts.fail ? 'warn' : 'ok'}`;
+  const per = on ? pageTime(s) : null;
+  // Only pages the reader has on the page get upscaled, so only those count as left.
+  const left = s.marks.filter((mk) => mk === 'now' || mk === 'todo').length + (s.loading ?? 0);
+  setText(pmap.per, per === null ? UNKNOWN : fmtTime(per));
+  pmap.per.className = per === null ? '' : 'ok';
+  // Several pages are worked on at once, so pages times the time of one is the upper end.
+  setText(pmap.left, per === null || !left ? UNKNOWN : `~${fmtTime(per * left)}`);
+  setTip(pmap.left, per === null || !left ? '' : 'at most: several pages are worked on at once');
+}
+
+/** A cell scrolls the reader to its page. Buttons turn Enter and Space into clicks themselves. */
+function onPageMapClick(e: MouseEvent) {
+  const cell = (e.target as HTMLElement).closest<HTMLElement>('.pcell');
+  if (!cell || !cell.dataset.page || tabId === undefined || !lastManga) return;
+  const msg: Message = { type: 'a4k-manga-goto', index: Number(cell.dataset.page) };
+  chrome.tabs.sendMessage(tabId, msg, { frameId: lastManga.frameId }).catch(() => { /* the tab is gone or reloading */ });
+}
+
+/** Arrow keys walk the map: one cell left or right, one row up or down. */
+const PMAP_STEPS: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -PMAP_COLS, ArrowDown: PMAP_COLS };
+function onPageMapKey(e: KeyboardEvent) {
+  const step = PMAP_STEPS[e.key];
+  const from = Array.prototype.indexOf.call(pmap.grid.children, e.target);
+  if (step === undefined || from < 0) return;
+  e.preventDefault(); // the arrows would scroll the popup
+  (pmap.grid.children[from + step] as HTMLElement | undefined)?.focus();
+}
+
+/** The cell that has the focus is the map's one tab stop, so Tab comes back to it. */
+function onPageMapFocus(e: FocusEvent) {
+  const cell = (e.target as HTMLElement).closest<HTMLElement>('.pcell');
+  if (!cell) return;
+  for (const el of pmap.grid.querySelectorAll<HTMLElement>('[tabindex="0"]')) el.tabIndex = -1;
+  cell.tabIndex = 0;
 }
 
 const MANGA_LABELS = ['GPU / page', 'Pages', 'Output', 'Mode', 'Failed', 'Next'];
@@ -503,22 +1005,26 @@ function paintMangaPerf({ s }: MangaView) {
   ];
   tiles.forEach((el, i) => { setText(el, values[i][0]); el.className = values[i][1]; });
   // The whole page (read or download, GPU, encode) overlaps with the next pages, so it is the tooltip.
-  tiles[0].title = on && s.pageMs != null ? `whole page, start to shown: ${Math.round(s.pageMs)} ms` : '';
+  setTip(tiles[0], on && s.pageMs != null ? `whole page, start to shown: ${Math.round(s.pageMs)} ms` : '');
   let vc = 'dim';
   let vt = '● off';
   if (s.kind === 'canvas') vt = '● n/a';
   else if (on && s.failed) { vc = 'warn'; vt = '● partly'; }
   else if (on && loaded && s.done === loaded) { vc = 'ok'; vt = loaded < n ? '● waiting for pages' : '● done'; }
   else if (on) { vc = 'ok'; vt = '● upscaling'; }
+  perf.verdict.hidden = false;
   setText(perf.verdict, vt);
   perf.verdict.className = `verdict ${vc}`;
-  setText(perf.legend, s.kind === 'images' ? 'pages upscaled 2× · Mode C or C+A suits b&w' : 'not supported on this reader yet');
+  setTip(perf.verdict, s.kind === 'images' ? 'pages upscaled 2× · Mode C or C+A suits b&w' : 'not supported on this reader yet');
 }
 
 function initMangaCard(url: string | undefined) {
   if (__FIREFOX__) return;
   try { const u = new URL(url ?? ''); if (u.protocol === 'http:' || u.protocol === 'https:') mangaHost = u.hostname; } catch { /* no url */ }
   if (!mangaHost) return;
+  pmap.grid.addEventListener('click', onPageMapClick);
+  pmap.grid.addEventListener('keydown', onPageMapKey);
+  pmap.grid.addEventListener('focusin', onPageMapFocus);
   void loadMangaSites().then((sites) => { mangaSiteOn = sites[mangaHost] === true; void refresh(); });
   onMangaSitesChanged((sites) => {
     mangaSiteOn = sites[mangaHost] === true;
@@ -539,6 +1045,99 @@ function initMangaCard(url: string | undefined) {
   });
 }
 
+// --- mode suggestion (Chrome build only) -----------------------------------------------
+// Mode 'anime' on a manga reader, or mode 'manga' on a page with a video: "playing now" shows the
+// card the page would get, locked, with a button to switch, and the mode chip turns red. After a
+// switch a line confirms for a moment, with an undo. Esc hides either until the popup reopens.
+const PROMPT_DONE_MS = 4000;
+const prompt = {
+  box: $('#mp-preview'), title: $('#mp-title'), tag: $('#mp-tag'), name: $('#mp-name'), go: $('#mp-go'), auto: $('#mp-auto'),
+  done: $('#mp-done'), doneText: $('#mp-done-text'), undo: $('#mp-undo'),
+};
+let promptKind: Suggest | null = null; // the mode the preview offers
+let promptHidden = false; // Esc was pressed in this popup
+let promptDone: { mode: Mode; prev: Mode; timer: number } | null = null; // the confirmation after a switch
+
+/** Hiding a part of the suggestion must not drop the keyboard focus: it goes to the mode dropdown. */
+function showPromptPart(el: HTMLElement, on: boolean) {
+  if (!on && el.contains(document.activeElement)) modeBtn.focus();
+  el.hidden = !on;
+}
+
+function showPrompt(on: boolean) {
+  showPromptPart(prompt.box, on);
+  $('#modeChip').classList.toggle('mp-ind-frame', on);
+}
+
+function endPromptDone() {
+  if (!promptDone) return;
+  window.clearTimeout(promptDone.timer);
+  promptDone = null;
+  showPromptPart(prompt.done, false);
+}
+
+/** Shows or hides the preview; returns the mode it offers while it shows. */
+function paintPrompt(found: MangaView | null, videos: VideoInfo[]): Suggest | null {
+  if (promptDone && mode() !== promptDone.mode) endPromptDone(); // the mode was changed by hand meanwhile
+  // Only a reader whose pages can be upscaled is offered: the condition the manga card switches on.
+  // A page with both a reader and a video fits mode 'manga': no offer to switch back.
+  const reader = found?.s.kind === 'images';
+  promptKind = mode() === 'anime' && reader ? 'manga' : mode() === 'manga' && videos.length && !reader ? 'anime' : null;
+  if (!promptKind || promptHidden) { showPrompt(false); return null; }
+  let tag: string;
+  if (promptKind === 'manga') {
+    setText(prompt.title, found!.meta.series ?? mangaHost);
+    tag = found!.meta.chapter ? mangaTag(found!.meta) : '';
+    setText(prompt.name, mangaLine(found!, false));
+  } else {
+    // The largest video is the one being watched (others are previews or ads).
+    const v = videos.reduce((a, b) => (b.height > a.height ? b : a));
+    const label = labelFor(v);
+    setText(prompt.title, label.title);
+    tag = label.tag;
+    setText(prompt.name, [label.episodeName, v.height ? pLabel(v.height) : ''].filter(Boolean).join(' · '));
+  }
+  setText(prompt.tag, tag);
+  prompt.tag.hidden = !tag;
+  setTip(prompt.name, prompt.name.textContent ?? ''); // the line is cut when it is long
+  setText(prompt.go, `switch to ${promptKind}`);
+  showPrompt(true);
+  setCutTip(prompt.title);
+  setCutTip(prompt.tag);
+  return promptKind;
+}
+
+/** Switches the mode (live, through saveSettings) and confirms: "now in manga mode", with an undo. */
+async function promptSwitch(to: Mode) {
+  const prev = mode();
+  paintSettings(await saveSettings({ mode: to }));
+  if (promptDone) window.clearTimeout(promptDone.timer);
+  promptDone = { mode: to, prev, timer: window.setTimeout(() => { endPromptDone(); void refresh(); }, PROMPT_DONE_MS) };
+  setText(prompt.doneText, `now in ${to} mode`);
+  showPromptPart(prompt.done, true);
+  prompt.undo.focus();
+  showPrompt(false);
+  void refresh();
+}
+
+function initPrompt() {
+  if (__FIREFOX__) return;
+  prompt.go.addEventListener('click', () => { if (promptKind) void promptSwitch(promptKind); });
+  prompt.auto.addEventListener('click', () => { void promptSwitch('auto'); });
+  prompt.undo.addEventListener('click', () => {
+    if (!promptDone) return;
+    const { prev } = promptDone;
+    endPromptDone();
+    void saveSettings({ mode: prev }).then((s) => { paintSettings(s); void refresh(); });
+  });
+  for (const el of [prompt.box, prompt.done]) el.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    e.preventDefault(); // Esc would close the popup
+    e.stopPropagation();
+    if (promptDone) endPromptDone(); else { promptHidden = true; showPrompt(false); void refresh(); }
+  });
+}
+
 (async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   tabId = tab?.id;
@@ -547,6 +1146,7 @@ function initMangaCard(url: string | undefined) {
   void showWhatsNew();
   void showRateCard();
   initMangaCard(tab?.url);
+  initPrompt();
   paintSettings(await loadSettings());
   onSettingsChanged((s) => { paintSettings(s); void refresh(); });
   onSourcesChanged(() => { void refresh(); });

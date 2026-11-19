@@ -4,8 +4,8 @@
 import { buildFragmentSource } from './mpv-hooks';
 import { chainKey, type Settings } from './settings';
 import {
-  Anime4kRenderer, HOOK, MAX_OUTPUT_PX, MAX_TEXTURE_BYTES, RenderSource, RenderStats, SourceSizeChanged,
-  estimateBytes, orderedPasses, planChain, poolTextures,
+  Anime4kRenderer, HOOK, RenderSource, RenderStats, SourceSizeChanged,
+  orderedPasses, planChain, poolTextures,
 } from './chain';
 import { decodedSize, uploadSize } from './video-size';
 import { REDRAW, createFrameReuse, differenceRadius } from './gpu-reuse';
@@ -157,13 +157,11 @@ async function buildRenderer(
 
   const maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
   if (w * 2 > maxTex || h * 2 > maxTex) throw new Error("The upscaled video exceeds this GPU's texture limit.");
-  // Beyond 2x is optional: halve the scale until the output fits the texture limit, the output
-  // cap, and the memory budget for every intermediate texture of the chain.
+  // Beyond 2x is optional: halve the scale until the output fits the GPU's texture limit.
   let scale = wantScale;
   let passes = orderedPasses(settings, scale);
   const wantReuse = isVideo && frameReuse;
-  const tooBig = () => w * scale > maxTex || h * scale > maxTex || w * h * scale * scale > MAX_OUTPUT_PX
-    || estimateBytes(passes, w, h, scale, wantReuse) > MAX_TEXTURE_BYTES;
+  const tooBig = () => w * scale > maxTex || h * scale > maxTex;
   while (scale > 2 && tooBig()) { scale /= 2; passes = orderedPasses(settings, scale); }
 
   canvas.width = w * scale;

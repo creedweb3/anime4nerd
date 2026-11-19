@@ -7,7 +7,7 @@ const KEY = 'a4k-manga';
  * but a tab opened before an extension update still runs the old page script until it reloads;
  * a mismatch tells the popup to ask for a reload instead of misreading the reply.
  */
-export const MANGA_PROTOCOL = 3;
+export const MANGA_PROTOCOL = 5;
 export type MangaSites = Record<string, true>;
 
 export async function loadMangaSites(): Promise<MangaSites> {
