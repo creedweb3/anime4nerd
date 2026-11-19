@@ -17,6 +17,7 @@ import type { Preset, Settings } from './settings';
 export interface RenderStats {
   gpuMs: number | null; // GPU time of the last completed frame; null if timer queries are unsupported
   samples: number[]; // GPU ms of frames completed in the last 2 s, oldest first
+  busySamples: number[]; // without timer queries (Firefox): ms from submit until the GPU finished, last 2 s, sampled
   cpuMs: number; // JS time spent issuing the frame
   fps: number; // rendered frames per second (rolling)
   passes: number;
@@ -173,6 +174,44 @@ export function poolTextures(plan: Plan, ownFinal = false): { slotOf: number[]; 
     live.push(s.out);
   });
   return { slotOf, slots };
+}
+
+/**
+ * Relative GPU work of one pass per output pixel, from its shader: each `mat4(...)` is a 4x4
+ * multiply-add (16), each texture read 4, plus a fixed cost per pixel. #define lines are not code
+ * that runs. Only ratios between chains are used, so the units do not matter.
+ */
+export function passWeight(body: string): number {
+  const code = body.replace(/^\s*#define.*$/gm, '');
+  const macs = (code.match(/\bmat4\s*\(/g)?.length ?? 0) * 16;
+  const reads = code.match(/\bgo_\d+\s*\(|_tex(?:Off)?\s*\(|\btexture\s*\(/g)?.length ?? 0;
+  return macs + reads * 4 + 8;
+}
+
+const weightCache = new WeakMap<HookPass, number>();
+
+/**
+ * Per-frame work that does not grow with the chain (uploading the frame, frame-reuse marking),
+ * in passWeight units per source pixel. Fitted to measured 2x and 4x GPU times of three presets
+ * (A, C, B+B) on full-change video: without it the model over-predicted 4x by 17-25%, with it
+ * within 10% (test/render-e2e.mjs checks this).
+ */
+const FIXED_PER_SOURCE_PX = 12000;
+
+/**
+ * Relative GPU cost of the chain for these settings on a w x h source at `scale`: every pass's
+ * output pixels times its weight, plus the fixed per-frame work. The load cap (load-cap.ts)
+ * predicts a scale's GPU time from the time measured at another with the ratio of these costs.
+ */
+export function chainCost(s: Settings, w: number, h: number, scale: number): number {
+  const plan = planChain(orderedPasses(s, scale), w, h, scale);
+  let total = w * h * FIXED_PER_SOURCE_PX;
+  for (const step of plan.steps) {
+    let wt = weightCache.get(step.pass);
+    if (wt === undefined) { wt = passWeight(step.pass.body); weightCache.set(step.pass, wt); }
+    total += plan.sizes[step.out].w * plan.sizes[step.out].h * wt;
+  }
+  return total;
 }
 
 /** A playing video, or a still image (manga pages) that render() uploads the same way. */

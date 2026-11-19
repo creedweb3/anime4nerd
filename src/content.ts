@@ -14,12 +14,13 @@ import { uploadSize } from './video-size';
 import { FullscreenMenu } from './fullscreen-menu';
 import { EPISODE_SECONDS } from './rate-prompt';
 import { MangaMode, startManga } from './manga';
-import { Measured, OVERLOAD_AFTER_MS, allowedScale, average, overloaded } from './load-cap';
+import { CostOf, Measured, OVERLOAD_AFTER_MS, allowedScale, median, overloaded, pixelCost, stepDownTo } from './load-cap';
 
 type GpuModule = typeof import('./gpu');
 let gpuModule: Promise<GpuModule> | null = null;
+let loadedGpu: GpuModule | null = null; // gpu.js once loaded: the load cap's cost model reads it synchronously
 function loadGpu(): Promise<GpuModule> {
-  gpuModule ??= import(/* @vite-ignore */ chrome.runtime.getURL('gpu.js')) as Promise<GpuModule>;
+  gpuModule ??= (import(/* @vite-ignore */ chrome.runtime.getURL('gpu.js')) as Promise<GpuModule>).then((m) => (loadedGpu = m));
   return gpuModule;
 }
 
@@ -90,14 +91,16 @@ class VideoUpscaler {
   private scale = 2;
 
   // GPU-load cap (load-cap.ts): the highest scale this video may use after it ran too slow, the
-  // GPU time measured at the current scale, when the renderer was built, and the last check.
+  // median GPU time at each scale it ran at, when the renderer was built, and the last check.
   private loadCap: number | null = null;
-  private measured: Measured | null = null;
+  private measured: Measured = new Map();
   private builtAt = 0;
   private loadCheckAt = 0;
+  private framesDrawn = 0; // frames rendered by this video's renderers
+  private drawWindow: { t: number; drawn: number; decoded: number }[] = []; // see watchLoad
 
   // Source frame-rate estimate from requestVideoFrameCallback metadata.
-  private vfcSamples: { t: number; presented: number }[] = [];
+  private fpsSamples: { t: number; frames: number; media: number }[] = [];
 
   private sourceFps: number | null = null;
 
@@ -163,8 +166,9 @@ class VideoUpscaler {
     this.onUpdate = onUpdate;
     const sync = () => this.sync();
     // A new source or size: the load cap and the measured GPU time were for the old one.
-    const reset = () => { this.loadCap = null; this.measured = null; this.teardown(); this.sync(); };
-    const seeking = () => { this.stopLoop(); if (this.canvas) this.canvas.hidden = true; };
+    const reset = () => { this.loadCap = null; this.measured = new Map(); this.teardown(); this.sync(); };
+    // A seek decodes frames nobody draws (from the keyframe to the target): not dropped frames.
+    const seeking = () => { this.stopLoop(); this.drawWindow = []; if (this.canvas) this.canvas.hidden = true; };
     const report = () => { this.sync(); this.onUpdate(); };
     this.listeners = [
       ['loadeddata', report], ['playing', report], ['pause', () => { this.freezeSamples(); report(); }], ['seeked', sync], ['seeking', seeking],
@@ -248,7 +252,7 @@ class VideoUpscaler {
     // A settings change lifts the load cap; a different chain also costs differently, so its
     // measured time no longer predicts anything (a new upscale choice keeps it).
     if (chainChanged) this.loadCap = null;
-    if (chainKey(s) !== chainKey(this.settings)) this.measured = null;
+    if (chainKey(s) !== chainKey(this.settings)) this.measured = new Map();
     this.settings = s;
     if (chainChanged || this.mangaOnly()) this.teardown();
     this.sync();
@@ -371,6 +375,7 @@ class VideoUpscaler {
       if (gen !== this.generation) { r.destroy(); return; }
       this.renderer = r;
       this.builtAt = performance.now();
+      this.drawWindow = []; // frames skipped while the new renderer compiled are not its drops
       this.starting = false;
       this.layout();
       this.sync();
@@ -418,6 +423,7 @@ class VideoUpscaler {
     this.rendering = true;
     try {
       r.render();
+      this.framesDrawn += 1;
       if (gen !== this.generation) return;
       // Shown again (scrolled back, tab back, seek done): the redrawn subtitles must come back with it.
       if (this.canvas?.hidden) { this.canvas.hidden = false; this.paintCues(); }
@@ -441,7 +447,7 @@ class VideoUpscaler {
           // video, so it polls instead (see nextDecodedFrame).
           this.usesVfc = !__FIREFOX__ && typeof v.requestVideoFrameCallback === 'function';
           this.frameHandle = this.usesVfc
-            ? v.requestVideoFrameCallback((_now, meta) => { this.frameHandle = null; this.noteSourceFrame(meta.presentedFrames); this.frame(); })
+            ? v.requestVideoFrameCallback(() => { this.frameHandle = null; this.noteSourceFrame(); this.frame(); })
             : this.nextDecodedFrame();
         }
       }
@@ -472,10 +478,10 @@ class VideoUpscaler {
   /** Keep measuring the video's frame rate while Anime4K is off (one callback per frame, no drawing). */
   private probeFps() {
     if (this.fpsProbe !== null || this.enabled || typeof this.video.requestVideoFrameCallback !== 'function') return;
-    const tick = (_now: number, meta: VideoFrameCallbackMetadata) => {
+    const tick = () => {
       this.fpsProbe = null;
       if (this.enabled) return;
-      this.noteSourceFrame(meta.presentedFrames);
+      this.noteSourceFrame();
       if (!this.video.paused && !this.video.ended) this.fpsProbe = this.video.requestVideoFrameCallback(tick);
     };
     this.fpsProbe = this.video.requestVideoFrameCallback(tick);
@@ -485,16 +491,23 @@ class VideoUpscaler {
     if (this.fpsProbe !== null) { this.video.cancelVideoFrameCallback(this.fpsProbe); this.fpsProbe = null; }
   }
 
-  /** `frames`: any counter that rises by one per source frame (rVFC presentedFrames, decoded frames). */
-  private noteSourceFrame(frames: number) {
+  /**
+   * The video's own frame rate: frames the decoder produced (shown or dropped) per second of video
+   * time, over the last 2 s. Frames we skip, a slow page, or the playback speed do not change it,
+   * and Chrome and Firefox both report these counters.
+   */
+  private noteSourceFrame() {
     const now = performance.now();
-    this.vfcSamples.push({ t: now, presented: frames });
-    while (this.vfcSamples.length && now - this.vfcSamples[0].t > 2000) this.vfcSamples.shift();
-    const a = this.vfcSamples[0];
-    const b = this.vfcSamples[this.vfcSamples.length - 1];
-    if (a && b && b.t - a.t > 500 && b.presented > a.presented) {
-      this.sourceFps = ((b.presented - a.presented) * 1000) / (b.t - a.t);
-    }
+    const frames = this.video.getVideoPlaybackQuality?.().totalVideoFrames ?? 0;
+    const media = this.video.currentTime;
+    const last = this.fpsSamples.at(-1);
+    // A seek, a loop or a new source jumps the video time or the counter: start over.
+    if (last && (media < last.media || frames < last.frames || media - last.media > ((now - last.t) / 1000) * 4 + 0.5)) this.fpsSamples = [];
+    this.fpsSamples.push({ t: now, frames, media });
+    while (this.fpsSamples.length && now - this.fpsSamples[0].t > 2000) this.fpsSamples.shift();
+    const a = this.fpsSamples[0];
+    const b = this.fpsSamples[this.fpsSamples.length - 1];
+    if (a && b && b.media - a.media > 0.5 && b.frames > a.frames) this.sourceFps = (b.frames - a.frames) / (b.media - a.media);
   }
 
   /** Render on the first animation frame after the decoder has produced a new frame. */
@@ -505,7 +518,7 @@ class VideoUpscaler {
       const now = decoded();
       if (now === last) { this.frameHandle = requestAnimationFrame(tick); return; }
       this.frameHandle = null;
-      this.noteSourceFrame(now);
+      this.noteSourceFrame();
       this.frame();
     };
     return requestAnimationFrame(tick);
@@ -695,26 +708,51 @@ class VideoUpscaler {
   relayout() { this.layout(); }
 
   /**
-   * While playing, at most every LOAD_CHECK_MS: note the GPU time at this scale (it predicts the
-   * cost of a higher one), and above 2x step down to half once a renderer that has run for
-   * OVERLOAD_AFTER_MS spent the last 2 s over the frame limit. The cap holds for this video
-   * until a setting or the source changes, so the scale does not bounce.
+   * While playing, at most every LOAD_CHECK_MS: note the median GPU time at this scale (it
+   * predicts the cost of any other), and above 2x, once a renderer has run for OVERLOAD_AFTER_MS,
+   * step down when the last 2 s dropped frames because of the GPU: straight to the highest scale
+   * predicted to fit. The cap holds for this video until a setting or the source changes, so the
+   * scale does not bounce.
    */
   private watchLoad(r: Anime4kRenderer) {
     const now = performance.now();
     if (now - this.loadCheckAt < LOAD_CHECK_MS || this.video.paused) return;
     this.loadCheckAt = now;
     const s = r.stats();
-    if (s.samples.length >= MIN_LOAD_SAMPLES) this.measured = { scale: this.scale, ms: average(s.samples) };
-    if (this.scale <= 2 || now - this.builtAt < OVERLOAD_AFTER_MS || !overloaded(s, this.sourceFps)) return;
-    this.loadCap = this.scale / 2;
+    // GPU time per frame: timer queries, or without them (Firefox) fence timing.
+    const gpu = s.timerSupported ? s.samples : s.busySamples;
+    if (gpu.length >= MIN_LOAD_SAMPLES) this.measured = new Map(this.measured).set(this.scale, median(gpu));
+    // Frames drawn against frames the decoder produced, over the last 2 s of playback.
+    const decoded = this.video.getVideoPlaybackQuality?.().totalVideoFrames ?? 0;
+    this.drawWindow.push({ t: now, drawn: this.framesDrawn, decoded });
+    while (this.drawWindow.length && now - this.drawWindow[0].t > 2000 + LOAD_CHECK_MS) this.drawWindow.shift();
+    const a = this.drawWindow[0];
+    const dDecoded = decoded - a.decoded;
+    const drawn = now - a.t >= 1500 && dDecoded >= MIN_LOAD_SAMPLES ? Math.min(1, (this.framesDrawn - a.drawn) / dDecoded) : null;
+    const budget = this.frameBudget();
+    if (this.scale <= 2 || now - this.builtAt < OVERLOAD_AFTER_MS || !overloaded({ drawn, gpuMs: gpu, budgetMs: budget })) return;
+    this.loadCap = stepDownTo(this.scale, this.measured, budget, this.costOf());
     // Rebuilt after this frame finishes, not inside it.
     window.setTimeout(() => { if (this.renderer === r) { this.teardown(); this.sync(); } }, 0);
   }
 
+  /** Time per source frame at the current playback speed; null while the frame rate is unknown. */
+  private frameBudget(): number | null {
+    return this.sourceFps ? 1000 / (this.sourceFps * (this.video.playbackRate || 1)) : null;
+  }
+
+  /** Relative GPU cost of this video's chain at a scale (chain.ts chainCost, once gpu.js is loaded). */
+  private costOf(): CostOf {
+    const gpu = loadedGpu;
+    if (!gpu) return pixelCost;
+    const { w, h } = uploadSize(this.video);
+    return (scale) => gpu.chainCost(this.settings, w, h, scale);
+  }
+
   /** The scale to run: the wanted one, held down by the GPU-load cap (load-cap.ts). */
   private wantedScale(): number {
-    return allowedScale(this.rawScale(), this.measured, this.sourceFps ? 1000 / this.sourceFps : null, this.loadCap);
+    // Judged against the scale running now (or last run): only a step up is predicted.
+    return allowedScale(this.rawScale(), this.scale, this.measured, this.frameBudget(), this.loadCap, this.costOf());
   }
 
   /** Manual 2x-8x, or in auto 4x (a second x2 pass) only when the picture is drawn at more than 2x the source in device pixels. */

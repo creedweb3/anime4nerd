@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dist = path.join(root, 'dist');
@@ -128,6 +128,48 @@ try {
   await page.waitForTimeout(1500);
   const lifted = (await list())?.[0];
   check('a settings change lifts the load cap', lifted?.loadCapped === false, `loadCapped ${lifted?.loadCapped}, ${lifted?.stats?.outputWidth}`);
+
+  // Prediction accuracy: the cost model (chain.ts chainCost) predicts 4x from the GPU time
+  // measured at 2x; compare with the real 4x time on the same full-change video, per preset.
+  const costFile = path.join(work, 'chain-cost.mjs');
+  execFileSync(process.execPath, [path.join(root, 'node_modules', 'esbuild', 'bin', 'esbuild'), path.join(root, 'src', 'chain.ts'),
+    '--bundle', '--platform=node', '--format=esm', '--loader:.glsl=text', `--outfile=${costFile}`, '--log-level=error']);
+  const { chainCost } = await import(pathToFileURL(costFile).href);
+  const medianOf = (xs) => { const s = [...xs].sort((a, b) => a - b); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+  const timeAt = async (preset, upscale) => {
+    await sw.evaluate(async ([p, u]) => {
+      const cur = (await chrome.storage.sync.get('anime4k')).anime4k ?? {};
+      await chrome.storage.sync.set({ anime4k: { ...cur, preset: p, upscale: u } });
+    }, [preset, upscale]);
+    await page.waitForTimeout(4500); // rebuild, settle, then 2 s of samples
+    const v = (await list())?.[0];
+    return { ms: v?.stats?.samples?.length ? medianOf(v.stats.samples) : null, width: v?.stats?.outputWidth };
+  };
+  const errors = [];
+  // A, C and B+B were used to fit the model's fixed cost (chain.ts); A+A and C+A were not.
+  for (const preset of ['A', 'C', 'BB', 'AA', 'CA']) {
+    const s = { mode: 'auto', preset, darkenLines: false, thinLines: false, upscale: '4x' };
+    const at2 = await timeAt(preset, '2x');
+    const at4 = await timeAt(preset, '4x');
+    if (!at2.ms || !at4.ms || at4.width !== 960 * 4) { errors.push({ preset, skipped: true }); continue; }
+    const model = at2.ms * chainCost(s, 960, 540, 4) / chainCost(s, 960, 540, 2);
+    const flat = at2.ms * 4;
+    errors.push({ preset, at2: +at2.ms.toFixed(1), at4: +at4.ms.toFixed(1), model: +model.toFixed(1), flat: +flat.toFixed(1),
+      modelErr: Math.abs(model - at4.ms) / at4.ms, flatErr: Math.abs(flat - at4.ms) / at4.ms });
+  }
+  const measuredRows = errors.filter((e) => !e.skipped);
+  // A lightly loaded GPU clocks down, so the 2x time is inflated and predictions run high (the
+  // safe side: a step up that is too slow is undone by its drops). What must hold: the model is
+  // never optimistic by more than 10%, and always beats a flat 4x per doubling.
+  const under = (e) => (e.at4 - e.model) / e.at4; // > 0: predicted less than measured
+  check('cost model predicts 4x from 2x never more than 10% low, and closer than a flat 4x, for presets it was and was not fitted on', measuredRows.length >= 4
+    && measuredRows.every((e) => under(e) <= 0.1 && e.modelErr < e.flatErr),
+    errors.map((e) => e.skipped ? `${e.preset}: skipped` : `${e.preset}: 2x ${e.at2} ms, 4x ${e.at4} ms, model ${e.model} (${(e.modelErr * 100).toFixed(0)}%), flat ${e.flat} (${(e.flatErr * 100).toFixed(0)}%)`).join(' | '));
+  await sw.evaluate(async () => {
+    const cur = (await chrome.storage.sync.get('anime4k')).anime4k ?? {};
+    await chrome.storage.sync.set({ anime4k: { ...cur, preset: 'A', upscale: '2x' } });
+  });
+
   await page.goto(`http://${host}/`);
   await page.waitForSelector('canvas.a4k-canvas:not([hidden])', { timeout: 30000 });
 

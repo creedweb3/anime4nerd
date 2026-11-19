@@ -11,10 +11,16 @@ import { decodedSize, uploadSize } from './video-size';
 import { REDRAW, createFrameReuse, differenceRadius } from './gpu-reuse';
 
 export type { Anime4kRenderer, RenderSource, RenderStats } from './chain';
-export { SourceSizeChanged } from './chain';
+export { SourceSizeChanged, chainCost } from './chain';
 
 /** How often render() re-checks the frame size and GL error state (each check stalls the GPU briefly). */
 const HEALTH_CHECK_MS = 1000;
+
+/** Without GPU timer queries (Firefox): every this many frames, time one with a fence instead. */
+const FENCE_TIME_EVERY = 3;
+
+/** A fence not signalled after this long is given up (its frame is not timed). */
+const FENCE_GIVE_UP_MS = 1000;
 
 /** Frame reuse: half-size (source pixels) of the window read back to measure a chain's reach. */
 const REACH_WINDOW = 128;
@@ -361,6 +367,23 @@ async function buildRenderer(
   const frameTimes: number[] = [];
   let lastHealthCheck = -Infinity;
   let lastFence: WebGLSync | null = null; // signalled when the GPU has finished the last frame
+  // Without timer queries (Firefox): time from submitting a frame until the GPU finished it,
+  // polled on a 0 ms timer (a few ms of resolution), for every FENCE_TIME_EVERY-th frame.
+  const busyRecent: { t: number; ms: number }[] = [];
+  let framesSubmitted = 0;
+
+  function timeWithFence(start: number) {
+    const fence = gl!.fenceSync(gl!.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    if (!fence) return;
+    const poll = () => {
+      if (destroyed || gl!.isContextLost()) return;
+      const now = performance.now();
+      if (gl!.getSyncParameter(fence, gl!.SYNC_STATUS) === gl!.SIGNALED) busyRecent.push({ t: now, ms: now - start });
+      else if (now - start < FENCE_GIVE_UP_MS) { setTimeout(poll, 0); return; }
+      gl!.deleteSync(fence);
+    };
+    setTimeout(poll, 0);
+  }
 
   function busy(): boolean {
     if (!lastFence || destroyed || gl!.isContextLost()) return false;
@@ -391,9 +414,11 @@ async function buildRenderer(
     const now = performance.now();
     while (frameTimes.length && now - frameTimes[0] > 2000) frameTimes.shift();
     while (recent.length && now - recent[0].t > 2000) recent.shift();
+    while (busyRecent.length && now - busyRecent[0].t > 2000) busyRecent.shift();
     return {
       gpuMs: lastGpuMs,
       samples: recent.map((r) => r.ms),
+      busySamples: busyRecent.map((r) => r.ms),
       cpuMs: lastCpuMs,
       fps: frameTimes.length / 2,
       passes: compiled.length,
@@ -463,6 +488,7 @@ async function buildRenderer(
     if (query) { gl!.endQuery(timerExt!.TIME_ELAPSED_EXT); pendingQueries.push(query); }
     if (lastFence) gl!.deleteSync(lastFence);
     lastFence = gl!.fenceSync(gl!.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    if (!timerExt && ++framesSubmitted % FENCE_TIME_EVERY === 0) timeWithFence(t0);
     gl!.flush();
     lastCpuMs = performance.now() - t0;
     frameTimes.push(t0);
