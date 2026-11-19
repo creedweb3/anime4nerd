@@ -98,6 +98,26 @@ interface PageState {
 
 export interface MangaMode { refresh(): void; stop(): void; status(): MangaStatus; goto(index: unknown): void; isReader(): boolean }
 
+/** How far up a clipping box is looked for: a sprite's crop box is its parent or close to it. */
+const CLIP_DEPTH = 4;
+/** A box showing under this share of an image crops it to a part (a sprite sheet), not a page. */
+const CLIP_SHARE = 0.25;
+
+/**
+ * False for images nobody sees as a page: hidden (visibility, opacity 0) or cropped by a much
+ * smaller box, as a video player's seek-preview sprite sheet (a big grid of thumbnails) is.
+ */
+function shown(img: HTMLImageElement, r: DOMRect): boolean {
+  if (img.checkVisibility && !img.checkVisibility({ visibilityProperty: true, opacityProperty: true })) return false;
+  let el = img.parentElement;
+  for (let i = 0; el && i < CLIP_DEPTH; i++, el = el.parentElement) {
+    if (getComputedStyle(el).overflow === 'visible') continue;
+    const b = el.getBoundingClientRect();
+    if (b.width * b.height < r.width * r.height * CLIP_SHARE) return false;
+  }
+  return true;
+}
+
 function textOf(sel: string): string {
   const el = document.querySelector(sel);
   return (el instanceof HTMLMetaElement ? el.content : el?.textContent ?? '').trim();
@@ -158,7 +178,7 @@ export function startManga(getSettings: () => Settings, loadGpu: () => Promise<G
     for (const img of Array.from(document.images).slice(0, MAX_IMAGES)) {
       const st = states.get(img);
       const r = img.getBoundingClientRect();
-      if (!r.width) continue;
+      if (!r.width || !shown(img, r)) continue;
       // Not loaded yet (lazy loading): counted as a slot, not as a page. A tracked page keeps
       // counting while its swapped source loads, at its original size.
       if (!st && (!img.complete || !img.naturalWidth)) {

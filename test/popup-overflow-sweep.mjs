@@ -634,7 +634,7 @@ try {
     await popup.evaluate(() => { document.body.scrollTop = document.body.scrollHeight; });
     await popup.waitForTimeout(300);
     await snap('5 videos, popup scrolled to the bottom', { noBottom: true, detail: (m) => `scrollTop ${m.ui.scrollTop}, side gaps left/right ${m.sideGaps}, body width ${m.bodyW}` });
-    await tipRow('5 videos, scrolled to the bottom: tooltip of the 32× pill (flips above)', '[data-upscale="32x"]');
+    await tipRow('5 videos, scrolled to the bottom: tooltip of the 8× pill (flips above)', '[data-upscale="8x"]');
     await popup.evaluate(() => { document.body.scrollTop = 0; });
     await tipRow('5 videos: tooltip of an iframe video\'s info line (frame host and stream host)', '#sources .source:nth-child(3)');
   });
@@ -706,9 +706,9 @@ try {
   });
   await scenario('info line with cap note', async () => {
     for (const [upscale, src, host, label] of [
-      ['auto', '/v.mp4', H1, '360p, upscale auto, host 127.0.0.1'], ['32x', '/v1080.mp4', H1, '1080p, upscale 32×, host 127.0.0.1'],
-      ['32x', '/v1080.mp4', `${SITE_HOST}:${P1}`, `1080p, upscale 32×, host ${SITE_HOST}`], ['32x', '/v.mp4', `${SITE_HOST}:${P1}`, `360p, upscale 32×, host ${SITE_HOST}`],
-      ['16x', '/v.mp4', `${SITE_HOST}:${P1}`, `360p, upscale 16×, host ${SITE_HOST}`], ['8x', '/v.mp4', `${SITE_HOST}:${P1}`, `360p, upscale 8×, host ${SITE_HOST}`],
+      ['auto', '/v.mp4', H1, '360p, upscale auto, host 127.0.0.1'], ['8x', '/v1080.mp4', H1, '1080p, upscale 8×, host 127.0.0.1'],
+      ['8x', '/v1080.mp4', `${SITE_HOST}:${P1}`, `1080p, upscale 8×, host ${SITE_HOST}`], ['8x', '/v.mp4', `${SITE_HOST}:${P1}`, `360p, upscale 8×, host ${SITE_HOST}`],
+      ['8x', '/v.mp4', `${SITE_HOST}:${P1}`, `360p, upscale 8×, host ${SITE_HOST}`],
     ]) {
       await setSettings({ upscale, preset: 'A' });
       const t = await watchOn(addPage(watchHtml({ videos: [video(src, 960, 540)] }), { host }));
@@ -740,7 +740,7 @@ try {
   // =============================================================================================
   // Heavy load: performance tiles, graph, header chips
   // =============================================================================================
-  const HEAVY = { preset: 'CA', upscale: '32x', darkenLines: true, thinLines: true };
+  const HEAVY = { preset: 'CA', upscale: '8x', darkenLines: true, thinLines: true };
   const graph = (m) => `${ui(['tiles', 'verdict', 'chips', 'legend', 'metas'])(m)} bars ${m.ui.barsH}px tall, ${m.ui.over} of 48 red, limit line at ${m.ui.limit}`;
   await scenario('heavy GPU load', async () => {
     await setSettings(HEAVY);
@@ -748,7 +748,7 @@ try {
     const t = await watchOn(heavy, { timeout: 40000 });
     await popup.waitForTimeout(5000);
     await openPopup(t);
-    await snap('heavy: real 1440p60 video, preset C+A, 32×, darken + thin lines, after 5 s', { detail: graph });
+    await snap('heavy: real 1440p60 video, preset C+A, 8×, darken + thin lines, after 5 s', { detail: graph });
     const alt = Array.from({ length: 48 }, (_, i) => (i % 2 ? 950 : 2));
     await openPopup(t, { stats: { samples: alt, gpuMs: 123.4, fps: 144, sourceFps: 23.976, outputWidth: 7680, outputHeight: 4320 }, video: { sourceFps: 23.976, playing: true } });
     await snap('[stub] heavy graph: bars alternate 2 and 950 ms, gpu 123.4 ms, 144 fps, output 7680×4320', { detail: graph });
@@ -1036,8 +1036,8 @@ try {
     await openPopup(t);
     await snap(`video in a cross-origin iframe, stream from a ${STREAM_HOST.length + 6}-char host (real state: ${vs?.[0]?.status ?? 'unknown'})`, { detail: ui(['states', 'metas']) });
     await tipRow('tooltip of the info line: "player frame: <host> · stream: <long host>"', '#sources .source .meta');
-    await tipRow('tooltip of the 32× pill (bottom right, 94 chars)', '[data-upscale="32x"]');
-    await tipRow('tooltip of the 32× pill by keyboard focus', '[data-upscale="32x"]', { focus: true });
+    await tipRow('tooltip of the 8× pill (bottom right, 94 chars)', '[data-upscale="8x"]');
+    await tipRow('tooltip of the 8× pill by keyboard focus', '[data-upscale="8x"]', { focus: true });
   });
 
   // =============================================================================================

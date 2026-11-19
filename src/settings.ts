@@ -3,8 +3,8 @@ import type { RateAction } from './rate-prompt';
 export type Preset = 'A' | 'B' | 'C' | 'AA' | 'BB' | 'CA';
 
 /** 'auto' picks 4x only when the video is drawn at more than 2x its source size. */
-export type Upscale = 'auto' | '2x' | '4x' | '8x' | '16x' | '32x';
-const UPSCALES: Upscale[] = ['auto', '2x', '4x', '8x', '16x', '32x'];
+export type Upscale = 'auto' | '2x' | '4x' | '8x';
+const UPSCALES: Upscale[] = ['auto', '2x', '4x', '8x'];
 
 /** The factor a manual choice asks for; null for auto. */
 export function requestedScale(u: Upscale): number | null {
@@ -24,10 +24,13 @@ export function frameVerdict(renderedFps: number, sourceFps: number | null): Fra
   return kept >= 0.97 ? 'ok' : kept >= 0.9 ? 'warn' : 'bad';
 }
 
-/** " · 16× capped: GPU limit" when the renderer ran below the manual choice, else ''. */
-export function capNote(u: Upscale, actualScale: number): string {
+/**
+ * " · 8× capped: GPU load" when the renderer ran below the manual choice because the GPU could not
+ * keep up (load-cap.ts), " · 8× capped: GPU limit" when the output did not fit its texture limit, else ''.
+ */
+export function capNote(u: Upscale, actualScale: number, byLoad = false): string {
   const want = requestedScale(u);
-  return want !== null && actualScale < want ? ` · ${want}× capped: GPU limit` : '';
+  return want !== null && actualScale < want ? ` · ${want}× capped: ${byLoad ? 'GPU load' : 'GPU limit'}` : '';
 }
 
 /**
@@ -76,7 +79,8 @@ export function normalize(raw: unknown): Settings {
     preset: PRESETS.some((p) => p.value === t.preset) ? (t.preset as Preset) : 'A',
     darkenLines: t.darkenLines === true,
     thinLines: t.thinLines === true,
-    upscale: UPSCALES.includes(t.upscale as Upscale) ? (t.upscale as Upscale) : 'auto',
+    // 16x and 32x were removed (impractical): an old choice of either becomes the largest left.
+    upscale: UPSCALES.includes(t.upscale as Upscale) ? (t.upscale as Upscale) : ['16x', '32x'].includes(t.upscale as string) ? '8x' : 'auto',
   };
 }
 
@@ -169,6 +173,7 @@ export interface VideoInfo {
   enabled: boolean;
   status: Status;
   message: string;
+  loadCapped?: boolean; // running below the wanted scale because the GPU could not keep up (load-cap.ts)
   stats: {
     gpuMs: number | null; samples: number[]; cpuMs: number; fps: number; passes: number;
     textureBytes: number; outputWidth: number; outputHeight: number; timerSupported: boolean;

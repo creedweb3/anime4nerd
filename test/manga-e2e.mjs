@@ -98,6 +98,25 @@ const pages = await serve((req, res) => {
       </script></body>`);
     return;
   }
+  if (req.url.startsWith('/player')) {
+    // A video player like strm.cx (Vidstack): "Next Episode" button and a seek-preview sprite sheet,
+    // a 3200x4500 grid of 160x90 thumbnails drawn at full width inside a small clipping box. Hidden
+    // until the seek bar is hovered (?shown=1: hovered).
+    const shown = req.url.includes('shown=1');
+    res.end(`<!doctype html><title>Dragon Ball Episode 3</title><body style="margin:0;background:#000">
+      <video src="/v.mp4" muted style="width:100%;display:block"></video>
+      <button aria-label="Previous Episode">‹</button><button aria-label="Next Episode">›</button>
+      <div style="position:absolute;left:300px;top:500px;width:160px;height:90px;overflow:hidden;${shown ? '' : 'visibility:hidden'}">
+        <img id="sprite" style="width:1796px;max-width:none;position:absolute;left:-200px;top:-90px">
+      </div>
+      <script>
+        const c = document.createElement('canvas'); c.width = 3200; c.height = 4500;
+        const g = c.getContext('2d');
+        for (let y = 0; y < 4500; y += 90) for (let x = 0; x < 3200; x += 160) { g.fillStyle = 'hsl(' + ((x + y) % 360) + ',40%,40%)'; g.fillRect(x, y, 160, 90); }
+        c.toBlob((b) => { document.getElementById('sprite').src = URL.createObjectURL(b); }, 'image/jpeg');
+      </script></body>`);
+    return;
+  }
   if (req.url.includes('/swap/')) {
     res.end(`<!doctype html><title>Swap Scans Chapter 4 - MangaReader</title><body style="margin:0;background:#222">
       <div style="width:900px"><img id="s1" src="${imgBase}/swap.jpg" style="width:100%"><img id="s2" src="${imgBase}/colour.jpg" style="width:100%"></div></body>`);
@@ -312,6 +331,16 @@ try {
   check('ordinary page on a switched-on site is left alone', blogSrcs.every((s) => !s.startsWith('blob:')));
   const blogStatus = await statusOf(`${base}/blog/kyoto`);
   check('ordinary page is not detected as manga', blogStatus?.kind === null, JSON.stringify({ kind: blogStatus?.kind }));
+  // A video player's seek-preview sprite sheet is not a manga page, hidden or shown (strm.cx false detection).
+  for (const q of ['', '?shown=1']) {
+    const pl = await ctx.newPage();
+    await pl.goto(`${base}/player${q}`);
+    await pl.waitForFunction(() => document.getElementById('sprite').naturalWidth === 3200, null, { timeout: 10000 });
+    await pl.waitForTimeout(3500);
+    const st = await statusOf(`${base}/player${q}`);
+    check(`video player with a ${q ? 'shown' : 'hidden'} seek-preview sprite sheet and "Next Episode" is not detected as manga`, st?.kind === null, JSON.stringify({ kind: st?.kind, reasons: st?.reasons }));
+    await pl.close();
+  }
   // ...and its popup is the normal anime popup, with no manga card, labels or tip.
   const blogTab = await sw.evaluate(async (u) => (await chrome.tabs.query({ url: u }))[0].id, `${base}/blog/kyoto`);
   const popup2 = await ctx.newPage();
@@ -736,11 +765,11 @@ try {
   await popupT.waitForTimeout(800);
   await popupT.hover('#report');
   await popupT.waitForTimeout(700);
-  await popupT.hover('[data-upscale="32x"]');
+  await popupT.hover('[data-upscale="8x"]');
   await popupT.waitForTimeout(700);
   const tNext = await popupT.evaluate(() => {
     const r = document.getElementById('tip').getBoundingClientRect();
-    const pill = document.querySelector('[data-upscale="32x"]').getBoundingClientRect();
+    const pill = document.querySelector('[data-upscale="8x"]').getBoundingClientRect();
     return { width: Math.round(r.width), right: r.right, bodyRight: document.body.getBoundingClientRect().right, gap: Math.round((pill.top - r.bottom) * 10) / 10 };
   });
   await popupT.close();
@@ -791,9 +820,10 @@ try {
       pillLines: pills.map((el) => getComputedStyle(el).borderTopWidth).join(','),
       // Effects: each exactly one preset tile wide, on the tiles' columns, text on the left.
       effects: effects.map((el, i) => `${r1(box(el).left - tiles[i].left)}/${r1(box(el).width - tiles[i].width)}/${getComputedStyle(el).textAlign}`).join(','),
-      // Upscale: six equal boxes across the panel on a 6px gap; no label in the row.
+      // Upscale: four equal boxes across the panel on a 6px gap; no label in the row.
+      upscaleCount: upscale.length,
       upscaleWidths: [...new Set(upscale.map((b) => r1(b.width)))], upscaleGaps: [...new Set(upscale.slice(1).map((b, i) => r1(b.left - upscale[i].right)))],
-      upscaleSpan: [r1(upscale[0].left - tiles[0].left), r1(tiles[2].right - upscale[5].right)], upscaleRow: new Set(upscale.map((b) => b.top)).size,
+      upscaleSpan: [r1(upscale[0].left - tiles[0].left), r1(tiles[2].right - upscale.at(-1).right)], upscaleRow: new Set(upscale.map((b) => b.top)).size,
       upscaleLabel: document.querySelectorAll('#upscale .pills-label, #upscale span').length,
       heads: heads.map((el) => el.textContent).join(','),
       headLook: heads.every((el) => { const cs = getComputedStyle(el); return cs.fontSize === panelHead.fontSize && cs.color === panelHead.color && cs.textTransform === 'uppercase' && cs.letterSpacing === panelHead.letterSpacing; }),
@@ -809,7 +839,7 @@ try {
   check('no "Episode N" filler: the quality stands beside the tag, the info line has the host and the stream host', vOn.tag === 'E3' && /^360p → \S+ \(\d×\)$/.test(vOn.name)
     && vOn.meta === `${new URL(base).host} · stream ${new URL(base).host}`, JSON.stringify({ tag: vOn.tag, name: vOn.name, meta: vOn.meta }));
   check('preset panel: no separator lines; effect buttons one tile wide on the tiles\' columns, text on the left', vOn.pillLines === '0px,0px' && vOn.effects === '0/0/left,0/0/left', JSON.stringify({ lines: vOn.pillLines, effects: vOn.effects }));
-  check('preset panel: six equal upscale boxes across the full width on a 6px gap, no inline label', vOn.upscaleWidths.length === 1 && vOn.upscaleGaps.length === 1 && vOn.upscaleGaps[0] === 6
+  check('preset panel: four equal upscale boxes (auto, 2×, 4×, 8×) across the full width on a 6px gap, no inline label', vOn.upscaleCount === 4 && vOn.upscaleWidths.length === 1 && vOn.upscaleGaps.length === 1 && vOn.upscaleGaps[0] === 6
     && vOn.upscaleSpan.join() === '0,0' && vOn.upscaleRow === 1 && vOn.upscaleLabel === 0, JSON.stringify({ widths: vOn.upscaleWidths, gaps: vOn.upscaleGaps, span: vOn.upscaleSpan, label: vOn.upscaleLabel }));
   check('preset panel: small headings "effects" and "upscale" in the panel heading\'s style, 6px above and 4px below', vOn.heads === 'effects,upscale' && vOn.headLook && vOn.headGaps === '6/4,6/4',
     JSON.stringify({ heads: vOn.heads, look: vOn.headLook, gaps: vOn.headGaps }));
@@ -1516,14 +1546,17 @@ try {
   if (shots) await pv.screenshot({ path: path.join(shots, 'not-possible.png'), clip: { x: 0, y: 0, width: 380, height: Math.min(impossible[0].height, 600) } });
 
   // Capped: short on the card, "GPU limit" in the tooltip.
-  await sw.evaluate(async () => { const cur = (await chrome.storage.sync.get('anime4k')).anime4k ?? {}; await chrome.storage.sync.set({ anime4k: { ...cur, upscale: '32x' } }); });
+  await sw.evaluate(async () => { const cur = (await chrome.storage.sync.get('anime4k')).anime4k ?? {}; await chrome.storage.sync.set({ anime4k: { ...cur, upscale: '8x' } }); });
   await restub(pv, { frames: { 0: [VIDEO] }, meta: { ...META, episodeName: 'Pilot' } });
   const capA = (await look(pv)).cards[0];
   await restub(pv, { frames: { 0: [VIDEO] }, meta: META });
   const capB = (await look(pv)).cards[0];
+  await restub(pv, { frames: { 0: [{ ...VIDEO, loadCapped: true }] }, meta: META });
+  const capLoad = (await look(pv)).cards[0];
+  check('capped by load: "· 8× capped" on the card, "GPU load" in the tooltip', capLoad.name === '1080p → 3840×2160 (2×) · 8× capped' && capLoad.nameTip === '8× capped: GPU load', JSON.stringify({ name: capLoad.name, tip: capLoad.nameTip }));
   await sw.evaluate(async () => { const cur = (await chrome.storage.sync.get('anime4k')).anime4k ?? {}; await chrome.storage.sync.set({ anime4k: { ...cur, upscale: 'auto' } }); });
-  check('capped: "· 32× capped" on the card, "GPU limit" in the tooltip only; on a full info line the host gives way (its full text in the tooltip), never the quality', capA.meta === 'site.example · 1080p → 3840×2160 (2×) · 32× capped' && capA.metaTip === 'site.example · stream: cdn.example · 32× capped: GPU limit' && capA.hostCut && capA.resWhole
-    && capB.name === '1080p → 3840×2160 (2×) · 32× capped' && capB.nameTip === '32× capped: GPU limit' && !/GPU limit/.test(capA.meta + capB.name + capB.meta), JSON.stringify({ capA, capB }));
+  check('capped: "· 8× capped" on the card, "GPU limit" in the tooltip only; on a full info line the host gives way (its full text in the tooltip), never the quality', capA.meta === 'site.example · 1080p → 3840×2160 (2×) · 8× capped' && capA.metaTip === 'site.example · stream: cdn.example · 8× capped: GPU limit' && capA.resWhole
+    && capB.name === '1080p → 3840×2160 (2×) · 8× capped' && capB.nameTip === '8× capped: GPU limit' && !/GPU limit/.test(capA.meta + capB.name + capB.meta), JSON.stringify({ capA, capB }));
   await pv.close();
 
   // Several videos: one card is open, the others are compact rows.

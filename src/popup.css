@@ -478,7 +478,7 @@ body:has(#mode[aria-expanded="true"]) .bar > :not(#modeChip) { pointer-events: n
 #effects { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 #effects .pill { padding-left: 8px; padding-right: 8px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Upscale: six equal boxes across the full width. Two of them are exactly one tile wide, so the row lines up with the columns above. */
-#upscale { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+#upscale { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 #upscale .pill { padding-left: 0; padding-right: 0; text-align: center; }
 .pill {
   border: 1px solid var(--line2);

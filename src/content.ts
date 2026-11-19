@@ -14,6 +14,7 @@ import { uploadSize } from './video-size';
 import { FullscreenMenu } from './fullscreen-menu';
 import { EPISODE_SECONDS } from './rate-prompt';
 import { MangaMode, startManga } from './manga';
+import { Measured, OVERLOAD_AFTER_MS, allowedScale, average, overloaded } from './load-cap';
 
 type GpuModule = typeof import('./gpu');
 let gpuModule: Promise<GpuModule> | null = null;
@@ -28,6 +29,8 @@ const BUSY_RETRY_MS = 8; // wait before retrying a frame skipped because the GPU
 // cap live contexts (~16) and evict the oldest, so a page full of videos must not get one each.
 const MAX_ACTIVE_RENDERERS = 2;
 const STACK_CHECK_MS = 1000; // how often to check that the player's overlays still paint over the canvas
+const LOAD_CHECK_MS = 500; // how often the GPU load is checked while playing (see watchLoad)
+const MIN_LOAD_SAMPLES = 5; // frames needed before a GPU time counts as measured
 // Redrawn subtitles (paintCues), sized like Chrome's own captions: font 5% of the video height,
 // rows touching, the last row almost on the bottom edge. Pages' ::cue rules can change the size.
 const CUE_FONT_SHARE = 0.05;
@@ -85,6 +88,13 @@ class VideoUpscaler {
 
   // Upscale factor the current renderer was built for (see wantedScale()).
   private scale = 2;
+
+  // GPU-load cap (load-cap.ts): the highest scale this video may use after it ran too slow, the
+  // GPU time measured at the current scale, when the renderer was built, and the last check.
+  private loadCap: number | null = null;
+  private measured: Measured | null = null;
+  private builtAt = 0;
+  private loadCheckAt = 0;
 
   // Source frame-rate estimate from requestVideoFrameCallback metadata.
   private vfcSamples: { t: number; presented: number }[] = [];
@@ -152,7 +162,8 @@ class VideoUpscaler {
     this.enabled = enabled;
     this.onUpdate = onUpdate;
     const sync = () => this.sync();
-    const reset = () => { this.teardown(); this.sync(); };
+    // A new source or size: the load cap and the measured GPU time were for the old one.
+    const reset = () => { this.loadCap = null; this.measured = null; this.teardown(); this.sync(); };
     const seeking = () => { this.stopLoop(); if (this.canvas) this.canvas.hidden = true; };
     const report = () => { this.sync(); this.onUpdate(); };
     this.listeners = [
@@ -196,6 +207,7 @@ class VideoUpscaler {
       status: this.status,
       message: this.message.slice(0, 200),
       stats: this.currentStats(),
+      loadCapped: !!this.renderer && this.scale < this.rawScale(),
       media: mediaSessionMeta(),
     };
   }
@@ -233,6 +245,10 @@ class VideoUpscaler {
 
   configure(s: Settings) {
     const chainChanged = chainKey(s) !== chainKey(this.settings) || s.upscale !== this.settings.upscale;
+    // A settings change lifts the load cap; a different chain also costs differently, so its
+    // measured time no longer predicts anything (a new upscale choice keeps it).
+    if (chainChanged) this.loadCap = null;
+    if (chainKey(s) !== chainKey(this.settings)) this.measured = null;
     this.settings = s;
     if (chainChanged || this.mangaOnly()) this.teardown();
     this.sync();
@@ -354,6 +370,7 @@ class VideoUpscaler {
       }, this.scale);
       if (gen !== this.generation) { r.destroy(); return; }
       this.renderer = r;
+      this.builtAt = performance.now();
       this.starting = false;
       this.layout();
       this.sync();
@@ -406,6 +423,7 @@ class VideoUpscaler {
       if (this.canvas?.hidden) { this.canvas.hidden = false; this.paintCues(); }
       this.setStatus('Active');
       this.countWatch();
+      this.watchLoad(r);
     } catch (e) {
       if (gen === this.generation) {
         // gpu.js is a separate bundle, so match the error by name rather than instanceof.
@@ -676,8 +694,31 @@ class VideoUpscaler {
   /** Re-check placement; called on every scan because players move or restyle the video without resizing it. */
   relayout() { this.layout(); }
 
-  /** Manual 2x-32x, or in auto 4x (a second x2 pass) only when the picture is drawn at more than 2x the source in device pixels. */
+  /**
+   * While playing, at most every LOAD_CHECK_MS: note the GPU time at this scale (it predicts the
+   * cost of a higher one), and above 2x step down to half once a renderer that has run for
+   * OVERLOAD_AFTER_MS spent the last 2 s over the frame limit. The cap holds for this video
+   * until a setting or the source changes, so the scale does not bounce.
+   */
+  private watchLoad(r: Anime4kRenderer) {
+    const now = performance.now();
+    if (now - this.loadCheckAt < LOAD_CHECK_MS || this.video.paused) return;
+    this.loadCheckAt = now;
+    const s = r.stats();
+    if (s.samples.length >= MIN_LOAD_SAMPLES) this.measured = { scale: this.scale, ms: average(s.samples) };
+    if (this.scale <= 2 || now - this.builtAt < OVERLOAD_AFTER_MS || !overloaded(s, this.sourceFps)) return;
+    this.loadCap = this.scale / 2;
+    // Rebuilt after this frame finishes, not inside it.
+    window.setTimeout(() => { if (this.renderer === r) { this.teardown(); this.sync(); } }, 0);
+  }
+
+  /** The scale to run: the wanted one, held down by the GPU-load cap (load-cap.ts). */
   private wantedScale(): number {
+    return allowedScale(this.rawScale(), this.measured, this.sourceFps ? 1000 / this.sourceFps : null, this.loadCap);
+  }
+
+  /** Manual 2x-8x, or in auto 4x (a second x2 pass) only when the picture is drawn at more than 2x the source in device pixels. */
+  private rawScale(): number {
     const manual = requestedScale(this.settings.upscale);
     if (manual !== null) return manual;
     const v = this.video;

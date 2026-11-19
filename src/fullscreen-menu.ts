@@ -10,7 +10,7 @@ import {
 const IDLE_MS = 2500;
 const POLL_MS = 500; // perf refresh while the panel is open
 const BARS = 48; // frame-time bars, as in the popup
-const UPSCALES: [Upscale, string][] = [['auto', 'auto'], ['2x', '2×'], ['4x', '4×'], ['8x', '8×'], ['16x', '16×'], ['32x', '32×']];
+const UPSCALES: [Upscale, string][] = [['auto', 'auto'], ['2x', '2×'], ['4x', '4×'], ['8x', '8×']];
 // Inline !important beats page stylesheets, so a page can't quietly hide, move or blow up the menu.
 const PINNED_STYLE: [string, string][] = [
   ['position', 'fixed'], ['top', '16px'], ['right', '16px'], ['left', 'auto'], ['bottom', 'auto'],
@@ -271,7 +271,7 @@ export class FullscreenMenu {
     this.meta.textContent = !t ? '' : st
       ? `${t.height}p → ${st.outputWidth}×${st.outputHeight} (${scale}×)`
       : `${t.height}p · ${t.status.toLowerCase()}`;
-    const cap = st && t ? capNote(s.upscale, scale) : '';
+    const cap = st && t ? capNote(s.upscale, scale, t.loadCapped) : '';
     if (cap) {
       // capNote is " · 8× capped: GPU limit": keep the dot plain, colour the note amber.
       const note = document.createElement('span');

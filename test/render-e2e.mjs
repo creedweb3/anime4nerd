@@ -34,8 +34,13 @@ const MODES = ['A', 'B', 'C', 'AA', 'BB', 'CA'];
 
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'a4k-render-'));
 // 960x540 source so 2x lands at 1080p, like a typical 540p/720p stream upscaled.
-execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=960x540:rate=24:duration=30',
+execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=960x540:rate=24:duration=120', // longer than the whole run: this server cannot serve the loop's reread
   '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-an', '-movflags', '+faststart', path.join(work, 'v.mp4')]);
+// Full-frame noise: every pixel changes each frame, so nothing is reused and 8x costs its full
+// price (the load-cap check needs a video the GPU cannot keep up with at 8x).
+execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'nullsrc=size=960x540:rate=60:duration=40,geq=random(1)*255:128:128',
+  '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '35', '-pix_fmt', 'yuv420p', '-an', '-movflags', '+faststart', path.join(work, 'noise.mp4')]);
+fs.writeFileSync(path.join(work, 'noise.html'), '<video src="noise.mp4" muted autoplay playsinline style="width:1920px;height:1080px"></video>');
 fs.writeFileSync(path.join(work, 'index.html'), '<video src="v.mp4" muted autoplay loop playsinline style="width:1920px;height:1080px"></video>');
 const server = http.createServer((req, res) => {
   const file = path.join(work, req.url === '/' ? 'index.html' : path.basename(req.url));
@@ -90,6 +95,41 @@ try {
     check(`mode ${mode} renders`, v?.status === 'Active' && st?.outputWidth === 960 * parseInt(UPSCALE, 10) && st?.reach > 0,
       v?.status === 'Active' ? `${st.outputWidth}x${st.outputHeight}, ${st.passes} passes, reach ${st.reach}, GPU ${ms?.toFixed(2)} ms, CPU ${st.cpuMs.toFixed(2)} ms, ${(st.textureBytes / 1048576).toFixed(0)} MB` : `${v?.status}: ${v?.message}`);
   }
+
+  // GPU-load cap: 8x (7680x4320 output) of full-frame 60 fps noise with the heaviest preset (B+B)
+  // misses the 16.7 ms frame limit even on a fast GPU, so after about 2 s it steps down to half,
+  // and again if needed, never below 2x; the card says "GPU load".
+  await sw.evaluate(async () => {
+    const cur = (await chrome.storage.sync.get('anime4k')).anime4k ?? {};
+    await chrome.storage.sync.set({ anime4k: { ...cur, preset: 'BB', upscale: '8x' } });
+  });
+  await page.goto(`http://${host}/noise.html`);
+  await page.waitForSelector('canvas.a4k-canvas:not([hidden])', { timeout: 30000 });
+  const widths = new Set();
+  const trail = []; // status changes, for the failure detail
+  let capped = null;
+  for (let i = 0; i < 60; i++) {
+    await page.waitForTimeout(500);
+    const v = (await list())?.[0];
+    if (v?.stats) widths.add(v.stats.outputWidth);
+    const media = v?.status === 'Active' ? '' : await page.evaluate(() => { const e = document.querySelector('video'); return ` [readyState ${e.readyState}, error ${e.error?.code ?? '-'} ${e.error?.message ?? ''}, t ${e.currentTime.toFixed(1)}]`; });
+    const avg = v?.stats?.samples?.length ? ` ${(v.stats.samples.reduce((a, b) => a + b, 0) / v.stats.samples.length).toFixed(0)}ms/${v.stats.sourceFps ? (1000 / v.stats.sourceFps).toFixed(0) : '?'}ms` : '';
+    const step = `${v?.status}${v?.stats ? `@${v.stats.outputWidth}${avg}` : ''}${v?.status === 'Active' ? '' : `: ${v?.message}${media}`}`;
+    if (trail.at(-1) !== step) trail.push(step);
+    capped = v;
+    if (v?.loadCapped && v.stats && v.stats.outputWidth < 960 * 8) break;
+  }
+  check('8x on a GPU that cannot keep up steps down and says it was the GPU load', !!capped?.loadCapped && capped.stats.outputWidth < 960 * 8 && capped.stats.outputWidth >= 960 * 2,
+    `widths seen ${[...widths].join(' -> ')}, loadCapped ${capped?.loadCapped}, trail: ${trail.join(' | ')}`);
+  await sw.evaluate(async () => {
+    const cur = (await chrome.storage.sync.get('anime4k')).anime4k ?? {};
+    await chrome.storage.sync.set({ anime4k: { ...cur, upscale: '2x' } });
+  });
+  await page.waitForTimeout(1500);
+  const lifted = (await list())?.[0];
+  check('a settings change lifts the load cap', lifted?.loadCapped === false, `loadCapped ${lifted?.loadCapped}, ${lifted?.stats?.outputWidth}`);
+  await page.goto(`http://${host}/`);
+  await page.waitForSelector('canvas.a4k-canvas:not([hidden])', { timeout: 30000 });
 
   // Scrolled out of view: drawing stops, and resumes when the video is back.
   const status = async () => (await list())?.[0]?.status;

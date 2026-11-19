@@ -417,8 +417,8 @@ function patchCard(c: Card, v: VideoInfo, open: boolean) {
   const outH = v.stats?.outputHeight ?? v.height * 2;
   const out = v.stats ? `${v.stats.outputWidth}×${v.stats.outputHeight}` : pLabel(outH);
   const scale = v.height ? Math.round(outH / v.height) : 0;
-  // " · 32× capped: GPU limit": the card says "· 32× capped", the tooltip says why.
-  const cap = v.stats && settings ? capNote(settings.upscale, scale) : '';
+  // " · 8× capped: GPU limit": the card says "· 8× capped", the tooltip says why.
+  const cap = v.stats && settings ? capNote(settings.upscale, scale, v.loadCapped) : '';
   const capTip = cap.replace(/^ · /, '');
   const output = `→ ${out} (${scale}×)${cap.replace(/: .*$/, '')}`;
   const frames = v.frameHost !== tabHost ? `player frame: ${v.frameHost} · stream: ${v.mediaHost}` : `stream: ${v.mediaHost}`;
