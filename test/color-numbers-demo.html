@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Anime4Nerd: color number formats</title>
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #0b0b0b; --panel: #111; --line: #262626; --line2: #3a3a3a;
+  --fg: #e4e4e4; --dim: #8d8d8d; --faint: #585858; --on: #fff; --ok: #9fd3a8; --bad: #e39a9a;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 28px 32px 60px;
+  background: #050505;
+  color: var(--fg);
+  font: 12px/1.5 "JetBrains Mono", "Cascadia Mono", "Fira Code", Consolas, ui-monospace, monospace;
+}
+h1 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
+.intro { margin: 0 0 14px; max-width: 900px; color: var(--dim); }
+.toolbar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; margin: 0 -32px 22px; padding: 10px 32px; background: rgba(5,5,5,.92); border-bottom: 1px solid var(--line); }
+.group { display: flex; align-items: center; gap: 8px; }
+.lbl { color: var(--faint); font-size: 10px; text-transform: uppercase; letter-spacing: .16em; }
+.seg { display: inline-flex; }
+.seg button { border: 1px solid var(--line2); background: transparent; color: var(--dim); font: inherit; font-size: 11px; padding: 3px 10px; cursor: pointer; }
+.seg button + button { margin-left: -1px; }
+.seg button[aria-pressed="true"] { background: var(--on); border-color: var(--on); color: #000; font-weight: 600; }
+.toolbar .hint { color: var(--faint); margin-left: auto; }
+
+.concept { margin-bottom: 44px; }
+.label { display: flex; align-items: baseline; gap: 10px; margin: 0 0 4px; font-size: 13px; font-weight: 600; }
+.label b { display: inline-grid; place-items: center; width: 22px; height: 22px; border: 1px solid var(--line2); font-size: 11px; }
+.sub { margin: 0 0 12px; color: var(--dim); max-width: 900px; }
+.stage { display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap; }
+.stage iframe { border: 1px solid var(--line); width: 382px; height: 600px; background: var(--bg); flex: none; }
+.side { display: grid; gap: 10px; }
+.side canvas { display: block; width: 480px; aspect-ratio: 16/9; border: 1px solid var(--line); cursor: zoom-in; }
+.cap { color: var(--faint); font-size: 10px; }
+.meter { display: grid; gap: 4px; width: 480px; }
+.m-row { display: grid; grid-template-columns: 8ch 1fr 9ch; align-items: center; gap: 10px; font-size: 11px; color: var(--dim); }
+.m-bar { position: relative; height: 8px; border: 1px solid var(--line); }
+.m-bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--ok); }
+.m-bar s { position: absolute; top: -3px; bottom: -3px; border-left: 1px dashed var(--fg); }
+.m-row.over { color: var(--bad); }
+.m-row.over .m-bar i { background: var(--bad); }
+.m-row b { text-align: right; font-weight: 600; color: var(--fg); }
+.m-row.over b { color: var(--bad); }
+.takeaway { margin: 12px 0 0; color: var(--dim); max-width: 960px; }
+.takeaway em { color: var(--fg); font-style: normal; }
+</style>
+</head>
+<body>
+<h1>color tab: percent numbers you can type into, without a box (design preview, sample data)</h1>
+<p class="intro">All in percent. Every number can be clicked (or reached with Tab and Enter) to type a value; each version below shows that in a different way. Hover a row or a number to see it. While typing, the field is a line under the number, not a box. Sample values: hue −8°, brightness 110%, contrast 125%, saturation 140%, gamma 0.85, grain 2.0.</p>
+
+<div class="toolbar">
+  <span class="group"><span class="lbl">tab</span><span class="seg" data-ctl="tab"><button type="button" data-v="upscale" aria-pressed="false">upscale</button><button type="button" data-v="color" aria-pressed="true">color</button></span></span>
+  <span class="group"><span class="lbl">page</span><span class="seg" data-ctl="page"><button type="button" data-v="one" aria-pressed="true">one video</button><button type="button" data-v="busy" aria-pressed="false">busy page</button></span></span>
+  <span class="hint">hold on a picture to see it without color changes</span>
+</div>
+
+<main id="designs"></main>
+
+<template id="t-design">
+  <section class="concept">
+    <h2 class="label"><b></b><span class="name"></span></h2>
+    <p class="sub"></p>
+    <div class="stage">
+      <iframe></iframe>
+      <div class="side">
+        <canvas width="480" height="270"></canvas>
+        <span class="cap">video on the page</span>
+        <div class="meter">
+          <div class="m-row" data-t="upscale"><span>upscale</span><span class="m-bar"><i></i><s></s></span><b>—</b></div>
+          <div class="m-row" data-t="color"><span>color</span><span class="m-bar"><i></i><s></s></span><b>—</b></div>
+        </div>
+      </div>
+    </div>
+    <p class="takeaway"></p>
+  </section>
+</template>
+
+<script src="color-demo.js"></script>
+<script>
+const DESIGNS = [
+  { id: 'plain', place: 'folder,pct,s,plain', name: 'no sign', sub: 'The number turns white on hover and the pointer becomes a text cursor; nothing else.',
+    take: '<em>Best at:</em> cleanest. <em>Cost:</em> nobody finds it unless they try.' },
+  { id: 'underline', place: 'folder,pct,s,underline', name: 'dotted underline', sub: 'A faint dotted line under every number, solid white on hover: the usual sign for "you can edit this".',
+    take: '<em>Best at:</em> always visible, quiet. <em>Cost:</em> six small lines in the panel.' },
+  { id: 'pencil', place: 'folder,pct,s,pencil', name: 'pencil on hover', sub: 'A small ✎ appears left of the number while you hover the row.',
+    take: '<em>Best at:</em> clear meaning, hidden until needed. <em>Cost:</em> only shows on hover.' },
+  { id: 'caret', place: 'folder,pct,s,caret', name: 'blinking caret', sub: 'Hovering the number shows a blinking text caret after it, as if the field were already open.',
+    take: '<em>Best at:</em> says "type here" literally. <em>Cost:</em> a blink can feel busy.' },
+  { id: 'glow', place: 'folder,pct,s,glow', name: 'lift on hover', sub: 'The number gets a soft dark panel behind it on hover, like a preset tile.',
+    take: '<em>Best at:</em> matches the tiles; feels like a button. <em>Cost:</em> does not say "type", only "clickable".' },
+  { id: 'label', place: 'folder,pct,s,label', name: '"type" on hover', sub: 'A tiny TYPE appears under the number while you hover the row.',
+    take: '<em>Best at:</em> spells it out. <em>Cost:</em> one more word on screen.' },
+];
+const main = document.getElementById('designs');
+const tpl = document.getElementById('t-design');
+const state = { tab: 'color', page: 'one' };
+const parts = {};
+DESIGNS.forEach((d, i) => {
+  const n = tpl.content.cloneNode(true);
+  n.querySelector('.label b').textContent = String.fromCharCode(65 + i);
+  n.querySelector('.name').textContent = d.name;
+  n.querySelector('.sub').textContent = d.sub;
+  n.querySelector('.takeaway').innerHTML = d.take;
+  const frame = n.querySelector('iframe');
+  frame.title = d.name;
+  const canvas = n.querySelector('canvas');
+  const meter = n.querySelector('.meter');
+  main.append(n);
+  parts[d.id] = { frame, preview: makePreview(canvas), meter };
+  frame.addEventListener('load', () => {
+        frame.contentWindow.postMessage({ type: 'tab', tab: state.tab }, '*');
+  });
+});
+/* A hash-only change does not reload a frame, so a loaded frame is reloaded by hand. */
+function loadFrames() {
+  for (const d of DESIGNS) {
+    const f = parts[d.id].frame, hash = `#list,${state.page},${d.place}`;
+    if (f.contentWindow?.location.href.startsWith('http')) { f.contentWindow.location.hash = hash; f.contentWindow.location.reload(); }
+    else f.src = `color-frame.html${hash}`;
+  }
+}
+loadFrames();
+
+const LIMIT = 600, SCALE_MAX = 700;
+addEventListener('message', (e) => {
+  const d = e.data, p = Object.values(parts).find((x) => x.frame.contentWindow === e.source);
+  if (!p) return;
+  if (d.type === 'color') p.preview.update(d.vals);
+  if (d.type === 'size') {
+    p.frame.style.height = `${Math.min(LIMIT, d.h) + 2}px`;
+    p.frame.style.width = `${d.w + 2}px`;
+    for (const row of p.meter.querySelectorAll('.m-row')) {
+      const h = d.tabs[row.dataset.t];
+      row.classList.toggle('over', h > LIMIT);
+      row.querySelector('i').style.width = `${Math.min(100, (h / SCALE_MAX) * 100)}%`;
+      row.querySelector('s').style.left = `${(LIMIT / SCALE_MAX) * 100}%`;
+      row.querySelector('b').textContent = `${h} / ${LIMIT}`;
+    }
+  }
+});
+
+for (const seg of document.querySelectorAll('[data-ctl]')) {
+  for (const b of seg.querySelectorAll('button')) {
+    b.addEventListener('click', () => {
+      const ctl = seg.dataset.ctl;
+      state[ctl] = b.dataset.v;
+      for (const o of seg.querySelectorAll('button')) o.setAttribute('aria-pressed', String(o === b));
+      if (ctl === 'page') loadFrames();
+      else for (const d of DESIGNS) parts[d.id].frame.contentWindow.postMessage(ctl === 'tab' ? { type: 'tab', tab: state.tab } : { type: 'scale', scale: state.scale }, '*');
+    });
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Anime4Nerd: colors without upscale</title>
+<style>
+:root { color-scheme: dark; --line: #262626; --line2: #3a3a3a; --fg: #e4e4e4; --dim: #8d8d8d; --faint: #585858; }
+* { box-sizing: border-box; }
+body { margin: 0; padding: 28px 32px 60px; background: #050505; color: var(--fg); font: 12px/1.5 "JetBrains Mono", "Cascadia Mono", Consolas, ui-monospace, monospace; }
+h1 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
+.intro { margin: 0 0 22px; max-width: 900px; color: var(--dim); }
+.grid { display: flex; flex-wrap: wrap; gap: 28px 24px; }
+figure { margin: 0; width: 382px; }
+figcaption { display: grid; gap: 2px; margin-bottom: 8px; }
+figcaption b { font-size: 13px; }
+figcaption b i { font-style: normal; display: inline-grid; place-items: center; width: 20px; height: 20px; margin-right: 8px; border: 1px solid var(--line2); font-size: 11px; }
+figcaption span { color: var(--dim); }
+/* Each popup is shown from the end of its sliders down: the part this page is about. */
+.crop { position: relative; height: 150px; overflow: hidden; border: 1px solid var(--line); background: #0b0b0b; }
+.crop iframe { position: absolute; left: 0; width: 380px; height: 600px; border: 0; }
+.copy { margin-top: 36px; max-width: 900px; }
+.copy h2 { font-size: 13px; margin: 0 0 6px; }
+.copy li { color: var(--dim); margin: 3px 0; }
+.copy li b { color: var(--fg); font-weight: 600; }
+</style>
+</head>
+<body>
+<h1>colors without upscale: design ideas (live popup)</h1>
+<p class="intro">Ways to show the one setting, using the sentence you liked: do colors also run on videos that are not upscaled. Each is the real popup, cropped to the end of the color tab; click them, they all work.</p>
+<div class="grid" id="grid"></div>
+<section class="copy">
+  <h2>other wordings that fit any of them</h2>
+  <ul>
+    <li><b>colors without upscale</b> · keep these colors on videos that are not upscaled (today)</li>
+    <li><b>every video</b> · colors stay on when upscaling is off</li>
+    <li><b>always on</b> · even when a video isn't upscaled</li>
+    <li><b>keep colors with upscale off</b></li>
+    <li><b>use colors on</b> · upscaled videos / every video</li>
+    <li><b>colors only</b> · use colors without upscaling this video</li>
+  </ul>
+</section>
+<script>
+const DESIGNS = [
+  ['i5', 'icon + state line (chosen)', 'screen icon (red, crossed out while off; green while on), the sentence, and "currently: …" under it'],
+  ['i2', '+ state line', 'for comparison'],
+  ['i3', '+ icon', 'for comparison'],
+];
+const grid = document.getElementById('grid');
+for (const [id, name, sub] of DESIGNS) {
+  const fig = document.createElement('figure');
+  fig.innerHTML = `<figcaption><b><i>${id.toUpperCase()}</i>${name}</b><span>${sub}</span></figcaption><div class="crop"><iframe title="${name}" src="popup-live.html#tab=color&ap=${id}"></iframe></div>`;
+  grid.append(fig);
+  const frame = fig.querySelector('iframe');
+  // Once the popup is laid out, slide it up so the crop starts just above the last two sliders.
+  frame.addEventListener('load', () => setTimeout(() => {
+    const row = frame.contentDocument.querySelector('.cs[data-k="deband"]');
+    if (!row) return;
+    const top = row.getBoundingClientRect().top - 6;
+    frame.style.top = `${-top}px`;
+    // The crop ends where the popup does.
+    fig.querySelector('.crop').style.height = `${frame.contentDocument.body.scrollHeight - top}px`;
+  }, 1500));
+}
+</script>
+</body>
+</html>

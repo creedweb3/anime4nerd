@@ -1,0 +1,193 @@
+<!doctype html>
+<!--
+  Ideas for long lists in the popup, each on the real popup (test/popup-live.html: src/popup.html,
+  src/popup.css, dist/popup.js with a fake chrome.*). "now" is the build as it is; the other ideas
+  are small patches applied inside that frame by this page, only to show how each would look.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Anime4Nerd: long lists</title>
+<style>
+:root {
+  color-scheme: dark;
+  --line: #262626; --line2: #3a3a3a;
+  --fg: #e4e4e4; --dim: #8d8d8d; --faint: #585858; --on: #fff; --ok: #9fd3a8;
+}
+* { box-sizing: border-box; }
+body { margin: 0; padding: 28px 32px 60px; background: #050505; color: var(--fg); font: 12px/1.5 "JetBrains Mono", "Cascadia Mono", Consolas, ui-monospace, monospace; }
+h1 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
+h2 { margin: 34px 0 4px; font-size: 13px; font-weight: 600; }
+.intro, .sub { margin: 0 0 14px; max-width: 980px; color: var(--dim); }
+.row { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-start; }
+figure { margin: 0; width: 382px; }
+figcaption { margin: 0 0 8px; min-height: 5.6em; color: var(--dim); }
+figcaption b { display: block; color: var(--fg); }
+figcaption .pick { color: var(--ok); }
+iframe { display: block; width: 382px; height: 600px; border: 1px solid var(--line); background: #0b0b0b; }
+</style>
+</head>
+<body>
+<h1>long lists in the popup</h1>
+<p class="intro">Each frame is the real popup at its real size (600px tall at most). Scroll inside a frame to see how it behaves: there is one scrollbar, on the popup, in every idea. "now" is the current build. The others are previews patched in by this page.</p>
+
+<h2>page map, chapter of 300 pages</h2>
+<p class="sub">40 pages done, 2 in progress.</p>
+<div class="row" id="pages"></div>
+
+<h2>profile list, 52 saved profiles</h2>
+<p class="sub">The list opens by itself here.</p>
+<div class="row" id="profiles"></div>
+
+<script>
+/* ---- the ideas: [title, words, popup query, patch run inside the frame, recommended] ----------- */
+const PAGE_IDEAS = [
+  ['now: every row', 'All 25 rows. The popup scrolls to reach them.', 'pages=300', null],
+  ['A: sets of 120', 'Ten rows at most. Arrows step through 1–120, 121–240, 241–300. Never grows past this height.', 'pages=300', pageSets, true],
+  ['B: smaller cells', '20 per row: 15 rows for 300 pages. Shorter, but still grows, and cells are small to hit.', 'pages=300', smallCells],
+  ['C: one strip', 'One bar, a slice per page. Always one line, but hard to pick one page.', 'pages=300', strip],
+];
+const PROFILE_IDEAS = [
+  ['now: full list', 'Two columns of 27. The popup scrolls to reach the rest.', 'profiles=52&tab=color', openList],
+  ['D: limit of 17', 'The limit is 60 now. At 17, the most that fit under the color tab, the list never scrolls. Shown here with 17.', 'profiles=17&tab=color', openList, true],
+  ['E: search box', 'Typing filters the list. Type "4" to try. Still full length until you type.', 'profiles=52&tab=color', search],
+  ['F: three columns', 'Three columns of 18. Shorter, names have less room.', 'profiles=52&tab=color', threeCols],
+];
+
+/* ---- patches: each runs inside the popup frame (w: its window, d: its document) ------------------ */
+function style(d, css) { const s = d.createElement('style'); s.textContent = css; d.head.append(s); }
+const cells = (d) => [...d.querySelectorAll('#pmap-grid .pcell')];
+
+function pageSets(w, d) {
+  const SET = 120;
+  let at = 0;
+  style(d, `.ps-bar { display: flex; align-items: center; justify-content: space-between; margin: 0 0 8px; color: var(--dim); font-size: 11px; }
+    .ps-bar button { all: unset; cursor: pointer; padding: 0 8px; color: var(--fg); font-size: 14px; line-height: 20px; border: 1px solid var(--line2); }
+    .ps-bar button:disabled { color: var(--faint); cursor: default; }
+    .ps-bar button:not(:disabled):hover { border-color: var(--on); }`);
+  const bar = d.createElement('div');
+  bar.className = 'ps-bar';
+  bar.innerHTML = '<button type="button" aria-label="previous pages">‹</button><span></span><button type="button" aria-label="next pages">›</button>';
+  d.getElementById('pmap-grid').before(bar);
+  const [prev, text, next] = bar.children;
+  const show = () => {
+    const all = cells(d);
+    all.forEach((c, i) => { c.style.display = i >= at && i < at + SET ? '' : 'none'; });
+    text.textContent = `${at + 1}–${Math.min(at + SET, all.length)} of ${all.length}`;
+    prev.disabled = at === 0;
+    next.disabled = at + SET >= all.length;
+  };
+  prev.onclick = () => { at -= SET; show(); };
+  next.onclick = () => { at += SET; show(); };
+  show();
+}
+
+function smallCells(w, d) {
+  style(d, `#pmap-grid { --cell: 15px; grid-template-columns: repeat(20, var(--cell)); gap: calc((100cqw - 20 * var(--cell)) / 19); }
+    #pmap-grid .pcell { font-size: 7px; }`);
+}
+
+function strip(w, d) {
+  style(d, `#pmap-grid { display: none; }
+    .st { display: flex; height: 26px; margin: 0 0 6px; }
+    .st i { flex: 1; background: var(--line2); cursor: pointer; }
+    .st i.done { background: var(--ok); } .st i.now { background: var(--on); } .st i.fail { background: var(--bad); }
+    .st i:hover { background: var(--on); }`);
+  const bar = d.createElement('div');
+  bar.className = 'st';
+  d.getElementById('pmap-grid').before(bar);
+  const paint = () => {
+    const all = cells(d);
+    while (bar.children.length < all.length) {
+      const n = bar.children.length;
+      const i = d.createElement('i');
+      i.dataset.tip = `page ${n + 1}`;
+      i.onclick = () => all[n].click();
+      bar.append(i);
+    }
+    all.forEach((c, n) => {
+      const st = ['done', 'now', 'fail'].find((k) => c.classList.contains(k)) ?? '';
+      if (bar.children[n].className !== st) bar.children[n].className = st;
+    });
+  };
+  paint();
+  w.setInterval(paint, 500);
+}
+
+function openList(w, d) { d.querySelector('#pf .pf-open')?.click(); }
+
+function search(w, d) {
+  style(d, `.ps-find { all: unset; display: block; box-sizing: border-box; width: 100%; margin: 0 0 4px; padding: 4px 6px; border: 1px solid var(--line2); color: var(--fg); font: inherit; font-size: 11px; grid-column: 1 / -1; grid-row: 1; }
+    .ps-find:focus { border-color: var(--on); }
+    .ps-find::placeholder { color: var(--faint); }`);
+  let q = '';
+  const fit = () => {
+    const list = d.querySelector('.pf-list');
+    if (!list) return;
+    let box = list.querySelector('.ps-find');
+    if (!box) {
+      box = d.createElement('input');
+      box.className = 'ps-find';
+      box.placeholder = 'find a profile';
+      box.value = q;
+      box.addEventListener('keydown', (e) => e.stopPropagation()); // the list's own keys would take it
+      box.addEventListener('input', () => { q = box.value; fit(); });
+      list.prepend(box);
+    }
+    // Place what is left in two columns under the box, by hand.
+    const opts = [...list.querySelectorAll('.mode-opt[data-id]')].filter((o) => o.dataset.id !== 'custom');
+    const shown = opts.filter((o) => o.querySelector('b')?.textContent.includes(q));
+    const rows = Math.max(1, Math.ceil(shown.length / 2));
+    list.style.gridTemplateRows = `auto repeat(${rows}, auto) auto`;
+    opts.forEach((o) => { o.style.display = shown.includes(o) ? '' : 'none'; });
+    shown.forEach((o, i) => { o.style.gridColumn = i < rows ? '1' : '2'; o.style.gridRow = String((i % rows) + 2); o.classList.toggle('c1', i < rows); });
+    const custom = list.querySelector('.mode-opt[data-id="custom"]');
+    if (custom) custom.style.gridRow = String(rows + 2);
+  };
+  openList(w, d);
+  fit();
+  new w.MutationObserver(fit).observe(d.getElementById('pf'), { childList: true });
+}
+
+function threeCols(w, d) {
+  const fit = () => {
+    const list = d.querySelector('.pf-list');
+    if (!list) return;
+    const opts = [...list.querySelectorAll('.mode-opt[data-id]')].filter((o) => o.dataset.id !== 'custom');
+    const rows = Math.ceil(opts.length / 3);
+    list.style.setProperty('--rows', String(rows));
+    list.style.gridTemplateColumns = '1fr 1fr 1fr';
+    opts.forEach((o, i) => o.classList.toggle('c1', i < rows * 2));
+    const custom = list.querySelector('.mode-opt[data-id="custom"]');
+    if (custom) custom.style.gridRow = String(rows + 1);
+  };
+  openList(w, d);
+  fit();
+  new w.MutationObserver(fit).observe(d.getElementById('pf'), { childList: true });
+}
+
+/* ---- frames ---------------------------------------------------------------------------- */
+function build(where, ideas) {
+  for (const [title, words, query, patch, pick] of ideas) {
+    const fig = document.createElement('figure');
+    fig.innerHTML = `<figcaption><b${pick ? ' class="pick"' : ''}>${title}${pick ? ' (recommended)' : ''}</b>${words}</figcaption><iframe title="${title}"></iframe>`;
+    where.append(fig);
+    const frame = fig.querySelector('iframe');
+    frame.src = `popup-live.html#${query}`; // in the hash: a server's clean-URL redirect drops a query
+    frame.addEventListener('load', () => {
+      if (!patch) return;
+      const w = frame.contentWindow;
+      // The popup builds itself after load: wait for its pieces before patching.
+      const ready = () => (query.startsWith('pages')
+        ? w.document.querySelectorAll('#pmap-grid .pcell').length > 0
+        : !!w.document.querySelector('#pf .pf-open') && w.document.body.dataset.tab === 'color');
+      const t = setInterval(() => { if (ready()) { clearInterval(t); patch(w, w.document); } }, 100);
+    });
+  }
+}
+build(document.getElementById('pages'), PAGE_IDEAS);
+build(document.getElementById('profiles'), PROFILE_IDEAS);
+</script>
+</body>
+</html>

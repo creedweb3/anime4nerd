@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Anime4Nerd: color tab designs</title>
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #0b0b0b; --panel: #111; --line: #262626; --line2: #3a3a3a;
+  --fg: #e4e4e4; --dim: #8d8d8d; --faint: #585858; --on: #fff; --ok: #9fd3a8; --bad: #e39a9a;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 28px 32px 60px;
+  background: #050505;
+  color: var(--fg);
+  font: 12px/1.5 "JetBrains Mono", "Cascadia Mono", "Fira Code", Consolas, ui-monospace, monospace;
+}
+h1 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
+.intro { margin: 0 0 14px; max-width: 900px; color: var(--dim); }
+.toolbar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; margin: 0 -32px 22px; padding: 10px 32px; background: rgba(5,5,5,.92); border-bottom: 1px solid var(--line); }
+.group { display: flex; align-items: center; gap: 8px; }
+.lbl { color: var(--faint); font-size: 10px; text-transform: uppercase; letter-spacing: .16em; }
+.seg { display: inline-flex; }
+.seg button { border: 1px solid var(--line2); background: transparent; color: var(--dim); font: inherit; font-size: 11px; padding: 3px 10px; cursor: pointer; }
+.seg button + button { margin-left: -1px; }
+.seg button[aria-pressed="true"] { background: var(--on); border-color: var(--on); color: #000; font-weight: 600; }
+.toolbar .hint { color: var(--faint); margin-left: auto; }
+
+.concept { margin-bottom: 44px; }
+.label { display: flex; align-items: baseline; gap: 10px; margin: 0 0 4px; font-size: 13px; font-weight: 600; }
+.label b { display: inline-grid; place-items: center; width: 22px; height: 22px; border: 1px solid var(--line2); font-size: 11px; }
+.sub { margin: 0 0 12px; color: var(--dim); max-width: 900px; }
+.stage { display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap; }
+.stage iframe { border: 1px solid var(--line); width: 382px; height: 600px; background: var(--bg); flex: none; }
+.side { display: grid; gap: 10px; }
+.side canvas { display: block; width: 480px; aspect-ratio: 16/9; border: 1px solid var(--line); cursor: zoom-in; }
+.cap { color: var(--faint); font-size: 10px; }
+.meter { display: grid; gap: 4px; width: 480px; }
+.m-row { display: grid; grid-template-columns: 8ch 1fr 9ch; align-items: center; gap: 10px; font-size: 11px; color: var(--dim); }
+.m-bar { position: relative; height: 8px; border: 1px solid var(--line); }
+.m-bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--ok); }
+.m-bar s { position: absolute; top: -3px; bottom: -3px; border-left: 1px dashed var(--fg); }
+.m-row.over { color: var(--bad); }
+.m-row.over .m-bar i { background: var(--bad); }
+.m-row b { text-align: right; font-weight: 600; color: var(--fg); }
+.m-row.over b { color: var(--bad); }
+.takeaway { margin: 12px 0 0; color: var(--dim); max-width: 960px; }
+.takeaway em { color: var(--fg); font-style: normal; }
+</style>
+</head>
+<body>
+<h1>color tab: five layouts that keep the popup under 600px (design preview, sample data)</h1>
+<p class="intro">The popup gets folder tabs under the video card: "upscale" (performance and presets, as today) and "color". Each mock uses the real popup.css from the working tree. The bars under each picture measure how tall each tab makes the popup; the dashed line is the 600px limit, past which the popup scrolls. "busy page" adds the rating card and a second video, the tallest a popup gets today.</p>
+
+<div class="toolbar">
+  <span class="group"><span class="lbl">tab</span><span class="seg" data-ctl="tab"><button type="button" data-v="upscale" aria-pressed="false">upscale</button><button type="button" data-v="color" aria-pressed="true">color</button></span></span>
+  <span class="group"><span class="lbl">page</span><span class="seg" data-ctl="page"><button type="button" data-v="one" aria-pressed="true">one video</button><button type="button" data-v="busy" aria-pressed="false">busy page</button></span></span>
+  <span class="group"><span class="lbl">numbers</span><span class="seg" data-ctl="scale"><button type="button" data-v="pct" aria-pressed="true">percent</button><button type="button" data-v="vlc" aria-pressed="false">vlc</button><button type="button" data-v="pm" aria-pressed="false">±100</button></span></span>
+  <span class="hint">hold on a picture to see it without color changes</span>
+</div>
+
+<main id="designs"></main>
+
+<template id="t-design">
+  <section class="concept">
+    <h2 class="label"><b></b><span class="name"></span></h2>
+    <p class="sub"></p>
+    <div class="stage">
+      <iframe></iframe>
+      <div class="side">
+        <canvas width="480" height="270"></canvas>
+        <span class="cap">video on the page</span>
+        <div class="meter">
+          <div class="m-row" data-t="upscale"><span>upscale</span><span class="m-bar"><i></i><s></s></span><b>—</b></div>
+          <div class="m-row" data-t="color"><span>color</span><span class="m-bar"><i></i><s></s></span><b>—</b></div>
+        </div>
+      </div>
+    </div>
+    <p class="takeaway"></p>
+  </section>
+</template>
+
+<script src="color-demo.js"></script>
+<script>
+const DESIGNS = [
+  { id: 'list', name: 'rows', sub: 'One row per control: name, slider, value. The baseline.',
+    take: '<em>Best at:</em> plain and fast to read. <em>Cost:</em> the tallest of the five, but still fits: about 374px with one video, 522px on a busy page.' },
+  { id: 'grid', name: 'two columns', sub: 'Two sliders per row, name and value above each slider. Half the rows.',
+    take: '<em>Best at:</em> every slider still visible, about 30px shorter than rows. <em>Cost:</em> shorter sliders, so fine steps are harder with the mouse (arrow keys still give 1% steps).' },
+  { id: 'pick', name: 'pick one', sub: 'Six tiles in the preset tiles\' look, each showing its value. Click one, and the single slider below controls it.',
+    take: '<em>Best at:</em> matches the preset panel; long slider; shortest with all values visible. <em>Cost:</em> one click before each change.' },
+  { id: 'fader', name: 'faders', sub: 'Six vertical sliders side by side, like a mixing desk. Value on top, name below.',
+    take: '<em>Best at:</em> all six readable at a glance, like an equalizer. <em>Cost:</em> 96px of travel is short for fine steps; names are small.' },
+  { id: 'box', name: 'value boxes', sub: 'The performance panel\'s six boxes, but each one is a control: drag sideways on it to change the value. A thin bar shows where it sits.',
+    take: '<em>Best at:</em> shortest of all, and looks exactly like the panel above it. <em>Cost:</em> dragging on a number is not obvious; it needs the hint line.' },
+];
+const main = document.getElementById('designs');
+const tpl = document.getElementById('t-design');
+const state = { tab: 'color', page: 'one', scale: 'pct', place: 'folder' };
+const parts = {};
+DESIGNS.forEach((d, i) => {
+  const n = tpl.content.cloneNode(true);
+  n.querySelector('.label b').textContent = String.fromCharCode(65 + i);
+  n.querySelector('.name').textContent = d.name;
+  n.querySelector('.sub').textContent = d.sub;
+  n.querySelector('.takeaway').innerHTML = d.take;
+  const frame = n.querySelector('iframe');
+  frame.title = d.name;
+  const canvas = n.querySelector('canvas');
+  const meter = n.querySelector('.meter');
+  main.append(n);
+  parts[d.id] = { frame, preview: makePreview(canvas), meter };
+  frame.addEventListener('load', () => {
+    frame.contentWindow.postMessage({ type: 'scale', scale: state.scale }, '*');
+    frame.contentWindow.postMessage({ type: 'tab', tab: state.tab }, '*');
+  });
+});
+/* A hash-only change does not reload a frame, so a loaded frame is reloaded by hand. */
+function loadFrames() {
+  for (const d of DESIGNS) {
+    const f = parts[d.id].frame, hash = `#${d.id},${state.page},${state.place}`;
+    if (f.contentWindow?.location.href.startsWith('http')) { f.contentWindow.location.hash = hash; f.contentWindow.location.reload(); }
+    else f.src = `color-frame.html${hash}`;
+  }
+}
+loadFrames();
+
+const LIMIT = 600, SCALE_MAX = 700;
+addEventListener('message', (e) => {
+  const d = e.data, p = parts[d?.design];
+  if (!p) return;
+  if (d.type === 'color') p.preview.update(d.vals);
+  if (d.type === 'size') {
+    p.frame.style.height = `${Math.min(LIMIT, d.h) + 2}px`;
+    p.frame.style.width = `${d.w + 2}px`;
+    for (const row of p.meter.querySelectorAll('.m-row')) {
+      const h = d.tabs[row.dataset.t];
+      row.classList.toggle('over', h > LIMIT);
+      row.querySelector('i').style.width = `${Math.min(100, (h / SCALE_MAX) * 100)}%`;
+      row.querySelector('s').style.left = `${(LIMIT / SCALE_MAX) * 100}%`;
+      row.querySelector('b').textContent = `${h} / ${LIMIT}`;
+    }
+  }
+});
+
+for (const seg of document.querySelectorAll('[data-ctl]')) {
+  for (const b of seg.querySelectorAll('button')) {
+    b.addEventListener('click', () => {
+      const ctl = seg.dataset.ctl;
+      state[ctl] = b.dataset.v;
+      for (const o of seg.querySelectorAll('button')) o.setAttribute('aria-pressed', String(o === b));
+      if (ctl === 'page' || ctl === 'place') loadFrames();
+      else for (const d of DESIGNS) parts[d.id].frame.contentWindow.postMessage(ctl === 'tab' ? { type: 'tab', tab: state.tab } : { type: 'scale', scale: state.scale }, '*');
+    });
+  }
+}
+</script>
+</body>
+</html>
