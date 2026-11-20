@@ -97,7 +97,7 @@ try {
   }
 
   // GPU-load cap: 8x (7680x4320 output) of full-frame 60 fps noise with the heaviest preset (B+B)
-  // misses the 16.7 ms frame limit even on a fast GPU, so after about 2 s it steps down to half,
+  // misses the 16.7 ms frame limit even on a fast GPU, so once its start-up grace (8 s) and a lasting drop are over it steps down,
   // and again if needed, never below 2x; the card says "GPU load".
   await sw.evaluate(async () => {
     const cur = (await chrome.storage.sync.get('anime4k')).anime4k ?? {};
@@ -121,6 +121,16 @@ try {
   }
   check('8x on a GPU that cannot keep up steps down and says it was the GPU load', !!capped?.loadCapped && capped.stats.outputWidth < 960 * 8 && capped.stats.outputWidth >= 960 * 2,
     `widths seen ${[...widths].join(' -> ')}, loadCapped ${capped?.loadCapped}, trail: ${trail.join(' | ')}`);
+  // The cap is checked after it (load-cap.ts capHelped): a real overload stays capped once the
+  // lower scale's warm-up and the check are over.
+  await page.waitForTimeout(8000);
+  const held = (await list())?.[0];
+  check('a cap that fixed real drops holds after its check', !!held?.loadCapped && held.stats?.outputWidth < 960 * 8, `loadCapped ${held?.loadCapped}, ${held?.stats?.outputWidth}`);
+  // Clicking the chosen upscale again (settings.ts liftLoadCap) runs it again, cap or not.
+  await sw.evaluate(async () => { await chrome.storage.local.set({ 'anime4k-lift-cap': Date.now() }); });
+  await page.waitForTimeout(2500);
+  const relifted = (await list())?.[0];
+  check('clicking the capped scale again runs it again', relifted?.loadCapped === false && relifted.stats?.outputWidth === 960 * 8, `loadCapped ${relifted?.loadCapped}, ${relifted?.stats?.outputWidth}`);
   await sw.evaluate(async () => {
     const cur = (await chrome.storage.sync.get('anime4k')).anime4k ?? {};
     await chrome.storage.sync.set({ anime4k: { ...cur, upscale: '2x' } });

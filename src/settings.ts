@@ -149,6 +149,20 @@ export function setSource(key: string, enabled: boolean): Promise<void> {
   return writeChain;
 }
 
+// Clicking the upscale option that is already chosen (e.g. 4x while it is capped) asks every
+// video to drop its GPU-load cap and run that scale again. A changing value, so storage reports it.
+const LIFT_CAP_KEY = 'anime4k-lift-cap';
+
+export function liftLoadCap(): Promise<void> {
+  return chrome.storage.local.set({ [LIFT_CAP_KEY]: Date.now() });
+}
+
+export function onLoadCapLifted(cb: () => void): void {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes[LIFT_CAP_KEY]) cb();
+  });
+}
+
 export function onSourcesChanged(cb: (s: Sources) => void): void {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes[SOURCES_KEY]) {
@@ -171,6 +185,7 @@ export interface VideoInfo {
   playing: boolean;
   sourceFps: number | null; // measured from requestVideoFrameCallback, also while off
   enabled: boolean;
+  colorOnly?: boolean; // not upscaled, but drawing the color controls alone (color.ts)
   status: Status;
   message: string;
   loadCapped?: boolean; // running below the wanted scale because the GPU could not keep up (load-cap.ts)
@@ -186,6 +201,8 @@ export interface VideoInfo {
 export type Message =
   | { type: 'a4k-list' }
   | { type: 'a4k-page-meta' }
+  // content (a player frame) -> background: the tab's page metadata and host, for the fullscreen menu's card
+  | { type: 'a4k-top-meta' }
   | { type: 'a4k-highlight'; id: string | null }
   | { type: 'a4k-changed' }
   // content -> background: upscaled time and finished episodes since the last report (rate-prompt.ts)

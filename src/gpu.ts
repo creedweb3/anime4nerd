@@ -9,6 +9,7 @@ import {
 } from './chain';
 import { decodedSize, uploadSize } from './video-size';
 import { REDRAW, createFrameReuse, differenceRadius } from './gpu-reuse';
+import type { ColorValues } from './color';
 
 export type { Anime4kRenderer, RenderSource, RenderStats } from './chain';
 export { SourceSizeChanged, chainCost } from './chain';
@@ -24,6 +25,8 @@ const FENCE_GIVE_UP_MS = 1000;
 
 /** Frame reuse: half-size (source pixels) of the window read back to measure a chain's reach. */
 const REACH_WINDOW = 128;
+/** GPU timings always kept, at least: the frame-time graphs' bar count (popup.ts, fullscreen-menu.ts BARS). */
+const KEEP_SAMPLES = 48;
 
 /** Frame reuse: the measured reach is widened by this factor (plus 2 pixels) before use. */
 const REACH_MARGIN = 1.25;
@@ -31,13 +34,95 @@ const REACH_MARGIN = 1.25;
 /** Frame reuse: reach already measured for a chain at a size (measuring costs a few full frames). */
 const reachCache = new Map<string, number | null>();
 
-/** The final draw to the canvas (flipped: textures are stored top row first). */
+/** A per-pixel hash (no texture, no state): the same pixel always gets the same value. */
+const HASH_GLSL = `
+float hash12(vec2 p) {
+  vec3 q = fract(vec3(p.xyx) * 0.1031);
+  q += dot(q, q.yzx + 33.33);
+  return fract((q.x + q.y) * q.z);
+}`;
+
+/*
+ * The final draw to the canvas (flipped: textures are stored top row first), with the color
+ * controls (color.ts). It runs in full every frame, also when frame reuse redraws nothing else,
+ * so changing a color never needs a rebuild. The math is VLC's adjust filter on BT.709 YUV:
+ *   Y' = (C*(Y-0.5) + 0.5 + (B-1)) ^ (1/G)
+ *   U' = S*(U cos h + V sin h),  V' = S*(V cos h - U sin h)
+ * plus our own: temperature/tint shift R, G, B before it; vibrance scales U/V less on pixels that
+ * are already colorful; grain adds noise to Y (and half as much to U, V) as VLC's grain does,
+ * new every frame, sized in 8-bit code values (VLC's variance).
+ */
 const PRESENT_FRAG = `#version 300 es
 precision highp float;
 in vec2 v_uv;
 out vec4 fragColor;
 uniform sampler2D FRAME_raw;
-void main() { fragColor = vec4(texture(FRAME_raw, vec2(v_uv.x, 1.0 - v_uv.y)).rgb, 1.0); }`;
+uniform bool u_color;
+uniform float u_bri, u_con, u_sat, u_invGamma, u_vib, u_warm, u_mag, u_grainSd, u_seed;
+uniform vec2 u_hue; // cos, sin
+${HASH_GLSL}
+void main() {
+  vec3 c = texture(FRAME_raw, vec2(v_uv.x, 1.0 - v_uv.y)).rgb;
+  if (u_color) {
+    c += vec3(u_warm + 0.5 * u_mag, -u_mag, -u_warm + 0.5 * u_mag);
+    float y = clamp(dot(c, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
+    float u = (c.b - y) / 1.8556;
+    float v = (c.r - y) / 1.5748;
+    float Y = pow(clamp(u_con * (y - 0.5) + 0.5 + (u_bri - 1.0), 0.0, 1.0), u_invGamma);
+    float s = u_sat * (1.0 + u_vib * max(0.0, 1.0 - length(vec2(u, v)) * 4.0));
+    float U = s * (u * u_hue.x + v * u_hue.y);
+    float V = s * (v * u_hue.x - u * u_hue.y);
+    if (u_grainSd > 0.0) {
+      vec2 p = gl_FragCoord.xy + u_seed;
+      Y += (hash12(p) + hash12(p + 17.3) + hash12(p + 41.7) - 1.5) * 2.0 * u_grainSd;
+      U += (hash12(p + 5.1) - 0.5) * u_grainSd;
+      V += (hash12(p + 9.7) - 0.5) * u_grainSd;
+    }
+    c = vec3(Y + 1.5748 * V, Y - 0.1873 * U - 0.4681 * V, Y + 1.8556 * U);
+    // Dither to 8 bits: without it the smooth in-between shades deband makes (and the colors'
+    // own gradients) are rounded back into bands on the 8-bit canvas, as mpv also dithers.
+    c += (hash12(gl_FragCoord.xy + u_seed * 0.37) - 0.5) / 255.0;
+  }
+  fragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+}`;
+
+/** Deband (mpv's algorithm): iterations, and the ring radius per iteration in source pixels. */
+const DEBAND_ITERATIONS = 2;
+const DEBAND_RANGE = 20;
+
+/*
+ * Deband, the first pass on the source frame (before Anime4K, as mpv does it). Each iteration
+ * averages four pixels on a ring around this one (radius grows each iteration, direction from a
+ * per-pixel hash) and takes that average where it is within the threshold, i.e. in flat areas
+ * where bands are; edges stay. u_threshold is mpv's deband-threshold, our "deband" value.
+ * The hash is per pixel, not per frame, so a still frame stays still (frame reuse relies on it).
+ */
+const DEBAND_FRAG = `#version 300 es
+precision highp float;
+in vec2 v_uv;
+out vec4 fragColor;
+uniform sampler2D SRC_raw;
+uniform vec2 SRC_size;
+uniform float u_threshold;
+${HASH_GLSL}
+void main() {
+  vec4 c = texture(SRC_raw, v_uv);
+  vec2 px = v_uv * SRC_size;
+  for (int i = 1; i <= ${DEBAND_ITERATIONS}; i++) {
+    float fi = float(i);
+    float dist = hash12(px + fi * 7.13) * ${DEBAND_RANGE}.0 * fi;
+    float dir = hash12(px + fi * 3.71) * 6.2831853;
+    vec2 o = dist * vec2(cos(dir), sin(dir)) / SRC_size;
+    vec4 avg = 0.25 * (texture(SRC_raw, v_uv + o) + texture(SRC_raw, v_uv - o)
+      + texture(SRC_raw, v_uv + vec2(o.x, -o.y)) + texture(SRC_raw, v_uv + vec2(-o.x, o.y)));
+    vec4 keep = step(vec4(u_threshold / (fi * 16384.0)), abs(c - avg)); // 1: differs too much, keep the pixel
+    c = mix(avg, c, keep);
+  }
+  fragColor = vec4(c.rgb, 1.0);
+}`;
+
+/** Deband strength used while measuring a chain's reach: the widest a deband pass ever spreads. */
+const DEBAND_MEASURE = 100;
 
 const VERT = `#version 300 es
 out vec2 v_uv;
@@ -118,17 +203,25 @@ let frameReuse = true;
 /** Redraw only what changed since the last frame (gpu-reuse.ts); off only to compare (tests). */
 export function setFrameReuse(on: boolean): void { frameReuse = on; }
 
+/**
+ * colorOnly: no Anime4K; the frame at its own size with only the color controls (a video that is
+ *   not upscaled while "also use colors when not upscaled" is on).
+ * deband: include the deband pass; its strength comes from setColor (0 changes nothing).
+ */
+export interface RendererOptions { colorOnly?: boolean; deband?: boolean }
+
 export async function createAnime4kRenderer(
   video: RenderSource,
   canvas: HTMLCanvasElement,
   settings: Settings,
   onError: (msg: string) => void,
   wantScale = 2,
+  opts: RendererOptions = {},
 ): Promise<Anime4kRenderer> {
   const { w, h } = video instanceof ImageBitmap ? { w: video.width, h: video.height } : uploadSize(video);
   if (!w || !h) throw new Error('Waiting for video dimensions.');
   try {
-    return await buildRenderer(video, canvas, settings, onError, wantScale, w, h);
+    return await buildRenderer(video, canvas, settings, onError, opts.colorOnly ? 1 : wantScale, w, h, opts);
   } catch (e) {
     // A build that fails after creating its context must give it back: pages get ~16 contexts,
     // and a leaked one evicts the oldest, which may be another video's working renderer.
@@ -145,6 +238,7 @@ async function buildRenderer(
   wantScale: number,
   w: number,
   h: number,
+  opts: RendererOptions,
 ): Promise<Anime4kRenderer> {
   // ImageBitmap, not instanceof HTMLVideoElement: a video from another realm (iframe) is still a video.
   const isVideo = !(video instanceof ImageBitmap);
@@ -162,13 +256,15 @@ async function buildRenderer(
   gl.getExtension('OES_texture_float_linear');
 
   const maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
-  if (w * 2 > maxTex || h * 2 > maxTex) throw new Error("The upscaled video exceeds this GPU's texture limit.");
+  const colorOnly = !!opts.colorOnly;
+  const minScale = colorOnly ? 1 : 2;
+  if (w * minScale > maxTex || h * minScale > maxTex) throw new Error("The upscaled video exceeds this GPU's texture limit.");
   // Beyond 2x is optional: halve the scale until the output fits the GPU's texture limit.
   let scale = wantScale;
-  let passes = orderedPasses(settings, scale);
+  let passes = colorOnly ? [] : orderedPasses(settings, scale);
   const wantReuse = isVideo && frameReuse;
   const tooBig = () => w * scale > maxTex || h * scale > maxTex;
-  while (scale > 2 && tooBig()) { scale /= 2; passes = orderedPasses(settings, scale); }
+  while (!colorOnly && scale > 2 && tooBig()) { scale /= 2; passes = orderedPasses(settings, scale); }
 
   canvas.width = w * scale;
   canvas.height = h * scale;
@@ -209,7 +305,9 @@ async function buildRenderer(
   // chain needs a handful of textures per size instead of one per pass.
   const plan = planChain(passes, w, h, scale);
   const { slotOf, slots } = poolTextures(plan, !!reuse);
-  const slotTex = slots.map((s, i) => (i === 0 ? videoTex : makeTex(s.w, s.h, true)));
+  // With deband, the chain reads the debanded frame in place of the video frame (texture 0).
+  const debandTex = opts.deband ? makeTex(w, h, true) : null;
+  const slotTex = slots.map((s, i) => (i === 0 ? debandTex ?? videoTex : makeTex(s.w, s.h, true)));
   const texOf = (id: number) => slotTex[slotOf[id]];
 
   const compiled: CompiledPass[] = [];
@@ -239,6 +337,7 @@ async function buildRenderer(
     return c;
   }
 
+  const debandPass = debandTex ? addPass('deband', DEBAND_FRAG, [{ name: 'SRC', tex: videoTex }], debandTex) : null;
   for (const s of plan.steps) {
     const inputs = s.inputs.map((inp): PassInput => ({ name: inp.name, tex: texOf(inp.ref) }));
     addPass(s.pass.desc, buildFragmentSource(s.pass, HOOK), inputs, texOf(s.out)).final = s.out === plan.final;
@@ -250,7 +349,7 @@ async function buildRenderer(
     canvas.width = finalSize.w;
     canvas.height = finalSize.h;
   }
-  addPass('present', PRESENT_FRAG, [{ name: 'FRAME', tex: texOf(plan.final) }], null);
+  const presentPass = addPass('present', PRESENT_FRAG, [{ name: 'FRAME', tex: texOf(plan.final) }], null);
 
   await finishPrograms(gl, pendingPrograms, () => destroyed);
   gl.deleteShader(vs);
@@ -260,6 +359,35 @@ async function buildRenderer(
       inp.loc = gl.getUniformLocation(c.program, `${inp.name}_raw`);
       inp.sizeLoc = gl.getUniformLocation(c.program, `${inp.name}_size`);
     }
+  }
+  const uni = (c: CompiledPass, name: string) => gl!.getUniformLocation(c.program, name);
+  const presentU = {
+    color: uni(presentPass, 'u_color'), bri: uni(presentPass, 'u_bri'), con: uni(presentPass, 'u_con'),
+    sat: uni(presentPass, 'u_sat'), invGamma: uni(presentPass, 'u_invGamma'), vib: uni(presentPass, 'u_vib'),
+    warm: uni(presentPass, 'u_warm'), mag: uni(presentPass, 'u_mag'), grainSd: uni(presentPass, 'u_grainSd'),
+    seed: uni(presentPass, 'u_seed'), hue: uni(presentPass, 'u_hue'),
+  };
+  const debandU = debandPass ? uni(debandPass, 'u_threshold') : null;
+  let color: ColorValues | null = null;
+  let debandStrength = 0;
+
+  /** Sets a pass's own uniforms (the generic loop only binds textures and sizes). */
+  function passUniforms(c: CompiledPass) {
+    if (c === debandPass) gl!.uniform1f(debandU, debandStrength);
+    if (c !== presentPass) return;
+    gl!.uniform1i(presentU.color, color ? 1 : 0);
+    if (!color) return;
+    const hue = (color.hue * Math.PI) / 180;
+    gl!.uniform1f(presentU.bri, color.brightness);
+    gl!.uniform1f(presentU.con, color.contrast);
+    gl!.uniform1f(presentU.sat, color.saturation);
+    gl!.uniform1f(presentU.invGamma, 1 / color.gamma);
+    gl!.uniform1f(presentU.vib, color.vibrance - 1);
+    gl!.uniform1f(presentU.warm, color.temperature / 1000); // +100: red +0.1, blue -0.1
+    gl!.uniform1f(presentU.mag, color.tint / 1250); // +100: green -0.08, red and blue +0.04
+    gl!.uniform1f(presentU.grainSd, Math.sqrt(color.grain) / 255); // VLC's variance is in 8-bit code values squared
+    gl!.uniform1f(presentU.seed, Math.random() * 1000);
+    gl!.uniform2f(presentU.hue, Math.cos(hue), Math.sin(hue));
   }
 
   const vao = gl.createVertexArray()!;
@@ -301,6 +429,7 @@ async function buildRenderer(
         }
         if (inp.sizeLoc) gl!.uniform2f(inp.sizeLoc, inp.tex.w, inp.tex.h);
       });
+      passUniforms(c);
       gl!.drawArrays(gl!.TRIANGLES, 0, 3);
     }
   }
@@ -348,11 +477,17 @@ async function buildRenderer(
   let reach: number | null = null; // source pixels; null = draw every frame in full
   let prevValid = false; // prevTex holds the frame the final texture was drawn from
   if (reuse?.usable) {
-    const key = `${chainKey(settings)}|${w}x${h}|${canvas.width}`;
+    const key = `${chainKey(settings)}|${debandPass ? 'deband' : ''}|${w}x${h}|${canvas.width}`;
     if (!reachCache.has(key)) {
+      // Measured with deband at full strength (its reach is also floored below).
+      debandStrength = DEBAND_MEASURE;
       try { reachCache.set(key, measureReach()); } catch { reachCache.set(key, null); }
+      debandStrength = 0;
     }
     reach = reachCache.get(key) ?? null;
+    // The noise image cannot show deband's reach (noise is never "flat", so deband keeps it), but
+    // on real gradients a change spreads as far as deband's outer ring: never less than that.
+    if (debandPass && reach !== null) reach = Math.max(reach, DEBAND_ITERATIONS * DEBAND_RANGE + 2);
   }
 
   // --- GPU timing -------------------------------------------------------------
@@ -413,8 +548,11 @@ async function buildRenderer(
     pollQueries();
     const now = performance.now();
     while (frameTimes.length && now - frameTimes[0] > 2000) frameTimes.shift();
-    while (recent.length && now - recent[0].t > 2000) recent.shift();
-    while (busyRecent.length && now - busyRecent[0].t > 2000) busyRecent.shift();
+    // The last 2 s, but never fewer than the graphs' bar count: a frame without a timing (the
+    // timer drops one when the GPU clock changes, or it is still pending) would leave the graph
+    // short on the left. At 24 fps 2 s is exactly that many frames, so one missing frame shows.
+    while (recent.length > KEEP_SAMPLES && now - recent[0].t > 2000) recent.shift();
+    while (busyRecent.length > KEEP_SAMPLES && now - busyRecent[0].t > 2000) busyRecent.shift();
     return {
       gpuMs: lastGpuMs,
       samples: recent.map((r) => r.ms),
@@ -494,5 +632,15 @@ async function buildRenderer(
     frameTimes.push(t0);
   }
 
-  return { render, busy, destroy, stats };
+  /**
+   * The color controls for the next frames (null: none). A new deband strength changes what
+   * every chain pass sees, so the next frame is drawn in full rather than in part.
+   */
+  function setColor(v: ColorValues | null) {
+    color = v;
+    const strength = v?.deband ?? 0;
+    if (strength !== debandStrength) { debandStrength = strength; prevValid = false; }
+  }
+
+  return { render, busy, destroy, stats, setColor };
 }

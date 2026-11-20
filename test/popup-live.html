@@ -1,0 +1,175 @@
+<!doctype html>
+<!--
+  The real popup, outside the extension: src/popup.html's markup, src/popup.css and the built
+  dist/popup.js (which has the color tab), with a fake chrome.* that answers like a page playing
+  one video. The color state (chrome.storage.local 'anime4k-color') is kept in this page's
+  localStorage, so profiles survive a reload. Hash: #tab=color|upscale. Nothing here talks to
+  the extension.
+  Query or hash: profiles=N starts with N saved color profiles (not kept; names=long gives
+  them 14-letter names); pages=N plays a manga
+  chapter of N pages instead of the video; build=firefox runs
+  dist-firefox/popup.js instead.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Anime4Nerd</title>
+<!-- Loaded with a timestamp below, so an edit always shows on reload (no cached copy). -->
+</head>
+<body>
+<script>
+/* ---- fake chrome.* ------------------------------------------------------------- */
+(() => {
+  const COLOR = 'anime4k-color';
+  const LS_KEY = 'a4n-popup-live-color';
+  const store = { sync: { anime4k: { mode: 'auto', preset: 'A', darkenLines: false, thinLines: false, upscale: 'auto' } }, local: { 'anime4k-sources': { 'player.example::blob:': true } } };
+  const q = new URLSearchParams(`${location.search.slice(1)}&${location.hash.slice(1)}`);
+  const PROFILES = Number(q.get('profiles')) || 0;
+  const PAGES = Number(q.get('pages')) || 0;
+  if (PROFILES) {
+    const v = { brightness: 1, contrast: 1.05, saturation: 1.1, gamma: 1, vibrance: 1, temperature: 0, tint: 0, deband: 0, grain: 0 };
+    const name = (i) => (q.get('names') === 'long' ? `WMWMWMWMWMW${String(i + 1).padStart(3, '0')}` : `look ${i + 1}`); // long: PROFILE_NAME_MAX wide letters
+    const profiles = Array.from({ length: PROFILES }, (_, i) => ({ id: `m${i}`, name: name(i), v }));
+    store.local[COLOR] = { on: true, always: false, profile: 'm3', values: v, profiles };
+  } else {
+    try { const c = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); if (c) store.local[COLOR] = c; } catch { /* storage blocked: start from the defaults */ }
+  }
+  if (PAGES) store.local['a4k-manga'] = { 'reader.example': true };
+  const keep = (name, k) => {
+    if (name !== 'local' || k !== COLOR || PROFILES) return;
+    try { localStorage.setItem(LS_KEY, JSON.stringify(store.local[COLOR])); } catch { /* the stub still works without it */ }
+  };
+  const listeners = [];
+  const area = (name) => ({
+    async get(keys) {
+      const all = store[name];
+      if (keys == null) return { ...all };
+      const list = typeof keys === 'string' ? [keys] : Array.isArray(keys) ? keys : Object.keys(keys);
+      return Object.fromEntries(list.filter((k) => k in all).map((k) => [k, structuredClone(all[k])]));
+    },
+    async set(obj) {
+      const changes = {};
+      for (const [k, v] of Object.entries(obj)) { changes[k] = { oldValue: store[name][k], newValue: structuredClone(v) }; store[name][k] = structuredClone(v); keep(name, k); }
+      for (const fn of listeners) fn(changes, name);
+    },
+    async remove(keys) { for (const k of [].concat(keys)) delete store[name][k]; },
+  });
+  // One video, 1080p, drawn at 4K; its GPU time wanders around 4 ms.
+  const samples = [];
+  let tick = 0;
+  function video() {
+    const enabled = !!store.local['anime4k-sources']?.['player.example::blob:'];
+    tick += 1;
+    for (let i = 0; i < 6; i++) samples.push(3.6 + Math.sin((tick * 6 + i) / 7) * 0.5 + Math.random() * 0.6);
+    while (samples.length > 120) samples.shift();
+    return {
+      id: 'player.example#1', key: 'player.example::blob:', frameHost: 'player.example', mediaHost: 'blob:',
+      width: 1920, height: 1080, playing: true, sourceFps: 23.976, enabled,
+      status: enabled ? 'Active' : 'Off', message: '',
+      stats: enabled ? { gpuMs: samples[samples.length - 1], samples: samples.slice(), cpuMs: 0.4, fps: 23.976, passes: 9, textureBytes: 96 * 1048576, outputWidth: 3840, outputHeight: 2160, timerSupported: true, sourceFps: 23.976 } : null,
+      media: null,
+    };
+  }
+  // A manga chapter of PAGES pages: the first 120 on the page, 40 of them upscaled, two in progress.
+  function manga() {
+    const loaded = Math.min(PAGES, 120);
+    const marks = Array.from({ length: loaded }, (_, i) => (i < 40 ? 'done' : i < 42 ? 'now' : 'todo'));
+    return {
+      on: true, kind: 'images', meta: { series: 'Vagabond', volume: null, chapter: '12', chapterTitle: null },
+      marks, first: 0, loading: 0, total: PAGES, reasons: ['demo'], current: 40, done: 40, failed: 0, lastError: null,
+      grey: true, size: { w: 1100, h: 1600 }, perPageMs: 180, pageMs: 420, imageHost: 'reader.example', protocol: 5,
+      host: 'reader.example', renders: 40,
+    };
+  }
+  const META = { title: 'Frieren: Beyond Journey’s End', season: 1, episode: 12, episodeName: 'A Real Hero', subtitle: null, source: 'demo' };
+  window.chrome = {
+    runtime: {
+      getManifest: () => ({ version: '1.3.0' }),
+      getURL: (p) => p,
+      onMessage: { addListener() {} },
+      sendMessage: async () => undefined,
+    },
+    storage: { sync: area('sync'), local: area('local'), onChanged: { addListener: (fn) => listeners.push(fn) } },
+    tabs: {
+      query: async () => [{ id: 1, url: PAGES ? 'https://reader.example/vagabond/12' : 'https://player.example/watch/frieren-12', active: true }],
+      sendMessage: async (_tab, msg) => {
+        if (msg?.type === 'a4k-list') return PAGES ? [] : [video()];
+        if (msg?.type === 'a4k-manga-status') return PAGES ? manga() : null;
+        if (msg?.type === 'a4k-page-meta') return META;
+        return null;
+      },
+    },
+    webNavigation: { getAllFrames: async () => [{ frameId: 0, url: 'https://player.example/watch/frieren-12' }] },
+    scripting: { insertCSS: async () => {}, executeScript: async () => [] },
+    action: { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} },
+  };
+})();
+
+/* ---- the real popup ---------------------------------------------------------- */
+(async () => {
+  const html = await (await fetch('../src/popup.html', { cache: 'no-store' })).text();
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  for (const s of doc.body.querySelectorAll('script')) s.remove();
+  const l = document.createElement('link');
+  l.rel = 'stylesheet';
+  l.href = `../src/popup.css?${Date.now()}`;
+  document.head.append(l);
+  await new Promise((ok) => { l.onload = ok; l.onerror = ok; });
+  document.body.replaceChildren(...doc.body.childNodes);
+  for (const a of doc.body.attributes) document.body.setAttribute(a.name, a.value);
+  const firefox = /(^|[?&#])build=firefox(&|$)/.test(location.search + location.hash);
+  if (firefox) window.browser = window.chrome; // the Firefox build calls browser.*
+  await loadScript(`../${firefox ? 'dist-firefox' : 'dist'}/popup.js?${Date.now()}`);
+  hookPage();
+})();
+function loadScript(src) {
+  return new Promise((ok, fail) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = fail; document.body.append(s); });
+}
+
+/* ---- the page around this frame ----------------------------------------------- */
+// Tab requests (#tab=..., or a message) click the popup's own tabs, so leaving the color tab asks as it would.
+function goTo(t) { document.querySelector(`.c-tab[data-t="${t}"]`)?.click(); }
+
+// The preview picture beside the frame takes slider positions (color-demo.js's makePreview).
+function position(k, v) {
+  switch (k) {
+    case 'hue': return v / 180;
+    case 'brightness': case 'contrast': case 'vibrance': return v - 1;
+    case 'saturation': return v < 1 ? v - 1 : (v - 1) / 2;
+    case 'gamma': return v < 1 ? Math.log10(v) / 2 : Math.log10(v);
+    case 'temperature': case 'tint': case 'deband': return v / 100;
+    case 'grain': return v / 10;
+  }
+  return 0;
+}
+async function postColor() {
+  const s = (await chrome.storage.local.get('anime4k-color'))['anime4k-color'];
+  const v = s?.values ?? {};
+  const keys = ['hue', 'brightness', 'contrast', 'saturation', 'gamma', 'vibrance', 'temperature', 'tint', 'deband', 'grain'];
+  const neutral = { brightness: 1, contrast: 1, saturation: 1, gamma: 1, vibrance: 1 };
+  const on = s?.on !== false;
+  parent.postMessage({ type: 'color', vals: Object.fromEntries(keys.map((k) => [k, on ? position(k, v[k] ?? neutral[k] ?? 0) : 0])) }, '*');
+}
+
+function hookPage() {
+  const tab = new URLSearchParams(location.hash.slice(1)).get('tab');
+  if (tab) goTo(tab);
+  addEventListener('message', (e) => { if (e.data?.type === 'tab') goTo(e.data.tab); });
+  chrome.storage.onChanged.addListener((c, area) => { if (area === 'local' && c['anime4k-color']) void postColor(); });
+  void postColor();
+  // Tell the page around this frame how tall each tab makes the popup (before its 600px cap).
+  // Not a ResizeObserver: measuring flips the tabs, which would wake it again.
+  setInterval(report, 1000);
+  report();
+}
+function report() {
+  requestAnimationFrame(() => {
+    const b = document.body, cur = b.dataset.tab, h = {};
+    for (const t of ['upscale', 'color']) { b.dataset.tab = t; h[t] = b.scrollHeight; }
+    b.dataset.tab = cur;
+    parent.postMessage({ type: 'size', h: b.offsetHeight, w: b.offsetWidth, tabs: h, tab: cur }, '*');
+  });
+}
+</script>
+</body>
+</html>

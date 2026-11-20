@@ -1,7 +1,10 @@
 // Unit tests for the GPU-load cap (src/load-cap.ts) and the chain cost model (src/chain.ts). Runs in Node:
 //   npx esbuild test/load-cap-test.ts --bundle --platform=node --format=esm --loader:.glsl=text --outfile=test/load-cap-test.js && node test/load-cap-test.js
 import assert from 'node:assert/strict';
-import { Measured, allowedScale, median, overloaded, pixelCost, predictAt, stepDownTo } from '../src/load-cap';
+import {
+  Measured, SEVERE_DRAWN, SEVERE_MS, SUSTAIN_MS, allowedScale, median, overloadFor, overloaded, pixelCost, predictAt,
+  capHelped, lowerHelps, smoothMs, stepDownTo,
+} from '../src/load-cap';
 import { chainCost, passWeight } from '../src/chain';
 import type { Settings } from '../src/settings';
 
@@ -94,6 +97,75 @@ test('overloaded: frames dropped AND the GPU is the reason', () => {
   assert.equal(overloaded({ drawn: null, gpuMs: [50, 50, 50, 50, 50], budgetMs: BUDGET }), false);
   assert.equal(overloaded({ drawn: 0.5, gpuMs: [50, 50, 50, 50, 50], budgetMs: null }), false);
 });
+
+test('overloaded: the GPU is the reason only when it runs near the limit or its slow frames pass it', () => {
+  // Median 76%, every frame within the limit: the drops come from elsewhere (page, decoder).
+  assert.equal(overloaded({ drawn: 0.8, gpuMs: [31, 32, 32, 32, 33, 31, 32, 32, 32, 32], budgetMs: BUDGET }), false);
+  // Median 81%: near the limit.
+  assert.equal(overloaded({ drawn: 0.8, gpuMs: [34, 34, 34, 34, 34, 34, 33, 34, 34, 34], budgetMs: BUDGET }), true);
+  // Median low, but the slowest tenth of frames go past the limit: spikes drop frames.
+  assert.equal(overloaded({ drawn: 0.8, gpuMs: [20, 20, 20, 20, 20, 20, 20, 20, 45, 46], budgetMs: BUDGET }), true);
+});
+
+test('overloadFor: a short dip caps nothing; a consistent drop for SUSTAIN_MS does', () => {
+  let t = overloadFor(null, 1000, 0.85);
+  assert.deepEqual(t, { since: 1000, fire: false });
+  t = overloadFor(t.since, 1000 + SUSTAIN_MS - 1, 0.85);
+  assert.equal(t.fire, false);
+  t = overloadFor(t.since, 1000 + SUSTAIN_MS, 0.85);
+  assert.equal(t.fire, true);
+  // A good check (null: not overloaded) in between starts over.
+  assert.deepEqual(overloadFor(1000, 3000, null), { since: null, fire: false });
+  assert.deepEqual(overloadFor(null, 3500, 0.85), { since: 3500, fire: false });
+});
+
+test('overloadFor: too many frames lost caps once it lasts SEVERE_MS, not on one dip', () => {
+  // One bad check (a cold GPU's first seconds, a page still loading) caps nothing.
+  assert.equal(overloadFor(null, 1000, SEVERE_DRAWN - 0.01).fire, false);
+  assert.equal(overloadFor(1000, 1000 + SEVERE_MS - 1, SEVERE_DRAWN - 0.01).fire, false);
+  assert.equal(overloadFor(1000, 1000 + SEVERE_MS, SEVERE_DRAWN - 0.01).fire, true);
+  // A milder drop for that long is not yet enough.
+  assert.equal(overloadFor(1000, 1000 + SEVERE_MS, SEVERE_DRAWN + 0.01).fire, false);
+  // Without GPU timings the drops may have other causes: only the long rule applies.
+  assert.equal(overloadFor(1000, 1000 + SEVERE_MS, SEVERE_DRAWN - 0.01, false).fire, false);
+  assert.equal(overloadFor(1000, 1000 + SUSTAIN_MS, SEVERE_DRAWN - 0.01, false).fire, true);
+});
+
+test('overloadFor: after a false alarm (slow = 2) a drop must last twice as long', () => {
+  assert.equal(overloadFor(1000, 1000 + SUSTAIN_MS, 0.85, true, 2).fire, false);
+  assert.equal(overloadFor(1000, 1000 + 2 * SUSTAIN_MS, 0.85, true, 2).fire, true);
+  assert.equal(overloadFor(1000, 1000 + SEVERE_MS, 0.5, true, 2).fire, false);
+  assert.equal(overloadFor(1000, 1000 + 2 * SEVERE_MS, 0.5, true, 2).fire, true);
+});
+
+test('lowerHelps: a step down counts only when the lower scale is predicted clearly cheaper', () => {
+  const m: Measured = new Map([[4, 38]]);
+  // 2x costs a quarter of the pixels: clearly cheaper.
+  assert.equal(lowerHelps(4, 2, m, pixelCost), true);
+  // A chain whose cost hardly changes with scale (fixed work dominates): a lower scale would not help.
+  const flat = (s: number) => 100 + s * 0.1;
+  assert.equal(lowerHelps(4, 2, m, flat), false);
+  // Nothing measured: no evidence either way, the drops decide.
+  assert.equal(lowerHelps(4, 2, new Map(), pixelCost), true);
+});
+
+test('capHelped: a cap that did not clearly reduce the drops was a false alarm', () => {
+  assert.equal(capHelped(0.8, 0.99), true); // drops gone
+  assert.equal(capHelped(0.6, 0.9), true); // much better
+  assert.equal(capHelped(0.85, 0.86), false); // no real change: the GPU was not the reason
+  assert.equal(capHelped(0.85, 0.8), false);
+});
+
+test('smoothMs: a scale\'s GPU time follows new checks without jumping on one', () => {
+  assert.equal(smoothMs(undefined, 30), 30);
+  const s = smoothMs(30, 40);
+  assert.ok(s > 30 && s < 40, String(s));
+  // Many checks converge on the new level.
+  let v = 30;
+  for (let i = 0; i < 30; i++) v = smoothMs(v, 40);
+  assert.ok(Math.abs(v - 40) < 0.1, String(v));
+});
+
 
 let failed = 0;
 for (const [name, fn] of tests) {

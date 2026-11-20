@@ -221,17 +221,19 @@ try {
     await p.goto(`http://${page}/heavy`);
     const trail = [];
     let info = null;
+    let fenced = false; // fence timings seen at some point: they start over once the cap resizes
     for (let i = 0; i < 40; i++) {
       await p.waitForTimeout(500);
       info = (await list(p))[0];
       const st = info?.stats;
       const step = `${info?.status}${st ? `@${st.outputWidth} ${st.fps}/${st.sourceFps?.toFixed(1)}fps busy${st.busySamples?.length ?? '-'}` : ''}${info?.loadCapped ? ' capped' : ''}`;
       if (trail.at(-1) !== step) trail.push(step);
+      if ((st?.busySamples?.length ?? 0) > 0 || st?.timerSupported) fenced = true;
       if (info?.loadCapped && st?.outputWidth === 1920) break;
     }
     const st = info?.stats;
     const fpsRight = Math.abs((st?.sourceFps ?? 0) - 60) <= 3;
-    const fenceTimed = (st?.busySamples?.length ?? 0) > 0 || st?.timerSupported;
+    const fenceTimed = fenced;
     const keptUp4x = trail.some((t) => /@3840 /.test(t)) && !info?.loadCapped && (st?.fps ?? 0) >= 0.92 * 60;
     const cappedRight = info?.loadCapped && st?.outputWidth === 1920;
     check('load-cap', fpsRight && fenceTimed && (cappedRight || keptUp4x), trail.join(' | '));

@@ -54,6 +54,17 @@ chrome.runtime.onMessage.addListener((msg: Message, sender, respond) => {
   if (sender.id !== chrome.runtime.id) return false;
   if (msg?.type === 'a4k-watch') void updateRate((s) => addWatch(s, msg.seconds, msg.episodes)).catch(() => {});
   else if (msg?.type === 'a4k-rate' && RATE_ACTIONS.includes(msg.action)) void updateRate((s) => applyAction(s, msg.action, msg.level)).catch(() => {});
+  else if (msg?.type === 'a4k-top-meta') {
+    // A player frame's fullscreen menu: the top page's title / episode and the tab's host, as the
+    // popup shows them. Only the asking tab's own top frame is asked.
+    const tab = sender.tab;
+    if (tab?.id === undefined) { respond(null); return false; }
+    let host = '';
+    try { host = tab.url ? new URL(tab.url).hostname : ''; } catch { /* no host */ }
+    chrome.tabs.sendMessage(tab.id, { type: 'a4k-page-meta' } satisfies Message, { frameId: 0 })
+      .then((meta: unknown) => respond({ meta: meta ?? null, host }), () => respond({ meta: null, host }));
+    return true; // answers asynchronously
+  }
   else if (!__FIREFOX__ && msg?.type === 'a4k-suggest') {
     const { tab, frameId } = sender;
     const kind = msg.kind === 'manga' || msg.kind === 'anime' || msg.kind === 'reader' ? msg.kind : null;

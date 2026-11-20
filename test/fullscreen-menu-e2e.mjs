@@ -31,8 +31,9 @@ const { chromium } = loadPlaywright();
 const entry = `
 import { FullscreenMenu } from ${JSON.stringify(path.join(root, 'src/fullscreen-menu.ts'))};
 import { normalize } from ${JSON.stringify(path.join(root, 'src/settings.ts'))};
+import { DEFAULT_COLOR } from ${JSON.stringify(path.join(root, 'src/color.ts'))};
 const settings = normalize({});
-const menu = new FullscreenMenu(() => null, () => settings);
+const menu = new FullscreenMenu(() => null, () => settings, () => DEFAULT_COLOR);
 menu.mount(document.body);
 document.addEventListener('mousemove', () => menu.wake(), { passive: true });
 `;

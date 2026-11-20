@@ -542,9 +542,9 @@ try {
       cell: cells[0].w, lastRow: cells.slice(108).map((c) => c.x).join() === cells.slice(0, 12).map((c) => c.x).join(),
     };
   });
-  check('page map, 120 pages: ten rows of 12 that scroll inside the map, never sideways', long.rows === 10 && long.scrolls && !long.sideways && long.lastRow, JSON.stringify(long));
+  check('page map, 120 pages: ten rows of 12, never sideways, and no scrollbar of its own', long.rows === 10 && !long.scrolls && !long.sideways && long.lastRow, JSON.stringify(long));
   check('page map, 120 pages: every cell the same whole-pixel square as in a short chapter', long.square && long.whole && long.cell === long.short, JSON.stringify(long));
-  check('page map, 120 pages: three rows show (3 cells and 2 gaps of 3px), the rest scrolls', long.rowGap === 3 && long.height === 3 * long.cell + 2 * 3, JSON.stringify({ rowGap: long.rowGap, height: long.height }));
+  check('page map, 120 pages: all ten rows show (no inner scroll); only the popup itself scrolls', Math.abs(long.height - (10 * long.cell + 9 * long.rowGap)) < 1, JSON.stringify({ rowGap: long.rowGap, height: long.height }));
   // A 30-page chapter (three rows, no scrolling): the gap between rows is the gap between columns.
   const thirty = await popup3.evaluate(() => {
     const grid = document.getElementById('pmap-grid');
@@ -1294,9 +1294,11 @@ try {
         return Math.abs(mid(el.querySelector('b').getBoundingClientRect()) - mid(box)) <= 0.5 && Math.abs(mid(el.querySelector('span').getBoundingClientRect()) - mid(box)) <= 0.5
           && Math.abs(mid(word.getBoundingClientRect()) - mid(box)) <= 1;
       }),
-      sideGaps: [...new Set(panels.map((r) => `${r1(r.left - body.left)}/${r1(body.right - r.right)}`))], bodyWidth: body.width,
+      sideGaps: [...new Set(panels.map((r) => `${r1(r.left - body.left)}/${r1(body.left + document.body.clientLeft + document.body.clientWidth - r.right)}`))], bodyWidth: body.width,
       sideways: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-      mapRows: new Set([...grid.children].map((el) => el.offsetTop)).size, mapLong: grid.classList.contains('long'), mapScrolls: grid.scrollHeight > grid.clientHeight,
+      sets: !document.getElementById('pmap-sets').hidden, setsInHead: !!document.querySelector('.panel-head #pmap-sets'),
+      range: document.getElementById('pmap-range').textContent, mapShown: [...grid.children].filter((el) => !el.hidden).length,
+      mapRows: new Set([...grid.children].filter((el) => !el.hidden).map((el) => el.offsetTop)).size, mapScrolls: grid.scrollHeight > grid.clientHeight, bodyScrolls: document.body.scrollHeight > document.body.clientHeight,
       legend: document.querySelectorAll('.pmap-legend, #pmap .pkey').length, hr: document.querySelectorAll('.hr').length,
       headGap: r1(card.top - document.querySelector('.panel-head').getBoundingClientRect().bottom),
       height: document.body.scrollHeight,
@@ -1327,7 +1329,7 @@ try {
   const p80 = await openChapter(80);
   const g80 = await chapter(p80);
   check('80-page chapter: still one 6×6px square per page, 39 to a row, wrapping to more rows on the same 2px gap', g80.n === 80 && !g80.shares && g80.barRows === '39+39+2' && g80.blockWidths.join() === '6'
-    && g80.blockHeights.join() === '6' && g80.blockGaps.join() === '2' && g80.rowGaps.join() === '2' && !g80.sideways && g80.height <= POPUP_MAX,
+    && g80.blockHeights.join() === '6' && g80.blockGaps.join() === '2' && g80.rowGaps.join() === '2' && !g80.sideways && !g80.mapScrolls,
     JSON.stringify({ n: g80.n, rows: g80.barRows, widths: g80.blockWidths, gaps: g80.blockGaps, rowGaps: g80.rowGaps, height: g80.height }));
   await p80.close();
   const p120 = await openChapter(120);
@@ -1335,8 +1337,10 @@ try {
   check('120-page chapter: the bar is one segment per state, as wide as its share, on one row', g120.shares && g120.n === 4 && g120.classes === 'done,now,fail,wait' && g120.oneRow && g120.barHeight === 6
     && g120.minBlock >= 2 && g120.blockGaps.length === 1 && g120.blockGaps[0] === 2 && g120.barInset[0] === g120.barInset[1] && g120.tiles === 'done:44,active:2,failed:1,queued:73',
     JSON.stringify({ n: g120.n, classes: g120.classes, widths: g120.blockWidths, gaps: g120.blockGaps, min: g120.minBlock, inset: g120.barInset, tiles: g120.tiles }));
-  check('120-page chapter (three-row page map that scrolls): popup fits without a scrollbar', g120.mapLong && g120.mapScrolls && g120.height <= POPUP_MAX && !g120.sideways && g120.sideGaps[0] === '10/10' && g120.sideGaps.length === 1,
+  // No scrollbar inside the popup: the page map shows every row, and only the popup itself scrolls.
+  check('120-page chapter: the page map has no scrollbar of its own, the popup scrolls instead, gaps stay 10px', !g120.mapScrolls && g120.mapRows === 10 && g120.bodyScrolls && !g120.sideways && g120.sideGaps[0] === '10/10' && g120.sideGaps.length === 1,
     `${g120.height}px, side gaps ${g120.sideGaps}`);
+  check('120-page chapter: one set of pages, so no page arrows', !g120.sets && g120.mapShown === 120, JSON.stringify({ sets: g120.sets, shown: g120.mapShown }));
   console.log(`INFO reader page, mode auto, 120-page chapter (three-row page map): popup content height ${g120.height}px; segments ${g120.blockWidths}px`);
   // The confirmation on the tallest popup: anime mode, then "switch to manga" from the preview.
   await pickMode(p120, 'anime');
@@ -1345,15 +1349,42 @@ try {
   await p120.waitForTimeout(700); // past a refresh
   const d120 = await prompt(p120);
   const m120 = await chapter(p120);
-  check('120-page chapter with the confirmation: popup fits without a scrollbar', d120.done && d120.card && m120.mapLong && d120.height <= POPUP_MAX && !d120.scrolls && d120.height === g120.height,
-    JSON.stringify({ done: d120.done, card: d120.card, long: m120.mapLong, height: d120.height, before: g120.height }));
+  check('120-page chapter with the confirmation: the popup keeps its height, the map no scrollbar of its own', d120.done && d120.card && !m120.mapScrolls && d120.height === g120.height,
+    JSON.stringify({ done: d120.done, card: d120.card, mapScrolls: m120.mapScrolls, height: d120.height, before: g120.height }));
   console.log(`INFO reader page, 120-page chapter, confirmation showing: popup content height ${d120.height}px`);
   await p120.close();
   await setMode('auto');
   const p300 = await openChapter(300);
   const g300 = await chapter(p300);
-  check('300-page chapter: one failed page in 300 is still a visible segment', g300.shares && g300.oneRow && g300.minBlock >= 2 && g300.tiles === 'done:112,active:2,failed:1,queued:185' && g300.height <= POPUP_MAX,
+  check('300-page chapter: one failed page in 300 is still a visible segment', g300.shares && g300.oneRow && g300.minBlock >= 2 && g300.tiles === 'done:112,active:2,failed:1,queued:185' && !g300.mapScrolls,
     JSON.stringify({ min: g300.minBlock, widths: g300.blockWidths, tiles: g300.tiles, height: g300.height }));
+  // Past 120 pages the map shows one set of 120 at a time, with arrows in its heading (no row of their own).
+  check('300-page chapter: page arrows in the map heading, one set of 120 pages in ten rows', g300.sets && g300.setsInHead && g300.mapShown === 120 && g300.mapRows === 10 && /^\d+–\d+$/.test(g300.range),
+    JSON.stringify({ sets: g300.sets, inHead: g300.setsInHead, shown: g300.mapShown, rows: g300.mapRows, range: g300.range }));
+  const mapSet = () => p300.evaluate(() => {
+    const shown = [...document.querySelectorAll('#pmap-grid .pcell')].filter((el) => !el.hidden);
+    return { range: document.getElementById('pmap-range').textContent, first: shown[0]?.textContent, last: shown.at(-1)?.textContent, n: shown.length,
+      prev: document.getElementById('pmap-prev').disabled, next: document.getElementById('pmap-next').disabled, height: document.body.scrollHeight,
+      focus: document.activeElement?.textContent };
+  });
+  while (!(await mapSet()).prev) await p300.click('#pmap-prev');
+  const set1 = await mapSet();
+  await p300.click('#pmap-next');
+  const set2 = await mapSet();
+  await p300.click('#pmap-next');
+  const set3 = await mapSet();
+  check('page arrows: 1–120, then 121–240, then 241–300; the end arrows switch off', set1.range === '1–120' && set1.first === '1' && set1.last === '120' && set1.prev && !set1.next
+    && set2.range === '121–240' && set2.first === '121' && set2.n === 120 && set3.range === '241–300' && set3.n === 60 && set3.next && !set3.prev, JSON.stringify([set1, set2, set3]));
+  await p300.waitForTimeout(1300); // past a refresh
+  check('page arrows: the picked set stays when the popup refreshes', (await mapSet()).range === '241–300', (await mapSet()).range);
+  await p300.click('#pmap-prev');
+  await p300.focus('#pmap-grid .pcell:nth-child(240)');
+  await p300.keyboard.press('ArrowRight');
+  const walked = await mapSet();
+  check('page map keys: walking past the last cell of a set shows the next set', walked.range === '241–300' && walked.focus === '241', JSON.stringify(walked));
+  await p300.keyboard.press('ArrowUp');
+  const back = await mapSet();
+  check('page map keys: walking back up shows the set before', back.range === '121–240' && back.focus === '229', JSON.stringify(back));
   await p300.close();
   // Downloaded bytes larger than the image on screen: refused by size, the rest still upscaled.
   const swap = await ctx.newPage();
@@ -1420,6 +1451,7 @@ try {
     const vis = (el) => !!el && el.getClientRects().length > 0;
     const text = (el) => (vis(el) ? el.textContent : '');
     const verdict = document.getElementById('verdict');
+    const tabDot = document.getElementById('t-verdict');
     const body = document.body;
     const bRect = body.getBoundingClientRect();
     const panels = [...document.querySelectorAll('.panel')].filter(vis).map((el) => el.getBoundingClientRect());
@@ -1441,7 +1473,8 @@ try {
         };
       }),
       perf: vis(document.getElementById('perf')), pmap: vis(document.getElementById('pmap')), manga: vis(document.getElementById('manga-card')),
-      verdict: text(verdict), verdictColour: getComputedStyle(verdict).color, verdictTip: verdict.dataset.tip ?? '', tiles: document.getElementById('k-load').textContent,
+      // The status shows as the upscale tab's dot (the heading is hidden); its words are the dot's tooltip.
+      verdict: vis(tabDot) ? `${tabDot.textContent} ${tabDot.dataset.tip ?? ''}` : '', verdictColour: getComputedStyle(tabDot).color, verdictTip: verdict.dataset.tip ?? '', tiles: document.getElementById('k-load').textContent,
       count: document.getElementById('count').textContent,
       height: body.scrollHeight, scrolls: body.scrollHeight > body.clientHeight, scrollsClass: document.documentElement.classList.contains('scrolls'),
       bodyWidth: bRect.width, barWidth: body.offsetWidth - body.clientWidth, maxHeight: body.style.maxHeight,

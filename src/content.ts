@@ -6,15 +6,19 @@
 
 import {
   Message, Settings, Sources, Status, Suggest, VideoInfo, chainKey,
-  loadSettings, loadSources, onSettingsChanged, onSourcesChanged, requestedScale, sourceKey,
+  loadSettings, loadSources, onLoadCapLifted, onSettingsChanged, onSourcesChanged, requestedScale, sourceKey,
 } from './settings';
 import type { Anime4kRenderer } from './gpu';
-import { collectPageMeta, mediaSessionMeta } from './media-meta';
+import { type ColorState, type ColorValues, DEFAULT_COLOR, appliedColor, loadColor, onColorChanged } from './color';
+import { EMPTY_META, type MediaMeta, type PageLabel, collectPageMeta, mediaSessionMeta } from './media-meta';
 import { uploadSize } from './video-size';
 import { FullscreenMenu } from './fullscreen-menu';
 import { EPISODE_SECONDS } from './rate-prompt';
 import { MangaMode, startManga } from './manga';
-import { CostOf, Measured, OVERLOAD_AFTER_MS, allowedScale, median, overloaded, pixelCost, stepDownTo } from './load-cap';
+import {
+  CostOf, Measured, OVERLOAD_AFTER_MS, RESUME_GRACE_MS, START_GRACE_MS, VERIFY_MS, allowedScale, capHelped, lowerHelps, median,
+  overloadFor, overloaded, pixelCost, smoothMs, stepDownTo,
+} from './load-cap';
 
 type GpuModule = typeof import('./gpu');
 let gpuModule: Promise<GpuModule> | null = null;
@@ -94,6 +98,17 @@ class VideoUpscaler {
   // median GPU time at each scale it ran at, when the renderer was built, and the last check.
   private loadCap: number | null = null;
   private measured: Measured = new Map();
+  // When the current unbroken overload began.
+  private overSince: number | null = null;
+  // Shares of frames drawn during the current overload; a cap being checked (did it help?); and
+  // how much longer a drop must last on this video (doubled after each false alarm).
+  private overDrawn: number[] = [];
+  private capCheck: { before: number; until: number; drawn: number[] } | null = null;
+  private capSlow = 1;
+  // Load checks wait until then (a new renderer warming up, a cold GPU, playback just resumed);
+  // a video's first renderer gets the longest wait.
+  private graceUntil = 0;
+  private coldStart = true;
   private builtAt = 0;
   private loadCheckAt = 0;
   private framesDrawn = 0; // frames rendered by this video's renderers
@@ -166,12 +181,19 @@ class VideoUpscaler {
     this.onUpdate = onUpdate;
     const sync = () => this.sync();
     // A new source or size: the load cap and the measured GPU time were for the old one.
-    const reset = () => { this.loadCap = null; this.measured = new Map(); this.teardown(); this.sync(); };
+    const reset = () => { this.liftCap(); this.measured = new Map(); this.coldStart = true; this.teardown(); this.sync(); };
     // A seek decodes frames nobody draws (from the keyframe to the target): not dropped frames.
     const seeking = () => { this.stopLoop(); this.drawWindow = []; if (this.canvas) this.canvas.hidden = true; };
     const report = () => { this.sync(); this.onUpdate(); };
+    // Resumed from a pause: the GPU may have clocked down meanwhile, so the first seconds don't count.
+    const playing = () => {
+      this.graceUntil = Math.max(this.graceUntil, performance.now() + RESUME_GRACE_MS);
+      this.drawWindow = [];
+      this.overSince = null;
+      report();
+    };
     this.listeners = [
-      ['loadeddata', report], ['playing', report], ['pause', () => { this.freezeSamples(); report(); }], ['seeked', sync], ['seeking', seeking],
+      ['loadeddata', report], ['playing', playing], ['pause', () => { this.freezeSamples(); report(); }], ['seeked', sync], ['seeking', seeking],
       ['resize', reset], ['emptied', reset], ['loadstart', reset], ['error', reset],
       ['enterpictureinpicture', sync], ['leavepictureinpicture', sync],
     ];
@@ -208,6 +230,7 @@ class VideoUpscaler {
       playing: !this.video.paused && !this.video.ended,
       sourceFps: this.sourceFps,
       enabled: this.enabled,
+      colorOnly: this.builtColorOnly && !!this.renderer,
       status: this.status,
       message: this.message.slice(0, 200),
       stats: this.currentStats(),
@@ -235,23 +258,73 @@ class VideoUpscaler {
   setEnabled(on: boolean) {
     if (on === this.enabled) return;
     this.enabled = on;
+    // A failure was for the other renderer (upscaling vs colors alone): this one gets a fresh try.
+    this.failed = false;
     if (this.idleTimer !== null) { window.clearTimeout(this.idleTimer); this.idleTimer = null; }
     if (!on) {
       // Stop drawing and hide the overlay, but keep the renderer compiled (only one warm at a time).
-      for (const other of upscalers.values()) if (other !== this && !other.enabled) other.teardown();
+      // (Not one drawing colors alone: that one is in use.)
+      for (const other of upscalers.values()) if (other !== this && !other.active) other.teardown();
       this.stopLoop();
       if (this.canvas) this.canvas.hidden = true;
-      this.failed = false;
-      this.idleTimer = window.setTimeout(() => { this.idleTimer = null; if (!this.enabled) this.teardown(); }, VideoUpscaler.KEEP_WARM_MS);
+      this.keepWarm();
     }
     this.sync();
+  }
+
+  // --- color controls (color.ts) ---------------------------------------------
+  private color: ColorState = colorState;
+
+  // What the current renderer was built for: colors alone (no upscaling), and with a deband pass.
+  private builtColorOnly = false;
+  private builtDeband = false;
+
+  /** The colors to apply now, or null: off, all neutral, or manga mode (videos left alone). */
+  private colors(): ColorValues | null {
+    return this.mangaOnly() ? null : appliedColor(this.color);
+  }
+
+  /** Not upscaled, but "also use colors when not upscaled" is on: draw the colors alone. */
+  private colorOnly(): boolean {
+    return !this.enabled && this.color.always && this.colors() !== null;
+  }
+
+  private wantsDeband(): boolean {
+    return (this.colors()?.deband ?? 0) > 0;
+  }
+
+  /** Drawing anything: upscaling, or colors alone. */
+  get active(): boolean {
+    return this.enabled || this.colorOnly();
+  }
+
+  /**
+   * The renderer can draw what is wanted now. A deband pass, once built, stays (at strength 0 it
+   * changes nothing), so dragging deband through 0 does not rebuild the renderer each time.
+   */
+  private rendererFits(): boolean {
+    return this.builtColorOnly === this.colorOnly() && (this.builtDeband || !this.wantsDeband());
+  }
+
+  /** Not drawing: keep the renderer compiled for a while (switching back is instant), then drop it. */
+  private keepWarm() {
+    if (this.idleTimer !== null || !this.renderer) return;
+    this.idleTimer = window.setTimeout(() => { this.idleTimer = null; if (!this.active) this.teardown(); }, VideoUpscaler.KEEP_WARM_MS);
+  }
+
+  setColor(c: ColorState) {
+    this.color = c;
+    // Only a renderer in use is rebuilt; an idle one (colors back at neutral, say) is kept warm.
+    if (this.renderer && this.active && !this.rendererFits()) this.teardown();
+    this.renderer?.setColor(this.colors());
+    this.sync(); // draws the change at once, also on a paused video
   }
 
   configure(s: Settings) {
     const chainChanged = chainKey(s) !== chainKey(this.settings) || s.upscale !== this.settings.upscale;
     // A settings change lifts the load cap; a different chain also costs differently, so its
     // measured time no longer predicts anything (a new upscale choice keeps it).
-    if (chainChanged) this.loadCap = null;
+    if (chainChanged) this.liftCap();
     if (chainKey(s) !== chainKey(this.settings)) this.measured = new Map();
     this.settings = s;
     if (chainChanged || this.mangaOnly()) this.teardown();
@@ -316,8 +389,10 @@ class VideoUpscaler {
   private sync() {
     if (this.dead) return;
     // Tells src/fullscreen-redirect.ts (page world) to fullscreen this video's container instead.
-    this.video.toggleAttribute('data-a4k-on', this.enabled && !this.mangaOnly());
-    if (!this.enabled) { this.stopLoop(); if (this.canvas) this.canvas.hidden = true; this.setStatus('Off'); this.probeFps(); return; }
+    this.video.toggleAttribute('data-a4k-on', this.active && !this.mangaOnly());
+    if (!this.active) { this.stopLoop(); if (this.canvas) this.canvas.hidden = true; this.setStatus('Off'); this.probeFps(); this.keepWarm(); return; }
+    // Upscaling vs colors alone, or deband on vs off, is a different renderer: build the right one.
+    if (this.renderer && !this.rendererFits()) this.teardown();
     this.stopProbe();
     // configure() has already dropped the renderer and its canvas; nothing is built while this holds.
     if (this.mangaOnly()) { this.stopLoop(); this.setStatus('Suspended', 'Paused: manga mode.'); return; }
@@ -351,7 +426,9 @@ class VideoUpscaler {
     this.starting = true;
     this.width = v.videoWidth;
     this.height = v.videoHeight;
-    this.scale = this.wantedScale();
+    this.builtColorOnly = this.colorOnly();
+    this.builtDeband = this.wantsDeband();
+    this.scale = this.builtColorOnly ? 1 : this.wantedScale();
     const gen = this.generation;
 
     const canvas = document.createElement('canvas');
@@ -361,7 +438,7 @@ class VideoUpscaler {
     this.canvas = canvas;
     this.mountCanvas(canvas);
     this.watchCues();
-    this.setStatus('Loading', 'Preparing Anime4K (first start compiles shaders, 5–10 s).');
+    this.setStatus('Loading', this.builtColorOnly ? 'Preparing colors.' : 'Preparing Anime4K (first start compiles shaders, 5–10 s).');
 
     const timeout = window.setTimeout(() => {
       if (gen === this.generation) this.fail('Anime4K initialization timed out.');
@@ -371,10 +448,14 @@ class VideoUpscaler {
       if (gen !== this.generation) return;
       const r = await createAnime4kRenderer(v, canvas, this.settings, (msg) => {
         if (gen === this.generation) this.fail(msg);
-      }, this.scale);
+      }, this.scale, { colorOnly: this.builtColorOnly, deband: this.builtDeband });
       if (gen !== this.generation) { r.destroy(); return; }
+      r.setColor(this.colors());
       this.renderer = r;
       this.builtAt = performance.now();
+      // The first renderer for a video starts on a cold GPU and a page that may still be loading.
+      this.graceUntil = this.builtAt + (this.coldStart ? START_GRACE_MS : OVERLOAD_AFTER_MS);
+      this.coldStart = false;
       this.drawWindow = []; // frames skipped while the new renderer compiled are not its drops
       this.starting = false;
       this.layout();
@@ -428,8 +509,8 @@ class VideoUpscaler {
       // Shown again (scrolled back, tab back, seek done): the redrawn subtitles must come back with it.
       if (this.canvas?.hidden) { this.canvas.hidden = false; this.paintCues(); }
       this.setStatus('Active');
-      this.countWatch();
-      this.watchLoad(r);
+      // Upscaled time and the GPU-load cap concern upscaling, not colors alone.
+      if (!this.builtColorOnly) { this.countWatch(); this.watchLoad(r); }
     } catch (e) {
       if (gen === this.generation) {
         // gpu.js is a separate bundle, so match the error by name rather than instanceof.
@@ -477,10 +558,10 @@ class VideoUpscaler {
 
   /** Keep measuring the video's frame rate while Anime4K is off (one callback per frame, no drawing). */
   private probeFps() {
-    if (this.fpsProbe !== null || this.enabled || typeof this.video.requestVideoFrameCallback !== 'function') return;
+    if (this.fpsProbe !== null || this.active || typeof this.video.requestVideoFrameCallback !== 'function') return;
     const tick = () => {
       this.fpsProbe = null;
-      if (this.enabled) return;
+      if (this.active) return;
       this.noteSourceFrame();
       if (!this.video.paused && !this.video.ended) this.fpsProbe = this.video.requestVideoFrameCallback(tick);
     };
@@ -708,20 +789,48 @@ class VideoUpscaler {
   relayout() { this.layout(); }
 
   /**
-   * While playing, at most every LOAD_CHECK_MS: note the median GPU time at this scale (it
-   * predicts the cost of any other), and above 2x, once a renderer has run for OVERLOAD_AFTER_MS,
-   * step down when the last 2 s dropped frames because of the GPU: straight to the highest scale
-   * predicted to fit. The cap holds for this video until a setting or the source changes, so the
-   * scale does not bounce.
+   * The user clicked the chosen upscale again: drop a GPU-load cap and run that scale. Judged
+   * from the wanted scale itself, so the step-up prediction cannot hold it back; the checks then
+   * start over after the start-up grace (a real overload is caught again by the same rules, at
+   * the earliest START_GRACE_MS + SEVERE_MS later).
+   */
+  liftLoadCap() {
+    if (this.loadCap === null && !this.capCheck) return;
+    this.liftCap();
+    this.coldStart = true; // a much heavier scale: the full start-up grace before any check
+    this.scale = this.rawScale();
+    this.teardown();
+    this.sync();
+  }
+
+  /** Forget the load cap and its history (a new source, size or setting starts fresh). */
+  private liftCap() {
+    this.loadCap = null;
+    this.overSince = null;
+    this.overDrawn = [];
+    this.capCheck = null;
+    this.capSlow = 1;
+  }
+
+  /**
+   * While playing, at most every LOAD_CHECK_MS: note the GPU time at this scale (smoothed; it
+   * predicts the cost of any other), and above 2x, once the renderer's grace is over (longest for a
+   * video's first renderer), step down when the GPU is the reason frames are lost: after
+   * SEVERE_MS when many are, after SUSTAIN_MS of an unbroken drop otherwise (load-cap.ts
+   * overloadFor), and only if the lower scale would clearly lighten the GPU. It goes straight to
+   * the highest scale predicted to fit, then checks the cap helped (verifyCap). A confirmed cap
+   * holds until a setting or the source changes: the scale never goes back and forth.
    */
   private watchLoad(r: Anime4kRenderer) {
     const now = performance.now();
     if (now - this.loadCheckAt < LOAD_CHECK_MS || this.video.paused) return;
     this.loadCheckAt = now;
+    // A hidden tab draws nothing: its missing frames say nothing about the GPU.
+    if (document.hidden) { this.overSince = null; this.drawWindow = []; return; }
     const s = r.stats();
     // GPU time per frame: timer queries, or without them (Firefox) fence timing.
     const gpu = s.timerSupported ? s.samples : s.busySamples;
-    if (gpu.length >= MIN_LOAD_SAMPLES) this.measured = new Map(this.measured).set(this.scale, median(gpu));
+    if (gpu.length >= MIN_LOAD_SAMPLES) this.measured = new Map(this.measured).set(this.scale, smoothMs(this.measured.get(this.scale), median(gpu)));
     // Frames drawn against frames the decoder produced, over the last 2 s of playback.
     const decoded = this.video.getVideoPlaybackQuality?.().totalVideoFrames ?? 0;
     this.drawWindow.push({ t: now, drawn: this.framesDrawn, decoded });
@@ -730,10 +839,44 @@ class VideoUpscaler {
     const dDecoded = decoded - a.decoded;
     const drawn = now - a.t >= 1500 && dDecoded >= MIN_LOAD_SAMPLES ? Math.min(1, (this.framesDrawn - a.drawn) / dDecoded) : null;
     const budget = this.frameBudget();
-    if (this.scale <= 2 || now - this.builtAt < OVERLOAD_AFTER_MS || !overloaded({ drawn, gpuMs: gpu, budgetMs: budget })) return;
-    this.loadCap = stepDownTo(this.scale, this.measured, budget, this.costOf());
     // Rebuilt after this frame finishes, not inside it.
-    window.setTimeout(() => { if (this.renderer === r) { this.teardown(); this.sync(); } }, 0);
+    const rebuild = () => window.setTimeout(() => { if (this.renderer === r) { this.teardown(); this.sync(); } }, 0);
+    if (now < this.graceUntil) { this.overSince = null; this.overDrawn = []; return; }
+    if (this.verifyCap(now, drawn, rebuild)) return;
+    if (this.scale <= 2) { this.overSince = null; return; }
+    const isOver = overloaded({ drawn, gpuMs: gpu, budgetMs: budget });
+    const over = overloadFor(this.overSince, now, isOver ? drawn : null, gpu.length >= MIN_LOAD_SAMPLES, this.capSlow);
+    this.overSince = over.since;
+    this.overDrawn = isOver && drawn !== null ? [...this.overDrawn, drawn] : [];
+    if (!over.fire) return;
+    const target = stepDownTo(this.scale, this.measured, budget, this.costOf());
+    const before = median(this.overDrawn);
+    this.overSince = null;
+    this.overDrawn = [];
+    // A lower scale that would hardly lighten the GPU would not stop these drops: not the GPU.
+    if (!lowerHelps(this.scale, target, this.measured, this.costOf())) return;
+    this.loadCap = target;
+    this.capCheck = { before, until: 0, drawn: [] };
+    rebuild();
+  }
+
+  /**
+   * After a cap, watch the lower scale for VERIFY_MS (once its warm-up is over). If the share of
+   * frames drawn did not clearly improve, the GPU was not the reason: undo the cap and make this
+   * video's next cap need a drop twice as long. True while the check is running.
+   */
+  private verifyCap(now: number, drawn: number | null, rebuild: () => void): boolean {
+    const c = this.capCheck;
+    if (!c) return false;
+    if (!c.until) c.until = now + VERIFY_MS;
+    if (drawn !== null) c.drawn.push(drawn);
+    if (now < c.until || !c.drawn.length) return true;
+    this.capCheck = null;
+    if (capHelped(c.before, median(c.drawn))) return false;
+    this.loadCap = null;
+    this.capSlow *= 2;
+    rebuild();
+    return true;
   }
 
   /** Time per source frame at the current playback speed; null while the frame rate is unknown. */
@@ -773,7 +916,7 @@ class VideoUpscaler {
     const parent = v.parentElement;
     if (!c || !parent) return;
     // Display size crossed the 2x line (fullscreen, theater mode, zoom): rebuild at the other scale.
-    if ((this.renderer || this.starting) && this.wantedScale() !== this.scale) { this.teardown(); this.sync(); return; }
+    if ((this.renderer || this.starting) && !this.builtColorOnly && this.wantedScale() !== this.scale) { this.teardown(); this.sync(); return; }
     // Players move the <video> between containers (theater/fullscreen layouts): follow it.
     const host = this.lowered;
     const misplaced = host
@@ -989,6 +1132,7 @@ function objectOffset(component: string | undefined, free: number): number {
 const upscalers = new Map<HTMLVideoElement, VideoUpscaler>();
 let settings: Settings;
 let sources: Sources = {};
+let colorState: ColorState = DEFAULT_COLOR;
 
 function collectVideos(root: Document | ShadowRoot | Element, out: HTMLVideoElement[]) {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
@@ -1041,7 +1185,7 @@ function queueScan() {
 }
 
 function applyRendererCap() {
-  const ranked = [...upscalers.values()].filter((u) => u.enabled).sort((a, b) => b.priority() - a.priority());
+  const ranked = [...upscalers.values()].filter((u) => u.active).sort((a, b) => b.priority() - a.priority());
   ranked.forEach((u, i) => u.setThrottled(i >= MAX_ACTIVE_RENDERERS));
 }
 
@@ -1207,7 +1351,18 @@ function fullscreenTarget(): { u: VideoUpscaler; container: Element | ShadowRoot
   return big ? { u: big, container: document.body } : null;
 }
 
-const menu = new FullscreenMenu(() => fullscreenTarget()?.u.info() ?? null, () => settings);
+/**
+ * The tab's page title / episode and host for the fullscreen menu's card. The top frame reads its
+ * own page; a player frame asks the background, which asks the top frame (as the popup does).
+ */
+async function loadPageLabel(): Promise<PageLabel | null> {
+  if (window.top === window) return { meta: collectPageMeta(), host: location.hostname };
+  const r = await chrome.runtime.sendMessage({ type: 'a4k-top-meta' } satisfies Message) as { meta: Partial<MediaMeta> | null; host: unknown } | null;
+  if (!r) return null;
+  return { meta: { ...EMPTY_META, ...(r.meta ?? {}) }, host: typeof r.host === 'string' ? r.host : '' };
+}
+
+const menu = new FullscreenMenu(() => fullscreenTarget()?.u.info() ?? null, () => settings, () => colorState, loadPageLabel);
 // Not offered in mode 'manga': its switch and presets would do nothing to a video there.
 function syncMenu() {
   if (stopped) return;
@@ -1240,8 +1395,17 @@ if (!window.__a4kLoaded) {
   window.__a4kLoaded = true;
   document.addEventListener(TAKEOVER_EVENT, onTakeover);
   (async () => {
-  [settings, sources] = await Promise.all([loadSettings(), loadSources()]);
+  [settings, sources, colorState] = await Promise.all([loadSettings(), loadSources(), loadColor()]);
   if (stopped) return;
+  onColorChanged((c) => {
+    if (stopped) return;
+    colorState = c;
+    for (const u of upscalers.values()) u.setColor(c);
+    applyRendererCap();
+    menu.refresh();
+    notify();
+  });
+  onLoadCapLifted(() => { if (stopped) return; for (const u of upscalers.values()) u.liftLoadCap(); applyRendererCap(); notify(); });
   onSettingsChanged((s) => { if (stopped) return; settings = s; for (const u of upscalers.values()) u.configure(s); manga?.refresh(); syncMenu(); notify(); if (!__FIREFOX__) checkSuggestion(); });
   if (!__FIREFOX__) {
     manga = startManga(() => settings, loadGpu);
@@ -1255,6 +1419,7 @@ if (!window.__a4kLoaded) {
     sources = s;
     for (const u of upscalers.values()) u.setEnabled(sources[u.key] === true);
     applyRendererCap();
+    menu.refresh(); // the color tab says whether colors reach a video that is not upscaled
     notify();
   });
   document.addEventListener('fullscreenchange', syncMenu);

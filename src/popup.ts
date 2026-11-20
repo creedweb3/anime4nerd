@@ -1,13 +1,15 @@
 import {
-  Message, Mode, PRESETS, Settings, Suggest, VideoInfo, capNote, frameVerdict, loadSettings, onSettingsChanged, onSourcesChanged, saveSettings, setSource,
+  Message, Mode, PRESETS, Settings, Suggest, VideoInfo, capNote, frameVerdict, liftLoadCap, loadSettings, onSettingsChanged, onSourcesChanged, saveSettings,
+  setSource,
 } from './settings';
-import { EMPTY_META, MediaMeta } from './media-meta';
+import { EMPTY_META, MediaMeta, videoLabel } from './media-meta';
 import { WHATS_NEW_URL, clearWhatsNew, pendingWhatsNew } from './whats-new';
 import { REVIEW_URL, RateAction, cardFor, loadRate, pendingLevel } from './rate-prompt';
 import { MANGA_PROTOCOL, loadMangaSites, onMangaSitesChanged, setMangaSites } from './manga-sites';
 import type { MangaStatus } from './manga';
 import type { MangaMeta } from './manga-meta';
 import { BROWSER, reportUrl } from './site-links';
+import { initColorTab, setColorVideo } from './popup-color';
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
 const hintEl = $('#hint');
@@ -67,7 +69,12 @@ for (const b of document.querySelectorAll<HTMLButtonElement>('[data-field]')) {
   });
 }
 for (const b of document.querySelectorAll<HTMLButtonElement>('[data-upscale]')) {
-  b.addEventListener('click', () => { void saveSettings({ upscale: b.dataset.upscale as Settings['upscale'] }); });
+  b.addEventListener('click', () => {
+    const up = b.dataset.upscale as Settings['upscale'];
+    // The option already chosen, clicked again: run it again even if the GPU-load cap held it down.
+    if (settings?.upscale === up) void liftLoadCap().catch(() => {});
+    else void saveSettings({ upscale: up });
+  });
 }
 
 // --- tooltips: one box for every [data-tip] (a native title= tooltip is drawn by the system) ---
@@ -286,20 +293,7 @@ function pLabel(h: number): string { return h ? `${h}p` : '?'; }
 
 /** Merge page metadata with the player frame's Media Session data. */
 function labelFor(v: VideoInfo): { title: string; tag: string; episodeName: string } {
-  const m: MediaMeta = { ...pageMeta };
-  if (v.media) {
-    if (!m.title && v.media.album) m.title = v.media.album;
-    if (!m.episodeName && v.media.title && v.media.title !== m.title) m.episodeName = v.media.title;
-    if (!m.title && v.media.title) m.title = v.media.title;
-    if (!m.subtitle && v.media.artist) m.subtitle = v.media.artist;
-  }
-  const title = m.title || tabHost || v.frameHost;
-  let tag = '';
-  if (m.episode !== null) tag = m.season !== null ? `S${m.season} E${m.episode}` : `E${m.episode}`;
-  let episodeName = m.episodeName && m.episodeName !== title ? m.episodeName : (m.episode === null && m.subtitle ? m.subtitle : '');
-  // No real name ("Episode 12" beside "S1 E12" says the same thing twice): the card shows the quality there.
-  if (/^\s*(episode|ep\.?|e)\s*#?\d+\s*$/i.test(episodeName) || episodeName.replace(/\s+/g, '').toLowerCase() === tag.replace(/\s+/g, '').toLowerCase()) episodeName = '';
-  return { title, tag, episodeName };
+  return videoLabel(pageMeta, v.media, tabHost || v.frameHost);
 }
 
 interface CardState { cls: string; text: string; tip: string }
@@ -309,6 +303,8 @@ const NOT_POSSIBLE = '● Not possible';
 /** What a video is doing, in a word or two (no performance verdict); the long reason is the tooltip. */
 function cardState(v: VideoInfo): CardState {
   if (mode() === 'manga') return { cls: 'dim', text: '● Paused', tip: 'Manga mode: videos are not upscaled' };
+  // Not upscaled, but drawing the color controls ("also use colors when not upscaled").
+  if (!v.enabled && v.colorOnly && v.status === 'Active') return { cls: 'ok', text: '● Colors only', tip: 'Not upscaled; your colors are applied. Tap to upscale' };
   if (!v.enabled) return { cls: 'off', text: '● Off', tip: 'Tap to turn on' };
   switch (v.status) {
     case 'Active': return v.playing ? { cls: 'ok', text: UPSCALING, tip: '' } : { cls: 'dim', text: '● Paused', tip: '' };
@@ -388,6 +384,17 @@ function buildCard(v: VideoInfo): Card {
 
 function setText(el: HTMLElement, text: string) { if (el.textContent !== text) el.textContent = text; }
 
+/** setText, with the "N× capped" note (`note`, e.g. "4× capped") inside `text` in the warn colour. */
+function setTextNote(el: HTMLElement, text: string, note: string) {
+  const at = note ? text.lastIndexOf(note) : -1;
+  if (at < 0) { if (el.querySelector('.capn') || el.textContent !== text) el.textContent = text; return; }
+  if (el.textContent === text && el.querySelector('.capn')) return;
+  const span = document.createElement('span');
+  span.className = 'capn';
+  span.textContent = note;
+  el.replaceChildren(text.slice(0, at), span, text.slice(at + note.length));
+}
+
 /** Whether the card's title is cut on one line (the two-line layout would hide that, so it is measured without it). */
 function titleIsLong(c: Card, title: string): boolean {
   if (c.long?.title !== title) {
@@ -445,9 +452,10 @@ function patchCard(c: Card, v: VideoInfo, open: boolean) {
   c.el.classList.toggle('two-line', layout === 'two-line');
   setText(c.tag, rowTag);
   c.tag.hidden = !rowTag;
-  setText(c.epName, rowText);
+  const capShort = cap.replace(/: .*$/, '').replace(/^ · /, ''); // "4× capped", in the warn colour wherever it shows
+  setTextNote(c.epName, rowText, capShort);
   setText(c.host, host);
-  setText(c.res, info);
+  setTextNote(c.res, info, capShort);
   setText(c.why, impossible ? shortReason(v.message) : '');
   c.host.hidden = c.res.hidden = impossible;
   c.why.hidden = !impossible;
@@ -658,10 +666,13 @@ async function refresh() {
     const reading = !!manga && list.length === 0;
     setText($('#nowLabel'), reading ? 'reading now' : 'playing now');
     $('#perf').hidden = reader;
+    // Colors only reach videos: a manga page with no video gets no folder tabs, only the upscale side.
+    document.body.classList.toggle('no-tabs', reading);
     hintEl.classList.toggle('manga', reading && reader);
 
     // The performance panel follows the open card; a manga page without a video gets manga figures.
     if (reading) paintMangaPerf(manga!); else if (!reader) paintPerf(open?.v ?? null);
+    setColorVideo(open?.v ? open.v.enabled : null);
     // Said once: on a video page the performance heading already reads "● Paused", so the preview drops its own.
     ($('.mp-paused') as HTMLElement | null)?.toggleAttribute('hidden', offered === 'anime');
 
@@ -888,12 +899,17 @@ function paintPageBar(states: CellState[], counts: Record<CellState, number>) {
 
 // --- page map: one cell per page of the chapter, built once and recoloured in place --------
 const PMAP_COLS = 12; // as in popup.css
-const PMAP_ROWS = 3; // more rows than this scroll inside the map, so the popup stays within its height
 const UNKNOWN = '–';
 const CELL_WORD: Record<CellState, string> = { done: 'done', now: 'in progress', fail: 'failed', wait: 'waiting' };
 const pmap = {
   panel: $('#pmap'), count: $('#pmap-count'), grid: $('#pmap-grid'), per: $('#pmap-per'), left: $('#pmap-left'),
+  sets: $('#pmap-sets'), prev: $<HTMLButtonElement>('#pmap-prev'), next: $<HTMLButtonElement>('#pmap-next'), range: $('#pmap-range'),
 };
+/** Pages shown at once: ten rows of 12. A longer chapter gets arrows to step through sets of this many. */
+const PMAP_SET = 120;
+/** The set the arrows picked; null follows the page being read. */
+let pmapPicked: number | null = null;
+let pmapSet = 0;
 
 /** Start to shown for one page; the GPU pass alone until a whole page has been timed. */
 function pageTime(s: MangaStatus): number | null { return s.pageMs ?? s.perPageMs ?? null; }
@@ -920,13 +936,14 @@ function paintPageMap(m: MangaView | null) {
     cell.textContent = String(i + 1);
     pmap.grid.append(cell);
   }
-  pmap.grid.classList.toggle('long', n > PMAP_COLS * PMAP_ROWS);
   // One tab stop for the whole map (the arrow keys move inside it): a long chapter must not put
   // hundreds of Tab presses before the presets.
   if (!pmap.grid.querySelector('[tabindex="0"]') && pmap.grid.firstElementChild) (pmap.grid.firstElementChild as HTMLElement).tabIndex = 0;
   // Cells stand for chapter pages; the reader's own list (loaded pages, then those still loading)
   // can be shorter and start later. An older page script sends neither figure.
   const first = s.first ?? 0;
+  const reading = Math.floor((first + (s.current ?? 0)) / PMAP_SET);
+  showSet(pmapPicked ?? reading);
   const reachable = s.marks.length + (s.loading ?? 0);
 
   const states = pageStates(s, on);
@@ -960,6 +977,33 @@ function paintPageMap(m: MangaView | null) {
   setTip(pmap.left, per === null || !left ? '' : 'at most: several pages are worked on at once');
 }
 
+/** Shows one set of PMAP_SET cells; the arrows only when the chapter has more than one set. */
+function showSet(set: number) {
+  const n = pmap.grid.children.length;
+  const last = Math.max(0, Math.ceil(n / PMAP_SET) - 1);
+  pmapSet = Math.min(Math.max(set, 0), last);
+  pmap.sets.hidden = last === 0;
+  const from = pmapSet * PMAP_SET;
+  const to = Math.min(from + PMAP_SET, n);
+  for (let i = 0; i < n; i += 1) {
+    const cell = pmap.grid.children[i] as HTMLElement;
+    const out = i < from || i >= to;
+    if (cell.hidden !== out) cell.hidden = out;
+  }
+  if (last === 0) return;
+  setText(pmap.range, `${from + 1}–${to}`);
+  pmap.prev.disabled = pmapSet === 0;
+  pmap.next.disabled = pmapSet === last;
+  // The map's one tab stop moves into the set on show, so Tab still reaches the map.
+  const stop = pmap.grid.querySelector<HTMLElement>('[tabindex="0"]');
+  if (stop?.hidden) { stop.tabIndex = -1; (pmap.grid.children[from] as HTMLElement).tabIndex = 0; }
+}
+
+function stepSet(by: number) {
+  pmapPicked = pmapSet + by;
+  showSet(pmapPicked);
+}
+
 /** A cell scrolls the reader to its page. Buttons turn Enter and Space into clicks themselves. */
 function onPageMapClick(e: MouseEvent) {
   const cell = (e.target as HTMLElement).closest<HTMLElement>('.pcell');
@@ -975,7 +1019,11 @@ function onPageMapKey(e: KeyboardEvent) {
   const from = Array.prototype.indexOf.call(pmap.grid.children, e.target);
   if (step === undefined || from < 0) return;
   e.preventDefault(); // the arrows would scroll the popup
-  (pmap.grid.children[from + step] as HTMLElement | undefined)?.focus();
+  const to = from + step;
+  if (to < 0 || to >= pmap.grid.children.length) return;
+  // Walking past the set shows the next one.
+  if (Math.floor(to / PMAP_SET) !== pmapSet) { pmapPicked = Math.floor(to / PMAP_SET); showSet(pmapPicked); }
+  (pmap.grid.children[to] as HTMLElement).focus();
 }
 
 /** The cell that has the focus is the map's one tab stop, so Tab comes back to it. */
@@ -1025,6 +1073,8 @@ function initMangaCard(url: string | undefined) {
   pmap.grid.addEventListener('click', onPageMapClick);
   pmap.grid.addEventListener('keydown', onPageMapKey);
   pmap.grid.addEventListener('focusin', onPageMapFocus);
+  pmap.prev.addEventListener('click', () => stepSet(-1));
+  pmap.next.addEventListener('click', () => stepSet(1));
   void loadMangaSites().then((sites) => { mangaSiteOn = sites[mangaHost] === true; void refresh(); });
   onMangaSitesChanged((sites) => {
     mangaSiteOn = sites[mangaHost] === true;
@@ -1143,6 +1193,7 @@ function initPrompt() {
   tabId = tab?.id;
   try { tabHost = new URL(tab?.url ?? '').host; } catch { /* no url permission */ }
   tick();
+  initColorTab();
   void showWhatsNew();
   void showRateCard();
   initMangaCard(tab?.url);

@@ -15,3 +15,6 @@ design/
 docs/private/
 *.stackdump
 .wrangler/
+
+# Anime frame used only by the local design demos (not ours to publish)
+test/demo-frame.webp

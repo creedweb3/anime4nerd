@@ -13,6 +13,7 @@ import darkenHQ from './shaders/Anime4K_Darken_HQ.glsl';
 import thinHQ from './shaders/Anime4K_Thin_HQ.glsl';
 import { HookPass, evalRpn, parseHookPasses } from './mpv-hooks';
 import type { Preset, Settings } from './settings';
+import type { ColorValues } from './color';
 
 export interface RenderStats {
   gpuMs: number | null; // GPU time of the last completed frame; null if timer queries are unsupported
@@ -35,6 +36,8 @@ export interface Anime4kRenderer {
   busy(): boolean;
   destroy(): void;
   stats(): RenderStats;
+  /** Color controls for the next frames, or null for none (see color.ts). */
+  setColor(v: ColorValues | null): void;
 }
 
 /** Thrown by render() when the decoded frame size no longer matches the textures; rebuild, don't fail. */
