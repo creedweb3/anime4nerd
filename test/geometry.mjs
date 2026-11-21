@@ -122,6 +122,14 @@ const LAYOUT = [
     bar: true,
   },
   {
+    // Vime-style player (mkissa.to): the absolutely positioned video sizes itself (100%) from an
+    // outer container, through an unpositioned inline wrapper. Positioning that wrapper would
+    // shrink the video to 0x0 (black picture), so the canvas must be placed without touching it.
+    name: 'layout-abs-inline',
+    body: `<div style="position:relative;width:960px;height:540px"><vm-file>${video('position:absolute;left:0;top:0;width:100%;height:100%')}</vm-file></div>`,
+    expect: (v) => ({ x: v.x + 120, y: v.y, w: 720, h: 540 }),
+  },
+  {
     name: 'layout-cap', // three eligible videos: only MAX_ACTIVE_RENDERERS (2) may run
     body: [1, 2, 3].map(() => video('width:480px;height:270px')).join(''),
     statuses: { Active: 2, Waiting: 1 },

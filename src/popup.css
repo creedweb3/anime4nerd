@@ -361,6 +361,11 @@ body:has(#mode[aria-expanded="true"]) .bar > :not(#modeChip) { pointer-events: n
 .capn { color: var(--warn); }
 /* Not possible: the reason, in the state's own colour, on the info line */
 .meta .why { overflow: hidden; text-overflow: ellipsis; color: var(--bad); opacity: 0.85; }
+/* Under a blocked video's reason: what to try instead */
+.source .hint { display: flex; align-items: center; gap: 6px; margin-top: 6px; color: var(--fg); opacity: 0.85; font-size: 11px; }
+/* the "tip" chip, drawn like the episode tag above it */
+.source .hint::before { content: "tip"; flex: none; border: 1px solid rgba(227, 197, 138, 0.45); padding: 1px 6px; color: var(--warn); font-size: 10px; }
+.source .hint[hidden] { display: none; }
 /* Every full video card is the same height whatever it holds: the episode row keeps its height with or without a tag. */
 .source:not(.compact):not(.manga-card) .episode { min-height: 19px; }
 /* No episode name: the quality stands beside the tag (see patchCard in popup.ts). */
