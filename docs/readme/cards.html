@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Anime4Nerd README cards</title>
+<!-- Source of the README's images below the banner (docs/readme/*.png), in the website's style.
+     Each element with a data-out attribute is captured on its own at device scale 2 in a headless
+     Chromium (serve the repo root over http), and saved as docs/readme/<data-out>.png. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="../../site/assets/site.css">
+<style>
+  body { margin: 0; padding: 24px; background: #0d1117; display: grid; gap: 24px; justify-items: start; }
+  .r-card { box-sizing: border-box; background:
+    linear-gradient(rgba(255,255,255,.022) 1px, transparent 1px) 0 0 / 28px 28px,
+    linear-gradient(90deg, rgba(255,255,255,.022) 1px, transparent 1px) 0 0 / 28px 28px, var(--bg);
+    border: 1px solid var(--line); color: var(--fg); font: 13px/1.6 var(--mono); }
+  .r-k { font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--faint); }
+  .r-k b { color: var(--ok); font-weight: 600; }
+
+  /* how it runs: the pass pipeline */
+  .r-pipe { width: 960px; padding: 28px 32px 26px; }
+  .r-pipe h3 { font-size: 26px; letter-spacing: -.03em; margin: 10px 0 22px; font-weight: 800; }
+  .r-pipe h3 em { font-style: normal; color: transparent; -webkit-text-stroke: 1px var(--ok); }
+  .r-flow { display: flex; align-items: stretch; gap: 0; }
+  .r-st { flex: 1; border: 1px solid var(--line2); background: var(--panel); padding: 12px 12px 11px; position: relative; }
+  .r-st .n { font-size: 10px; color: var(--faint); letter-spacing: .14em; }
+  .r-st b { display: block; font-size: 13px; margin-top: 4px; }
+  .r-st small { display: block; color: var(--dim); font-size: 11px; margin-top: 2px; }
+  .r-st.r-io { border-color: var(--ok); }
+  .r-st.r-io b { color: var(--ok); }
+  .r-ar { display: grid; place-items: center; width: 26px; color: var(--faint); font-size: 14px; }
+  .r-notes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 22px; color: var(--dim); font-size: 11.5px; }
+  .r-notes b { color: var(--fg); font-weight: 600; display: block; font-size: 12px; }
+
+  /* store buttons, the site's .btn */
+  .r-bt { display: inline-flex; align-items: center; gap: 10px; font: 600 15px var(--mono); padding: 15px 22px; border: 1px solid var(--line2); color: var(--fg); background: var(--bg); }
+  .r-bt svg { width: 18px; height: 18px; }
+  .r-bt.r-p { background: var(--on); color: #000; border-color: var(--on); }
+  .r-bt small { font-weight: 400; opacity: .6; }
+
+  /* three r-steps */
+  .r-steps { width: 960px; display: grid; grid-template-columns: repeat(3, 1fr); padding: 0; }
+  .r-steps > div { padding: 20px 22px; border-right: 1px solid var(--line); }
+  .r-steps > div:last-child { border-right: 0; }
+  .r-steps .r-num { font-size: 30px; font-weight: 800; color: transparent; -webkit-text-stroke: 1px var(--ok); line-height: 1; }
+  .r-steps b { display: block; margin-top: 10px; font-size: 14px; }
+  .r-steps small { color: var(--dim); font-size: 11.5px; }
+
+  /* doc tiles */
+  .r-tile { width: 472px; padding: 18px 20px; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 14px; }
+  .r-tile b { font-size: 15px; }
+  .r-tile small { grid-column: 1; color: var(--dim); font-size: 11.5px; }
+  .r-tile .r-go { grid-row: 1 / 3; grid-column: 2; width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--line2); color: var(--ok); font-size: 15px; }
+  .r-tile.r-sm { width: 230px; grid-template-columns: 1fr; padding: 16px 18px; }
+  .r-tile.r-sm .r-go { display: none; }
+</style>
+</head>
+<body>
+
+<div class="r-card r-pipe" data-out="pipeline">
+  <div class="r-k">how it runs · <b>every frame, on your gpu</b></div>
+  <h3>The original shaders, <em>unchanged.</em></h3>
+  <div class="r-flow">
+    <div class="r-st r-io"><div class="n">IN</div><b>video frame</b><small>1080p, as it plays</small></div>
+    <div class="r-ar">→</div>
+    <div class="r-st"><div class="n">01</div><b>Clamp</b><small>highlights</small></div>
+    <div class="r-ar">→</div>
+    <div class="r-st"><div class="n">02</div><b>Restore CNN</b><small>lines, blur, noise</small></div>
+    <div class="r-ar">→</div>
+    <div class="r-st"><div class="n">03</div><b>Upscale ×2</b><small>CNN, one pass</small></div>
+    <div class="r-ar">→</div>
+    <div class="r-st"><div class="n">04+</div><b>×2 again</b><small>up to 8×</small></div>
+    <div class="r-ar">→</div>
+    <div class="r-st r-io"><div class="n">OUT</div><b>canvas</b><small>2160p, over the player</small></div>
+  </div>
+  <div class="r-notes">
+    <div><b>bloc97's Anime4K</b>The mpv .glsl shaders, copied verbatim (MIT). No third-party port.</div>
+    <div><b>src/mpv-hooks.ts</b>Reads //!HOOK, //!BIND, //!SAVE, //!WIDTH, //!HEIGHT, //!WHEN and turns each pass into a WebGL2 shader.</div>
+    <div><b>WebGL2, RGBA16F</b>Every pass renders into half-float textures; the last one is drawn on a canvas over the video.</div>
+  </div>
+</div>
+
+<a class="r-bt r-p" data-out="btn-chrome"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 0C8.21 0 4.831 1.757 2.632 4.501l3.953 6.848A5.454 5.454 0 0 1 12 6.545h10.691A12 12 0 0 0 12 0zM1.931 5.47A11.943 11.943 0 0 0 0 12c0 6.012 4.42 10.991 10.189 11.864l3.953-6.847a5.45 5.45 0 0 1-6.865-2.29zm13.342 2.166a5.446 5.446 0 0 1 1.45 7.09l.002.001h-.002l-5.344 9.257c.206.01.413.016.621.016 6.627 0 12-5.373 12-12 0-1.54-.29-3.011-.818-4.364zM12 16.364a4.364 4.364 0 1 1 0-8.728 4.364 4.364 0 0 1 0 8.728Z"/></svg>add to chrome <small>· free</small></a>
+<a class="r-bt" data-out="btn-firefox"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8.824 7.287c.008 0 .004 0 0 0zm-2.8-1.4c.006 0 .003 0 0 0zm16.754 2.161c-.505-1.215-1.53-2.528-2.333-2.943.654 1.283 1.033 2.57 1.177 3.53l.002.02c-1.314-3.278-3.544-4.6-5.366-7.477-.091-.147-.184-.292-.273-.446a3.545 3.545 0 01-.13-.24 2.118 2.118 0 01-.172-.46.03.03 0 00-.027-.03.038.038 0 00-.021 0l-.006.001a.037.037 0 00-.01.005L15.624 0c-2.585 1.515-3.657 4.168-3.932 5.856a6.197 6.197 0 00-2.305.587.297.297 0 00-.147.37c.057.162.24.24.396.17a5.622 5.622 0 012.008-.523l.067-.005a5.847 5.847 0 011.957.222l.095.03a5.816 5.816 0 01.616.228c.08.036.16.073.238.112l.107.055a5.835 5.835 0 01.368.211 5.953 5.953 0 012.034 2.104c-.62-.437-1.733-.868-2.803-.681 4.183 2.09 3.06 9.292-2.737 9.02a5.164 5.164 0 01-1.513-.292 4.42 4.42 0 01-.538-.232c-1.42-.735-2.593-2.121-2.74-3.806 0 0 .537-2 3.845-2 .357 0 1.38-.998 1.398-1.287-.005-.095-2.029-.9-2.817-1.677-.422-.416-.622-.616-.8-.767a3.47 3.47 0 00-.301-.227 5.388 5.388 0 01-.032-2.842c-1.195.544-2.124 1.403-2.8 2.163h-.006c-.46-.584-.428-2.51-.402-2.913-.006-.025-.343.176-.389.206-.406.29-.787.616-1.136.974-.397.403-.76.839-1.085 1.303a9.816 9.816 0 00-1.562 3.52c-.003.013-.11.487-.19 1.073-.013.09-.026.181-.037.272a7.8 7.8 0 00-.069.667l-.002.034-.023.387-.001.06C.386 18.795 5.593 24 12.016 24c5.752 0 10.527-4.176 11.463-9.661.02-.149.035-.298.052-.448.232-1.994-.025-4.09-.753-5.844z"/></svg>add to firefox <small>· free</small></a>
+
+<div class="r-card r-steps" data-out="steps">
+  <div><div class="r-num">01</div><b>Install</b><small>Chrome, Edge, Brave 116+ or Firefox 140+ on desktop.</small></div>
+  <div><div class="r-num">02</div><b>Play any web video</b><small>Any site, any embedded player, or a manga reader.</small></div>
+  <div><div class="r-num">03</div><b>Flip the switch</b><small>Click the icon and switch the video on. It is remembered.</small></div>
+</div>
+
+<div class="r-card r-tile" data-out="doc-presets"><b>Presets</b><span class="r-go">→</span><small>The six Anime4K mpv shader chains and line effects.</small></div>
+<div class="r-card r-tile" data-out="doc-upscale"><b>Upscale factor</b><span class="r-go">→</span><small>Auto, 2× to 8×, and the GPU limits that cap it.</small></div>
+<div class="r-card r-tile" data-out="doc-how"><b>How it works</b><span class="r-go">→</span><small>Content script, WebGL2 passes, the fullscreen menu.</small></div>
+<div class="r-card r-tile" data-out="doc-naming"><b>Video naming</b><span class="r-go">→</span><small>How the popup names the show and episode playing.</small></div>
+<div class="r-card r-tile" data-out="doc-gpu"><b>GPU meter</b><span class="r-go">→</span><small>Live cost per frame, and numbers on an RTX 2060.</small></div>
+<div class="r-card r-tile" data-out="doc-limits"><b>Limitations</b><span class="r-go">→</span><small>CORS, DRM, the first-start compile, native controls.</small></div>
+<div class="r-card r-tile" data-out="doc-testing"><b>Testing</b><span class="r-go">→</span><small>Shader test page, Firefox smoke test, rating card.</small></div>
+<div class="r-card r-tile" data-out="doc-source"><b>Load from source</b><span class="r-go">→</span><small>Unpacked in Chrome, temporary add-on in Firefox.</small></div>
+
+<div class="r-card r-tile r-sm" data-out="lic-mit"><div class="r-k">license</div><b>MIT</b><small>the extension's code</small></div>
+<div class="r-card r-tile r-sm" data-out="lic-anime4k"><div class="r-k">shaders</div><b>Anime4K</b><small>bloc97, MIT</small></div>
+<div class="r-card r-tile r-sm" data-out="lic-privacy"><div class="r-k">privacy</div><b>Nothing sent</b><small>no account, no analytics</small></div>
+<div class="r-card r-tile r-sm" data-out="lic-security"><div class="r-k">security</div><b>Safety guide</b><small>model and reporting</small></div>
+
+</body>
+</html>

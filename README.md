@@ -43,309 +43,49 @@ Switch it on for any web video and every frame is restored and upscaled 2× to 8
 
 ## ✦ How it runs
 
-Real-time 2x–8x Anime4K upscaling of any `<video>` on a page, as a
-Chrome/Edge/Brave and Firefox extension you control.
-
-It runs **bloc97's original Anime4K shaders** (`src/shaders/`, copied verbatim
-from https://github.com/bloc97/Anime4K, MIT) in WebGL2. A small loader
-(`src/mpv-hooks.ts`) reads the mpv `//!HOOK / //!BIND / //!SAVE / //!WIDTH /
-//!HEIGHT / //!WHEN` directives and turns each pass into a fragment shader, so
-no third-party port of the shaders is involved.
+<img src="docs/readme/pipeline.png" alt="Pipeline: video frame, clamp highlights, restore CNN, upscale x2, more x2 passes up to 8x, canvas over the player" width="100%">
 
 ## ✦ Install
 
-| Browser | Get it |
-|---|---|
-| Chrome · Edge · Brave | [Chrome Web Store](https://chromewebstore.google.com/detail/anime4nerd/kblnmcdmlgeidaclnhjmcffefmkehkpm) |
-| Firefox (desktop 140+) | [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/anime4nerd/) |
+<p align="center">
+<a href="https://chromewebstore.google.com/detail/anime4nerd/kblnmcdmlgeidaclnhjmcffefmkehkpm"><img src="docs/readme/btn-chrome.png" alt="Add to Chrome" height="52"></a>&nbsp;&nbsp;
+<a href="https://addons.mozilla.org/firefox/addon/anime4nerd/"><img src="docs/readme/btn-firefox.png" alt="Add to Firefox" height="52"></a>
+</p>
 
-Open a page with a video, click the Anime4Nerd icon and flip the switch on the video card.
-
-<details>
-<summary><b>Load from source: Chrome, Edge, Brave</b></summary>
-
-From the Chrome Web Store:
-https://chromewebstore.google.com/detail/anime4nerd/kblnmcdmlgeidaclnhjmcffefmkehkpm
-
-From source:
-
-1. Open `chrome://extensions` (or `brave://extensions`).
-2. Turn on **Developer mode**.
-3. **Load unpacked** → pick the `dist/` folder. (Or `npm run pack` and share
-   `Anime4Nerd chrome.zip`; it unzips to the same folder.)
-4. Open a page with a video, click the extension icon, and flip the switch on
-   the video card.
-
-To limit it to certain sites, use the extension's "Site access" settings.
-
-</details>
-
-<details>
-<summary><b>Load from source: Firefox</b></summary>
-
-From Firefox Add-ons (desktop Firefox 140 or newer; Firefox for Android is not
-supported):
-https://addons.mozilla.org/firefox/addon/anime4nerd/
-
-From source, as a temporary add-on (removed when Firefox closes):
-
-1. `npm run build:firefox`.
-2. Open `about:debugging#/runtime/this-firefox`.
-3. **Load Temporary Add-on…** → pick `dist-firefox/manifest.json`.
-4. Open a page with a video, click the extension icon, and flip the switch on
-   the video card.
-
-Site access is under `about:addons` → Anime4Nerd → Permissions. Firefox has no
-GPU timer queries, so the popup shows "GPU timing not available in this
-browser" instead of GPU ms per frame (it still says whether upscaling keeps up
-with the video); everything else works as in Chrome, and
-settings sync through Firefox Sync if you use it.
-
-The switch is remembered per **site + stream host**, so once you turn on the
-player on a site it stays on for the next episode. Presets, line effects and
-the upscale factor are global.
-
-In fullscreen the toolbar popup can't open, so a small ☰ button appears in the
-player's top-right corner. It opens a menu with the on/off switch, presets,
-line effects, upscale factor and a GPU frame-time graph, and fades out when the
-mouse is idle.
-
-</details>
+<img src="docs/readme/steps.png" alt="1 Install, 2 Play any web video, 3 Flip the switch" width="100%">
 
 ## ✦ Build
 
 ```bash
 npm install
-npm run build
+npm run build            # Chrome, Edge, Brave  ->  dist/
+npm run build:firefox    # Firefox              ->  dist-firefox/
+npm run pack:firefox     # also writes "Anime4Nerd firefox.zip"
 ```
-
-Output goes to `dist/`.
-
-For Firefox:
-
-```bash
-npm run build:firefox   # writes dist-firefox/
-npm run pack:firefox    # also writes "Anime4Nerd firefox.zip"
-```
-
-The Firefox build uses the same sources with a Firefox manifest
-(`firefoxManifest()` in `build.mjs`): `background.scripts` instead of a service
-worker, the add-on id `anime4nerd@creedweb3.github.io`, desktop Firefox 140+
-(not Firefox for Android), and `data_collection_permissions: none`. `pack` and
-`pack:firefox` write the zip with Windows' own `tar.exe` on Windows and with
-`zip` on Linux and macOS.
 
 ## ✦ Under the hood
 
-<details>
-<summary><b>Presets (the standard Anime4K mpv mappings)</b></summary>
+<p>
+<a href="docs/TECHNICAL.md#presets"><img src="docs/readme/doc-presets.png" alt="Presets" width="49%"></a>
+<a href="docs/TECHNICAL.md#upscale-factor"><img src="docs/readme/doc-upscale.png" alt="Upscale factor" width="49%"></a>
+<a href="docs/TECHNICAL.md#how-it-works"><img src="docs/readme/doc-how.png" alt="How it works" width="49%"></a>
+<a href="docs/TECHNICAL.md#video-naming"><img src="docs/readme/doc-naming.png" alt="Video naming" width="49%"></a>
+<a href="docs/TECHNICAL.md#gpu-meter"><img src="docs/readme/doc-gpu.png" alt="GPU meter" width="49%"></a>
+<a href="docs/TECHNICAL.md#limitations"><img src="docs/readme/doc-limits.png" alt="Limitations" width="49%"></a>
+<a href="docs/TECHNICAL.md#testing"><img src="docs/readme/doc-testing.png" alt="Testing" width="49%"></a>
+<a href="docs/TECHNICAL.md#load-from-source"><img src="docs/readme/doc-source.png" alt="Load from source" width="49%"></a>
+</p>
 
-| Preset | Shader chain |
-|---|---|
-| Mode A | Clamp_Highlights → Restore_CNN_VL → Upscale_CNN_x2_VL |
-| Mode B | Clamp_Highlights → Restore_CNN_Soft_VL → Upscale_CNN_x2_VL |
-| Mode C | Clamp_Highlights → Upscale_Denoise_CNN_x2_VL |
-| A+A | Mode A → Restore_CNN_M |
-| B+B | Mode B → Restore_CNN_Soft_M |
-| C+A | Mode C → Restore_CNN_M |
+## ✦ License and privacy
 
-Line effects append `Anime4K_Darken_HQ` and/or `Anime4K_Thin_HQ`.
+<p>
+<a href="LICENSE"><img src="docs/readme/lic-mit.png" alt="MIT license" width="24%"></a>
+<a href="THIRD_PARTY_NOTICES.md"><img src="docs/readme/lic-anime4k.png" alt="Anime4K shaders, MIT" width="24%"></a>
+<a href="PRIVACY.md"><img src="docs/readme/lic-privacy.png" alt="Privacy policy" width="24%"></a>
+<a href="SECURITY.md"><img src="docs/readme/lic-security.png" alt="Security" width="24%"></a>
+</p>
 
-</details>
-
-<details>
-<summary><b>Upscale factor</b></summary>
-
-The Anime4K networks are trained for exactly 2x, so larger factors chain extra
-`Upscale_CNN_x2_M` passes, one per doubling:
-
-- **auto** (default): 2x, or 4x when the video is shown at more than 2x its
-  source size in device pixels (e.g. 720p fullscreen on a 1440p+ screen).
-- **2x, 4x, 8x**: manual. The renderer uses the largest factor at or
-  below the choice whose output fits the GPU's texture limit, stays at or under
-  8K (7680×4320 pixels) and keeps all intermediate textures under 2 GB, and steps
-  down while the GPU cannot keep up. The popup then shows e.g.
-  `(4×) · 8× capped: GPU limit` or `GPU load`. A saved 16x or 32x (removed in
-  1.3.0) becomes 8x. In practice 8x is reachable
-  for 480p and smaller sources; above 4x the extra detail is mostly downscaled
-  away by the browser.
-
-</details>
-
-<details>
-<summary><b>How it works</b></summary>
-
-- `src/content.ts` runs in every frame (`all_frames: true`), finds `<video>`
-  elements (including inside shadow roots) and reports them to the popup. For a
-  video whose source switch is on it lays a `<canvas>` over the video and
-  drives one render per video frame with `requestVideoFrameCallback`. (Firefox
-  fires that callback only ~25 times a second on 60 fps video, so the Firefox
-  build renders on the first animation frame after
-  `getVideoPlaybackQuality().totalVideoFrames` changes.)
-  It suspends in picture-in-picture, native video fullscreen and hidden tabs,
-  rebuilds on resize, and falls back to the plain video on any GPU error.
-- `src/fullscreen-menu.ts` is the on-video menu shown while a player
-  container is fullscreen, in a closed shadow root inside the fullscreen
-  element (or inside its open shadow root when the video lives there). It also
-  shows when the whole frame fills the screen: an embedded player whose outer
-  page fullscreened the iframe, or F11. Its clicks only count when they are real
-  user clicks on an unmodified, visible menu.
-- `src/fullscreen-redirect.ts` runs in the page's own JavaScript world
-  (`"world": "MAIN"`) and uses no extension APIs. When the page fullscreens a
-  `<video>` that is being upscaled (marked `data-a4k-on` by the content script),
-  it fullscreens the video's parent instead, because nothing can be drawn over a
-  bare fullscreen video. `content.css` makes the video fill the screen there.
-- After an extension reload the old content script is orphaned; it removes its
-  canvases and menu and stops as soon as its extension context is gone.
-- `src/gpu.ts` is loaded lazily (`import(chrome.runtime.getURL('gpu.js'))`),
-  builds the pass list for the chosen preset, compiles all programs in
-  parallel (`KHR_parallel_shader_compile`), and per frame uploads the video
-  frame, runs every pass into `RGBA16F` textures and blits the final `MAIN`
-  texture to the canvas.
-- Presets live in `chrome.storage.sync`; the per-source on/off map lives in
-  `chrome.storage.local` (`anime4k-sources`).
-- `src/background.ts` injects the content script into tabs that were already
-  open when the extension was installed, one frame at a time.
-
-</details>
-
-<details>
-<summary><b>Video naming</b></summary>
-
-Each row is labelled with what is playing, not just the host:
-
-```
-Attack on Titan
-E1 - To You, in 2000 Years: The Fall of Shiganshina
-```
-
-Sources, in order of trust (`src/media-meta.ts`): schema.org JSON-LD
-(`TVEpisode`, `Movie`, `VideoObject`), the player's Media Session metadata
-(read inside the player frame, so cross-origin embeds work), Open Graph
-`og:title`, then `document.title` / `h1` / URL heuristics (`S2E3`, `1x05`,
-`Episode 5`, `?ep=5`, `/episode-5`). Site names and "Watch … Online" boilerplate
-are stripped. For single videos (YouTube style) the second line is the channel.
-Fixtures live in `test/meta-test.ts`.
-
-</details>
-
-<details>
-<summary><b>GPU meter and reference numbers</b></summary>
-
-Each active video row shows live GPU cost measured with
-`EXT_disjoint_timer_query_webgl2`: ms per frame, load (% of the frame budget at
-the video's fps), rolling average/peak, a 48-sample bar graph, pass count, VRAM
-held by the shader textures, and output size. Red bars mean the GPU took longer
-than one video frame.
-
-Reference numbers, RTX 2060, 1920×1080 source → 3840×2160, Chromium (ANGLE D3D11):
-
-| Preset | GPU ms/frame | Passes | VRAM |
-|---|---|---|---|
-| A   | 15.1 | 39 | 704 MB |
-| A+A | 23.7 | 47 | 1210 MB |
-| C   | 13.2 | 22 | 435 MB |
-| C+A | 15.8 | 30 | 941 MB |
-
-A 24 fps video gives a 41.7 ms budget, so A uses ~36% of the GPU, A+A ~57%.
-
-Firefox does not offer the timer query, so there the meter shows frame-rate
-figures instead of GPU time: the video's fps, the share of its frames drawn,
-frames missed per second, passes and VRAM, and whether it keeps up. Speed is about the same as Chrome. Same
-RTX 2060, 1080p60 source: Mode A → 4K 57 fps in Firefox, 55 in Chrome; A+A → 4K
-38 / 39; Mode A → 8K 34 / 31.
-
-</details>
-
-<details>
-<summary><b>Limitations</b></summary>
-
-- **CORS.** Uploading a video frame to WebGL requires the video to be
-  CORS-clean (`crossorigin` attribute + `Access-Control-Allow-Origin` on the
-  media). Many web players already do this. For others you will see
-  "This video source does not allow browser upscaling". DRM (Widevine) video
-  can never be read.
-- First start compiles ~40 large shaders: 5–10 s on first use, then cached by
-  the browser.
-- WebGL2 only (no WebGPU). Firefox 140+ is supported (separate build, see
-  above); Safari is untested.
-- The fullscreen button of the browser's own `<video controls>` does not go
-  through the page's fullscreen API, so it still fullscreens the bare video:
-  plain playback, no menu.
-
-</details>
-
-## ✦ Testing
-
-<details>
-<summary><b>Local shader test</b></summary>
-
-```bash
-npx esbuild test/test.ts --bundle --format=esm --loader:.glsl=text --outfile=test/test.js
-npx serve test
-```
-
-Open the page, pick a preset, press Run. It feeds a synthetic animated
-line-art pattern through the renderer. Query parameters: `w`/`h` set the source
-size, `scale` the requested upscale factor (e.g. `?w=854&h=480&scale=8`).
-
-`test/fullscreen-menu.html` runs the real content script on a fake player with
-mocked `chrome.*` APIs. Copy `dist/content.js`, `dist/gpu.js`,
-`dist/fullscreen-redirect.js` and `dist/content.css` next to it first. Open
-`/fullscreen-menu?shadow=1` for a player inside a shadow root, and
-`fullscreen-frame.html` for an outer page that fullscreens the player's iframe.
-Real fullscreen needs a user gesture, e.g. a click or CDP `Runtime.evaluate`
-with `userGesture: true`.
-
-</details>
-
-<details>
-<summary><b>Firefox smoke test</b></summary>
-
-```bash
-npm run build:firefox
-node test/firefox-smoke.mjs
-```
-
-Needs `ffmpeg` on PATH and Playwright with its Firefox (`npm i -g playwright`,
-then `npx playwright install firefox`). It runs headless, installs
-`dist-firefox/` as a temporary add-on over Firefox's remote debugging protocol,
-and checks same-origin VP9 and H.264, a CORS source, a cross-origin iframe, the
-no-CORS message, a bare video file page and the fullscreen redirect.
-
-</details>
-
-<details>
-<summary><b>Rating card</b></summary>
-
-At 3, 12, 48 and 200 upscaled episodes the popup shows one "rate it" card with the
-user's own totals (`src/rate-prompt.ts`). An episode is a video upscaled for at
-least 10 minutes; time counts only while frames are being drawn. The counts live in
-`chrome.storage.local` (`anime4k-rate`), are written only by the background, and
-never leave the device. ✕ hides the card until the next milestone, "rate it" opens
-the store's reviews page (Chrome Web Store, or Firefox Add-ons in the Firefox build),
-and "✓ already rated" (offered after a click) stops it for good.
-
-```bash
-npx esbuild test/rate-test.ts --bundle --platform=node --format=esm --outfile=test/rate-test.js && node test/rate-test.js
-npm run build && node test/rate-e2e.mjs "C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"
-```
-
-The first runs the unit tests in Node; the second loads `dist/` into a real
-Chromium browser, counts a short upscaled playback and walks the card through
-every state.
-
-</details>
-
-## ✦ Credits and legal
-
-- Anime4K shaders: bloc97 and contributors, MIT (`src/shaders/LICENSE`).
-- Banner and before/after frame: "A snapshot from the 2012 demo release from the Morevna Project" by [Morevna Project](https://morevnaproject.org), [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/). Cropped and upscaled for comparison.
-- Extension code: MIT (`LICENSE`).
-- Anime4K shaders: MIT, bloc97 (`src/shaders/LICENSE`, `THIRD_PARTY_NOTICES.md`).
-- Privacy: `PRIVACY.md`. The extension sends no data about you; its only network requests are manga mode's downloads of the page images a manga reader shows. The popup's bug icon and the page shown after removal open optional forms on the website, which send only what you write, when you press send.
-- Security model and user safety guide: `SECURITY.md`.
-- Store listing draft: `docs/STORE_LISTING.md`; Firefox Add-ons listing and
-  reviewer notes: `docs/AMO_LISTING.md`.
-
-<div align="center"><br><sub>Not affiliated with bloc97 or any streaming site.</sub></div>
+<div align="center">
+<br>
+<sub>Banner and before/after frame: "A snapshot from the 2012 demo release from the Morevna Project" by <a href="https://morevnaproject.org">Morevna Project</a>, <a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>, cropped and upscaled for comparison.<br>Store listings: <a href="docs/STORE_LISTING.md">Chrome Web Store</a> · <a href="docs/AMO_LISTING.md">Firefox Add-ons</a>. Not affiliated with bloc97 or any streaming site.</sub>
+</div>
