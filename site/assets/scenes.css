@@ -27,14 +27,15 @@
 .scene .mp.real { --k: .5105; padding: 0; height: 164px; overflow: hidden; }
 .scene .mp.real iframe { display: block; width: 380px; height: 318px; border: 0; transform: scale(var(--k)); transform-origin: 0 0; pointer-events: none; color-scheme: dark; }
 
-/* ---------- install · pin it from the puzzle menu, then open the popup from the pinned icon ---------- */
+/* ---------- install · pin it from the puzzle menu, open the popup from the pinned icon, switch the
+   video on (the page script clicks the real popup's switch as the cursor presses it) ---------- */
 .scene .in.s7 { --T: 10s; }
 .scene .s7 .mp { right: 40px; animation-name: drop7; }
 .scene .s7 .cur { animation-name: c7; }
 .scene .s7 .menu { animation-name: menu7; }
 .scene .s7 .pin { animation-name: pin7; }
 .scene .s7 .newme { animation-name: land7; }
-@keyframes c7 { 0% { opacity: 0; transform: translate(170px, 200px); } 6% { opacity: 1; } 14%, 16% { transform: var(--a1); } 17.5% { transform: var(--a1) scale(.82); } 19%, 22% { transform: var(--a1); } 29%, 31% { transform: var(--a2); } 32.5% { transform: var(--a2) scale(.82); } 34%, 40% { transform: var(--a2); } 50%, 53% { transform: var(--a3); } 54.5% { transform: var(--a3) scale(.82); } 56%, 80% { opacity: 1; transform: var(--a3); } 88%, 100% { opacity: 0; transform: translate(250px, 170px); } }
+@keyframes c7 { 0% { opacity: 0; transform: translate(170px, 200px); } 6% { opacity: 1; } 14%, 16% { transform: var(--a1); } 17.5% { transform: var(--a1) scale(.82); } 19%, 22% { transform: var(--a1); } 29%, 31% { transform: var(--a2); } 32.5% { transform: var(--a2) scale(.82); } 34%, 40% { transform: var(--a2); } 50%, 53% { transform: var(--a3); } 54.5% { transform: var(--a3) scale(.82); } 56%, 60% { transform: var(--a3); } 68%, 70% { transform: var(--a4); } 71.5% { transform: var(--a4) scale(.82); } 73%, 82% { opacity: 1; transform: var(--a4); } 90%, 100% { opacity: 0; transform: translate(250px, 200px); } }
 @keyframes menu7 { 0%, 17% { opacity: 0; transform: translateY(-8px) scaleY(.94); } 21%, 38% { opacity: 1; transform: none; } 42%, 100% { opacity: 0; transform: none; } }
 @keyframes pin7 { 0%, 32% { color: var(--faint); } 33%, 100% { color: var(--ok); } }
 @keyframes land7 { 0%, 40% { opacity: 0; transform: translateX(26px) scale(.6); } 46%, 53.5% { opacity: 1; transform: none; } 54.5% { transform: scale(.86); } 56%, 92% { opacity: 1; transform: none; } 97%, 100% { opacity: 0; transform: none; } }

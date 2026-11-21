@@ -209,7 +209,7 @@
       </div>
   </section>
 
-  <section id="color" class="sec">
+  <section id="color" class="sec split">
       <div class="rail">
         <div class="phead"><span>ep 05 · color controls</span><span>new in 1.3.0</span></div>
         <h2>Grade the picture.</h2>
@@ -217,48 +217,55 @@
         <ul class="ctl" aria-label="The ten controls">
           <li>brightness</li><li>contrast</li><li>saturation</li><li>gamma</li><li>hue</li><li>vibrance</li><li>temperature</li><li>tint</li><li>deband</li><li>grain</li>
         </ul>
-      </div>
-      <div class="body">
-        <div class="duo">
-          <div class="popbox" id="color-pop" data-h="545"><iframe src="popup/?color=1#tab=color" title="The popup's color tab, working" loading="lazy"></iframe></div>
-          <div class="duo-side">
-            <figure class="cpic" id="color-pic">
-              <div class="phead"><span>preview</span><span>approximate</span></div>
-              <div class="cpic-img"><img src="assets/frame-after.png" alt="An anime frame that follows the popup's color values" width="800" height="450" loading="lazy"><span class="warm" aria-hidden="true"></span></div>
-            </figure>
-            <div class="panel">
-              <div class="phead"><span>profiles</span></div>
-              <h3>Five looks, plus your own</h3>
-              <p>Pick slice of life, sunlit, shonen, moody or vintage, or move the sliders and save the result under your own name. Try it: the popup here is the real one.</p>
-            </div>
+        <div class="pair">
+          <figure class="cpic" id="color-pic">
+            <div class="phead"><span>preview</span><span>approximate</span></div>
+            <div class="cpic-img"><img src="assets/frame-after.png" alt="An anime frame that follows the popup's color values" width="800" height="450" loading="lazy"><span class="warm" aria-hidden="true"></span></div>
+          </figure>
+          <div class="panel">
+            <div class="phead"><span>profiles</span></div>
+            <h3>Five looks, plus your own</h3>
+            <p>Five ready-made looks, or your own values saved under a name. The popup here is the real one: try it.</p>
+            <div class="foot"><span class="chip">slice of life</span><span class="chip">sunlit</span><span class="chip">shonen</span><span class="chip">moody</span><span class="chip">vintage</span></div>
           </div>
         </div>
       </div>
+      <div class="body">
+        <div class="popbox" id="color-pop" data-h="545"><iframe src="popup/?color=1#tab=color" title="The popup's color tab, working" loading="lazy"></iframe><svg class="pcur" viewBox="0 0 22 22" aria-hidden="true"><path d="M3 2 L3 18 L7.5 13.8 L10.5 20 L13.2 18.8 L10.3 12.8 L16.5 12.6 Z" fill="#eceded" stroke="#08090a" stroke-width="1.4" stroke-linejoin="round"/></svg></div>
+      </div>
   </section>
 
-  <section id="manga" class="sec">
+  <section id="manga" class="sec split">
       <div class="rail">
         <div class="phead"><span>ep 06 · manga mode</span><span>new in 1.3.0</span></div>
         <h2>Sharper pages, too.</h2>
         <p class="intro">Manga readers get the same treatment. Each page of a chapter is upscaled once, on your GPU, and swapped in place. Press <kbd>Alt</kbd>+<kbd>M</kbd> to see the originals again.</p>
-      </div>
-      <div class="body">
-        <div class="duo">
-          <div class="popbox" id="manga-pop" data-h="550"><iframe src="popup/?pages=60" title="The popup on a manga chapter, working" loading="lazy"></iframe></div>
-          <div class="duo-side">
-            <div class="panel">
-              <div class="phead"><span>mode</span></div>
-              <h3>auto, anime or manga</h3>
-              <p>The mode in the popup's top bar decides what Anime4Nerd works on: video and manga, video only, or pages only. When a page holds the other kind, the popup suggests a switch.</p>
-            </div>
-            <div class="panel">
-              <div class="phead"><span>page map</span></div>
-              <h3>Every page at a glance</h3>
-              <p>The popup shows which pages are done, which are in progress and which wait, with the time per page.</p>
-              <div class="foot"><span class="chip">chrome</span><span class="chip">edge</span><span class="chip">brave</span><span class="chip">firefox</span></div>
-            </div>
+        <div class="pair">
+          <div class="panel">
+            <div class="phead"><span>mode</span></div>
+            <h3>auto, anime or manga</h3>
+            <p>Video and manga, video only, or pages only. When a page holds the other kind, the popup suggests a switch.</p>
+          </div>
+          <div class="panel">
+            <div class="phead"><span>page map</span></div>
+            <h3>Every page at a glance</h3>
+            <p>Which pages are done, which are in progress and which wait, with the time per page.</p>
+            <div class="foot"><span class="chip">chrome</span><span class="chip">edge</span><span class="chip">brave</span><span class="chip">firefox</span></div>
+          </div>
+          <div class="panel">
+            <div class="phead"><span>order</span></div>
+            <h3>Nearest page first</h3>
+            <p>Pages near where you read go first. A page is redone only when you change the preset.</p>
+          </div>
+          <div class="panel">
+            <div class="phead"><span>black &amp; white</span></div>
+            <h3>Grey stays grey</h3>
+            <p>Pages without colour are kept grey, with no tint from the shaders.</p>
           </div>
         </div>
+      </div>
+      <div class="body">
+        <div class="popbox" id="manga-pop" data-h="500"><iframe src="popup/?pages=36" title="The popup on a manga chapter, working" loading="lazy"></iframe></div>
       </div>
   </section>
 
@@ -267,14 +274,14 @@
         <div class="phead"><span>ep 07 · install</span></div>
         <h2>Get Anime4Nerd.</h2>
         <p class="intro">Add it, pin it from the puzzle menu once, and it is one click away on any video.</p>
-        <figure class="scene" aria-hidden="true"><div class="phead"><span><b>pin it, then open it</b></span><span>toolbar</span></div>
+        <figure class="scene" aria-hidden="true"><div class="phead"><span><b>pin it, open it, switch on</b></span><span>toolbar</span></div>
         <div class="stage"><div class="in s7">
         <div class="tb"><span class="dots"><i></i><i></i><i></i></span><span class="url">your-favourite-stream.example</span><span data-aim="3" class="x me newme"><img src="assets/icon.png" alt=""></span><span data-aim="1" class="x pz"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 7h3.2a2 2 0 1 1 3.6 0H13v3.2a2 2 0 1 1 0 3.6V17H9.8a2 2 0 1 0-3.6 0H3v-3.2a2 2 0 1 0 0-3.6z" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></span></div>
         <div class="menu"><div class="phead"><span>extensions</span><span>2</span></div>
         <div class="it"><img src="assets/icon.png" alt=""><span>Anime4Nerd</span><span data-aim="2" class="pin"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 3h6l-1 5 3 3H5l3-3zM10 11v6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></span></div>
         <div class="it dim"><span class="ph"></span><span>another extension</span></div>
         </div>
-        <div class="mp real"><iframe src="popup/" title="" tabindex="-1" loading="lazy"></iframe></div>
+        <div class="mp real"><iframe src="popup/?off=1" title="" tabindex="-1" loading="lazy"></iframe><span data-aim="4" data-at="#sources .switch" class="nw"></span></div>
         <svg class="cur" viewBox="0 0 22 22" aria-hidden="true"><path d="M3 2 L3 18 L7.5 13.8 L10.5 20 L13.2 18.8 L10.3 12.8 L16.5 12.6 Z" fill="#eceded" stroke="#08090a" stroke-width="1.4" stroke-linejoin="round"/></svg>
         </div></div>
         </figure>
@@ -590,6 +597,99 @@
     }
   })();
 
+  // Color section: while on screen, a pointer opens the real popup's profile menu and switches
+  // between vintage and neutral (the sliders and the picture follow), about every 5 s. It waits while the mouse is over the
+  // popup and stops for good once the visitor uses it. Reduced motion: no pointer, no steps.
+  (function () {
+    var box = document.getElementById('color-pop');
+    if (!box || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    var f = box.querySelector('iframe'), cur = box.querySelector('.pcur');
+    var LOOKS = ['p-vintage', 'neutral'];
+    var at = 0, timer = 0, seen = false, over = false, stopped = false;
+    var doc = function () { try { return f.contentDocument; } catch (e) { return null; } };
+    var go = function () { return seen && !over && !stopped; };
+    // The pointer glides like a hand on a mouse: a slightly curved path, slow start and stop
+    // (minimum-jerk easing), and more time for longer moves. It first enters from below right.
+    // The path is a Web Animation of transform, so it runs on the compositor and stays smooth
+    // while the popup re-renders on the main thread. Each glide holds its last frame (fill
+    // forwards) until the next one replaces it: handing the end position back to the page's own
+    // style made the pointer flash at a wrong spot while the main thread was busy.
+    var pos = null, anim = null;
+    // Position goes in the CSS translate property, not transform: the press (scale, in .down)
+    // is applied after translate, so it no longer shrinks the offset and pulls the pointer
+    // toward the box's corner.
+    var css = function (x, y) { return x.toFixed(2) + 'px ' + y.toFixed(2) + 'px'; };
+    var glide = function (x, y, done) {
+      var from = pos;
+      if (anim) { var m = getComputedStyle(cur).translate.split(' '); from = { x: parseFloat(m[0]) || 0, y: parseFloat(m[1]) || 0 }; }
+      if (!from) from = { x: x + 80, y: y + 110 };
+      var dx = x - from.x, dy = y - from.y, dist = Math.hypot(dx, dy);
+      var bend = dist > 40 ? .14 : 0;
+      var cx = from.x + dx / 2 - dy * bend, cy = from.y + dy / 2 + dx * bend;
+      var frames = [];
+      for (var i = 0; i <= 60; i++) {
+        var t = i / 60, e = t * t * t * (t * (6 * t - 15) + 10), u = 1 - e;
+        frames.push({ offset: t, translate: css(u * u * from.x + 2 * u * e * cx + e * e * x, u * u * from.y + 2 * u * e * cy + e * e * y) });
+      }
+      pos = { x: x, y: y };
+      var old = anim;
+      anim = cur.animate(frames, { duration: Math.min(1600, 700 + dist * 3.2), easing: 'linear', fill: 'forwards' });
+      if (old) old.cancel();
+      var mine = anim;
+      anim.onfinish = function () { if (done && anim === mine) done(); };
+    };
+    // Glide the tip (2.7, 1.8 of the 20px pointer) onto the element's text, just past its middle.
+    var aim = function (el, done) {
+      var label = el.querySelector('b') || el, range = el.ownerDocument.createRange();
+      range.selectNodeContents(label);
+      var r = range.getBoundingClientRect();
+      if (!r.width) r = el.getBoundingClientRect();
+      var k = Number(getComputedStyle(box).getPropertyValue('--k')) || 1;
+      glide((r.left + r.width * .55) * k - 2.7, (r.top + r.height * .6) * k - 1.8, done);
+    };
+    var press = function (el) { cur.classList.add('down'); setTimeout(function () { cur.classList.remove('down'); el.click(); }, 150); };
+    var wait = function (fn, ms) {
+      clearTimeout(timer);
+      timer = setTimeout(function () { if (go()) fn(); else cur.classList.remove('show'); }, ms);
+    };
+    var step = function () {
+      var d = doc(), btn = d && d.querySelector('#pf .pf-open');
+      if (!btn || !btn.getBoundingClientRect().width) { wait(step, 1000); return; }
+      aim(btn, function () {
+        wait(function () {
+          press(btn);
+          wait(function () {
+            var opt = d.querySelector('.pf-list .mode-opt[data-id="' + LOOKS[at] + '"]');
+            if (!opt) { wait(step, 1000); return; }
+            aim(opt, function () {
+              opt.dispatchEvent(new PointerEvent('pointerenter')); // the popup lights the row under the pointer
+              wait(function () {
+                press(opt);
+                at = (at + 1) % LOOKS.length;
+                // drift off the closed menu, then rest until the next look
+                setTimeout(function () { if (pos) glide(pos.x + 22, pos.y + 30); }, 450);
+                wait(step, 3400);
+              }, 500);
+            });
+          }, 600);
+        }, 350);
+      });
+      cur.classList.add('show');
+    };
+    var resume = function () { if (go()) wait(step, 600); };
+    f.addEventListener('load', function () {
+      var d = doc();
+      var stop = function (e) { if (e.isTrusted) { stopped = true; clearTimeout(timer); cur.classList.remove('show'); } };
+      if (d) { d.addEventListener('pointerdown', stop, true); d.addEventListener('keydown', stop, true); }
+    });
+    box.addEventListener('mouseenter', function () { over = true; });
+    box.addEventListener('mouseleave', function () { over = false; resume(); });
+    new IntersectionObserver(function (entries) {
+      seen = entries[0].isIntersecting;
+      if (seen) resume(); else { clearTimeout(timer); cur.classList.remove('show'); }
+    }, { threshold: .3 }).observe(box);
+  })();
+
   // Color section: the picture beside the popup follows its color values. CSS filters only
   // approximate the extension's shader (brightness, contrast, saturation with vibrance, hue, and a
   // warm or cool tint for temperature).
@@ -677,6 +777,51 @@
       f.addEventListener('load', put);
     });
     if (document.fonts) document.fonts.ready.then(function () { scenes.forEach(function (s) { aim(s.querySelector('.in')); }); });
+    // Scenes with the real popup: the popup itself reacts when the pointer gets there. From..to is the
+    // part of the pointer's loop in which the reaction shows; the loop position is read from the
+    // pointer's own animation, so the two stay in step when a scene pauses off screen.
+    // Reduced motion: the reaction is shown, like the rest of the scene's end state.
+    (function () {
+      var still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      var live = [
+        // install: the pointer presses the video's switch (71.5% of the loop); off again once the popup has closed
+        { sel: '.s7', from: .715, to: .94, set: function (d, on) {
+          // the popup flips a card's switch on pointerdown (and is busy until pointerup)
+          var sw = d.querySelector('#sources .switch'), i = sw && sw.querySelector('input');
+          if (!i) return false;
+          if (i.checked !== on) {
+            sw.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }));
+            sw.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 }));
+          }
+          return true;
+        } },
+        // after an update: the pointer rests on the "new v1.3.0" chip and the popup shows its tooltip
+        { sel: '.s2', from: .56, to: .84, set: function (d, on) {
+          var n = d.querySelector('#whatsnew');
+          if (!n || n.hidden) return false;
+          n.dispatchEvent(new PointerEvent(on ? 'pointerover' : 'pointerout', { bubbles: true }));
+          return true;
+        } },
+      ];
+      live.forEach(function (s) {
+        var scene = document.querySelector('.scene ' + s.sel), shown = null;
+        if (!scene) return;
+        var cur = scene.querySelector('.cur'), f = scene.querySelector('iframe');
+        setInterval(function () {
+          if (!still && !scene.closest('.scene').classList.contains('run')) return;
+          var d = null;
+          try { d = f.contentDocument; } catch (e) { return; }
+          if (!d || !d.body) return;
+          var want = true, a = cur.getAnimations()[0];
+          if (!still) {
+            if (!a) return;
+            var T = a.effect.getComputedTiming().duration, p = (a.currentTime % T) / T;
+            want = p >= s.from && p < s.to;
+          }
+          if (want !== shown && s.set(d, want)) shown = want;
+        }, 100);
+      });
+    })();
     var fit = function () { scenes.forEach(function (s) { var st = s.querySelector('.stage'); st.firstElementChild.style.setProperty('--s', String(st.clientWidth / 380)); }); };
     var io = new IntersectionObserver(function (entries) { entries.forEach(function (e) { e.target.classList.toggle('run', e.isIntersecting); }); });
     scenes.forEach(function (s) { io.observe(s); });

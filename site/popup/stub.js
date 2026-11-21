@@ -2,8 +2,9 @@
 // dist/, copied in by site/build.mjs) runs on this fake chrome.*, which answers like a page playing
 // one video. Modelled on test/popup-live.html. Fictional names only. Nothing is stored or sent:
 // every setting lives in this frame's memory and resets on reload.
-// Query: pages=N plays a manga chapter of N pages instead of the video; new=1 opens it right after
-// an update (the "new v1.3.0" chip); color=1 starts with a ready-made look and one saved profile.
+// Query: pages=N plays a manga chapter of N pages instead of the video (its pages keep getting
+// upscaled, in a loop, unless the visitor asks for reduced motion); off=1 starts with the video off; new=1 opens it right after
+// an update (the "new v1.3.0" chip); color=1 starts on neutral, with the ready-made looks and one saved profile.
 // Hash: tab=color|upscale opens that folder tab.
 (() => {
   const COLOR = 'anime4k-color';
@@ -11,7 +12,7 @@
   const PAGES = Number(q.get('pages')) || 0;
   const store = {
     sync: { anime4k: { mode: 'auto', preset: 'A', darkenLines: false, thinLines: true, upscale: 'auto' } },
-    local: { 'anime4k-sources': { 'stream.example::blob:': true } },
+    local: { 'anime4k-sources': q.get('off') === '1' ? {} : { 'stream.example::blob:': true } },
   };
   if (q.get('new') === '1') store.local['anime4k-whats-new'] = '1.3.0';
   if (PAGES) store.local['a4k-manga'] = { 'reader.example': true };
@@ -26,7 +27,7 @@
       { id: 'm0', name: 'late night', v: { brightness: 0.96, contrast: 1.06, saturation: 0.95, gamma: 1.08, vibrance: 1.1, temperature: -8, tint: 2, deband: 30, grain: 0.02 } },
     ];
     const full = (v) => ({ brightness: 1, contrast: 1, saturation: 1, gamma: 1, hue: 0, vibrance: 1, temperature: 0, tint: 0, deband: 0, grain: 0, ...v });
-    store.local[COLOR] = { on: true, always: false, profile: 'p-sunlit', values: full(looks[1].v), profiles: looks.map((p) => ({ ...p, v: full(p.v) })) };
+    store.local[COLOR] = { on: true, always: false, profile: 'neutral', values: full({}), profiles: looks.map((p) => ({ ...p, v: full(p.v) })) };
   }
 
   const listeners = [];
@@ -69,15 +70,20 @@
       media: null,
     };
   }
-  // A manga chapter of PAGES pages: 40 upscaled, two in progress, the rest queued.
+  // A manga chapter of PAGES pages, two in progress at a time. With motion: from a third done, a page
+  // every 0.6 s, a pause on the finished chapter, then again. Without: 60% done.
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const t0 = Date.now();
   function manga() {
     const loaded = Math.min(PAGES, 120);
-    const marks = Array.from({ length: loaded }, (_, i) => (i < 40 ? 'done' : i < 42 ? 'now' : 'todo'));
+    const from = Math.round(loaded / 3), steps = loaded - from + 5; // 5: the pause, in pages
+    const done = still ? Math.round(loaded * 0.6) : Math.min(loaded, from + Math.floor((Date.now() - t0) / 600) % steps);
+    const marks = Array.from({ length: loaded }, (_, i) => (i < done ? 'done' : i < done + 2 ? 'now' : 'todo'));
     return {
       on: true, kind: 'images', meta: { series: 'Moonlit Ronin', volume: null, chapter: '12', chapterTitle: null },
-      marks, first: 0, loading: 0, total: PAGES, reasons: ['demo'], current: 40, done: 40, failed: 0, lastError: null,
+      marks, first: 0, loading: 0, total: PAGES, reasons: ['demo'], current: done, done, failed: 0, lastError: null,
       grey: true, size: { w: 1100, h: 1600 }, perPageMs: 180, pageMs: 420, imageHost: 'reader.example', protocol: 5,
-      host: 'reader.example', renders: 40,
+      host: 'reader.example', renders: done,
     };
   }
   const META = { title: 'Starlight Academy', season: 1, episode: 3, episodeName: 'The Night Before the Festival', subtitle: null, source: 'demo' };
