@@ -1,4 +1,47 @@
-# Anime4Nerd (browser extension)
+<div align="center">
+
+<a href="https://anime4nerd.pages.dev/"><img src="docs/readme/banner.png" alt="Anime4Nerd: sharper anime, right in your browser" width="100%"></a>
+
+<br>
+
+[![Chrome Web Store](https://img.shields.io/chrome-web-store/v/kblnmcdmlgeidaclnhjmcffefmkehkpm?style=flat-square&label=chrome&labelColor=0b0b0b&color=9fd3a8&logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/anime4nerd/kblnmcdmlgeidaclnhjmcffefmkehkpm)
+[![Chrome users](https://img.shields.io/chrome-web-store/users/kblnmcdmlgeidaclnhjmcffefmkehkpm?style=flat-square&label=users&labelColor=0b0b0b&color=9fd3a8)](https://chromewebstore.google.com/detail/anime4nerd/kblnmcdmlgeidaclnhjmcffefmkehkpm)
+[![Firefox Add-ons](https://img.shields.io/amo/v/anime4nerd?style=flat-square&label=firefox&labelColor=0b0b0b&color=9fd3a8&logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/firefox/addon/anime4nerd/)
+[![Latest release](https://img.shields.io/github/v/release/creedweb3/anime4nerd?style=flat-square&label=release&labelColor=0b0b0b&color=e4e4e4)](https://github.com/creedweb3/anime4nerd/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-e4e4e4?style=flat-square&labelColor=0b0b0b)](LICENSE)
+
+**The original Anime4K neural upscaler, live on your own GPU.**<br>
+Switch it on for any web video and every frame is restored and upscaled 2× to 8× while it plays.
+
+[**Add to Chrome**](https://chromewebstore.google.com/detail/anime4nerd/kblnmcdmlgeidaclnhjmcffefmkehkpm) &nbsp;·&nbsp; [**Add to Firefox**](https://addons.mozilla.org/firefox/addon/anime4nerd/) &nbsp;·&nbsp; [**Website**](https://anime4nerd.pages.dev/) &nbsp;·&nbsp; [**Report a problem**](https://anime4nerd.pages.dev/report)
+
+</div>
+
+<br>
+
+## ✦ What you get
+
+<table>
+<tr>
+<td width="50%" valign="top"><img src="docs/store/anime4nerd-1-hero.png" alt="The popup on a video"><br><b>Any web video, one switch.</b> Six presets, line effects, 2× to 8× output, a live GPU meter, and a per-site switch that remembers the next episode.</td>
+<td width="50%" valign="top"><img src="docs/store/anime4nerd-2-compare.png" alt="Before and after"><br><b>Cleaner lines, less blur.</b> bloc97's original Anime4K shaders, unchanged, run through WebGL2. No third-party port.</td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="docs/store/anime4nerd-3-manga.png" alt="Manga mode"><br><b>Manga mode.</b> Manga reader pages upscaled once per chapter, with a page map. <kbd>Alt</kbd>+<kbd>M</kbd> shows the originals.</td>
+<td width="50%" valign="top"><img src="docs/store/anime4nerd-4-color.png" alt="Color controls"><br><b>Color controls.</b> Ten controls in VLC's units, five ready-made looks and your own profiles, also in the fullscreen menu.</td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td align="center" width="25%"><b>Private</b><br><sub>No account, no analytics. The video never leaves your machine.</sub></td>
+<td align="center" width="25%"><b>Fullscreen menu</b><br><sub>Change anything without leaving fullscreen, even in embedded players.</sub></td>
+<td align="center" width="25%"><b>Every browser</b><br><sub>Chrome, Edge, Brave 116+ and Firefox 140+ (desktop).</sub></td>
+<td align="center" width="25%"><b>Open source</b><br><sub>MIT, like the Anime4K shaders it runs.</sub></td>
+</tr>
+</table>
+
+## ✦ How it runs
 
 Real-time 2x–8x Anime4K upscaling of any `<video>` on a page, as a
 Chrome/Edge/Brave and Firefox extension you control.
@@ -9,30 +52,17 @@ from https://github.com/bloc97/Anime4K, MIT) in WebGL2. A small loader
 //!HEIGHT / //!WHEN` directives and turns each pass into a fragment shader, so
 no third-party port of the shaders is involved.
 
-## Build
+## ✦ Install
 
-```bash
-npm install
-npm run build
-```
+| Browser | Get it |
+|---|---|
+| Chrome · Edge · Brave | [Chrome Web Store](https://chromewebstore.google.com/detail/anime4nerd/kblnmcdmlgeidaclnhjmcffefmkehkpm) |
+| Firefox (desktop 140+) | [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/anime4nerd/) |
 
-Output goes to `dist/`.
+Open a page with a video, click the Anime4Nerd icon and flip the switch on the video card.
 
-For Firefox:
-
-```bash
-npm run build:firefox   # writes dist-firefox/
-npm run pack:firefox    # also writes "Anime4Nerd firefox.zip"
-```
-
-The Firefox build uses the same sources with a Firefox manifest
-(`firefoxManifest()` in `build.mjs`): `background.scripts` instead of a service
-worker, the add-on id `anime4nerd@creedweb3.github.io`, desktop Firefox 140+
-(not Firefox for Android), and `data_collection_permissions: none`. `pack` and
-`pack:firefox` write the zip with Windows' own `tar.exe` on Windows and with
-`zip` on Linux and macOS.
-
-## Install (Chrome / Edge / Brave)
+<details>
+<summary><b>Load from source: Chrome, Edge, Brave</b></summary>
 
 From the Chrome Web Store:
 https://chromewebstore.google.com/detail/anime4nerd/kblnmcdmlgeidaclnhjmcffefmkehkpm
@@ -48,7 +78,10 @@ From source:
 
 To limit it to certain sites, use the extension's "Site access" settings.
 
-## Install (Firefox)
+</details>
+
+<details>
+<summary><b>Load from source: Firefox</b></summary>
 
 From Firefox Add-ons (desktop Firefox 140 or newer; Firefox for Android is not
 supported):
@@ -77,7 +110,35 @@ player's top-right corner. It opens a menu with the on/off switch, presets,
 line effects, upscale factor and a GPU frame-time graph, and fades out when the
 mouse is idle.
 
-## Presets (the standard Anime4K mpv mappings)
+</details>
+
+## ✦ Build
+
+```bash
+npm install
+npm run build
+```
+
+Output goes to `dist/`.
+
+For Firefox:
+
+```bash
+npm run build:firefox   # writes dist-firefox/
+npm run pack:firefox    # also writes "Anime4Nerd firefox.zip"
+```
+
+The Firefox build uses the same sources with a Firefox manifest
+(`firefoxManifest()` in `build.mjs`): `background.scripts` instead of a service
+worker, the add-on id `anime4nerd@creedweb3.github.io`, desktop Firefox 140+
+(not Firefox for Android), and `data_collection_permissions: none`. `pack` and
+`pack:firefox` write the zip with Windows' own `tar.exe` on Windows and with
+`zip` on Linux and macOS.
+
+## ✦ Under the hood
+
+<details>
+<summary><b>Presets (the standard Anime4K mpv mappings)</b></summary>
 
 | Preset | Shader chain |
 |---|---|
@@ -90,7 +151,10 @@ mouse is idle.
 
 Line effects append `Anime4K_Darken_HQ` and/or `Anime4K_Thin_HQ`.
 
-## Upscale factor
+</details>
+
+<details>
+<summary><b>Upscale factor</b></summary>
 
 The Anime4K networks are trained for exactly 2x, so larger factors chain extra
 `Upscale_CNN_x2_M` passes, one per doubling:
@@ -106,7 +170,10 @@ The Anime4K networks are trained for exactly 2x, so larger factors chain extra
   for 480p and smaller sources; above 4x the extra detail is mostly downscaled
   away by the browser.
 
-## How it works
+</details>
+
+<details>
+<summary><b>How it works</b></summary>
 
 - `src/content.ts` runs in every frame (`all_frames: true`), finds `<video>`
   elements (including inside shadow roots) and reports them to the popup. For a
@@ -140,7 +207,10 @@ The Anime4K networks are trained for exactly 2x, so larger factors chain extra
 - `src/background.ts` injects the content script into tabs that were already
   open when the extension was installed, one frame at a time.
 
-## Video naming
+</details>
+
+<details>
+<summary><b>Video naming</b></summary>
 
 Each row is labelled with what is playing, not just the host:
 
@@ -157,7 +227,10 @@ Sources, in order of trust (`src/media-meta.ts`): schema.org JSON-LD
 are stripped. For single videos (YouTube style) the second line is the channel.
 Fixtures live in `test/meta-test.ts`.
 
-## GPU meter
+</details>
+
+<details>
+<summary><b>GPU meter and reference numbers</b></summary>
 
 Each active video row shows live GPU cost measured with
 `EXT_disjoint_timer_query_webgl2`: ms per frame, load (% of the frame budget at
@@ -182,7 +255,10 @@ frames missed per second, passes and VRAM, and whether it keeps up. Speed is abo
 RTX 2060, 1080p60 source: Mode A → 4K 57 fps in Firefox, 55 in Chrome; A+A → 4K
 38 / 39; Mode A → 8K 34 / 31.
 
-## Limitations
+</details>
+
+<details>
+<summary><b>Limitations</b></summary>
 
 - **CORS.** Uploading a video frame to WebGL requires the video to be
   CORS-clean (`crossorigin` attribute + `Access-Control-Allow-Origin` on the
@@ -197,7 +273,12 @@ RTX 2060, 1080p60 source: Mode A → 4K 57 fps in Firefox, 55 in Chrome; A+A →
   through the page's fullscreen API, so it still fullscreens the bare video:
   plain playback, no menu.
 
-## Local shader test
+</details>
+
+## ✦ Testing
+
+<details>
+<summary><b>Local shader test</b></summary>
 
 ```bash
 npx esbuild test/test.ts --bundle --format=esm --loader:.glsl=text --outfile=test/test.js
@@ -216,7 +297,10 @@ mocked `chrome.*` APIs. Copy `dist/content.js`, `dist/gpu.js`,
 Real fullscreen needs a user gesture, e.g. a click or CDP `Runtime.evaluate`
 with `userGesture: true`.
 
-## Firefox smoke test
+</details>
+
+<details>
+<summary><b>Firefox smoke test</b></summary>
 
 ```bash
 npm run build:firefox
@@ -229,7 +313,10 @@ then `npx playwright install firefox`). It runs headless, installs
 and checks same-origin VP9 and H.264, a CORS source, a cross-origin iframe, the
 no-CORS message, a bare video file page and the fullscreen redirect.
 
-## Rating card
+</details>
+
+<details>
+<summary><b>Rating card</b></summary>
 
 At 3, 12, 48 and 200 upscaled episodes the popup shows one "rate it" card with the
 user's own totals (`src/rate-prompt.ts`). An episode is a video upscaled for at
@@ -248,15 +335,17 @@ The first runs the unit tests in Node; the second loads `dist/` into a real
 Chromium browser, counts a short upscaled playback and walks the card through
 every state.
 
-## Credits
+</details>
+
+## ✦ Credits and legal
 
 - Anime4K shaders: bloc97 and contributors, MIT (`src/shaders/LICENSE`).
-
-## Legal
-
+- Banner and before/after frame: "A snapshot from the 2012 demo release from the Morevna Project" by [Morevna Project](https://morevnaproject.org), [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/). Cropped and upscaled for comparison.
 - Extension code: MIT (`LICENSE`).
 - Anime4K shaders: MIT, bloc97 (`src/shaders/LICENSE`, `THIRD_PARTY_NOTICES.md`).
 - Privacy: `PRIVACY.md`. The extension sends no data about you; its only network requests are manga mode's downloads of the page images a manga reader shows. The popup's bug icon and the page shown after removal open optional forms on the website, which send only what you write, when you press send.
 - Security model and user safety guide: `SECURITY.md`.
 - Store listing draft: `docs/STORE_LISTING.md`; Firefox Add-ons listing and
   reviewer notes: `docs/AMO_LISTING.md`.
+
+<div align="center"><br><sub>Not affiliated with bloc97 or any streaming site.</sub></div>
