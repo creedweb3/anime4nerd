@@ -20,6 +20,11 @@ function memoryKV() {
       const { value } = store.get(key);
       return type === 'arrayBuffer' ? value.buffer ?? value : value;
     },
+    async getWithMetadata(key) {
+      if (!store.has(key)) return { value: null, metadata: null };
+      const { value, opts } = store.get(key);
+      return { value, metadata: opts.metadata ?? null };
+    },
     async put(key, value, opts = {}) { store.set(key, { value, opts }); },
     async delete(key) { store.delete(key); },
     async list({ prefix = '', cursor, limit = 1000 } = {}) {
@@ -129,7 +134,7 @@ test('every other admin path is a plain 404 without a session', async () => {
     assert.equal(res.status, 404, path);
     assert.equal(await res.text(), 'Not found');
   }
-  for (const path of ['/admin/api/done', '/admin/api/delete']) {
+  for (const path of ['/admin/api/mark', '/admin/api/delete']) {
     const res = await handleAdmin(req(path, { method: 'POST', body: { key: 'report:x' } }), e, UI, passTurnstile);
     assert.equal(res.status, 404, path);
   }
@@ -282,8 +287,8 @@ test('answers list comes from key metadata, with old answers read from their val
   assert.equal(res.headers.get('cache-control'), 'no-store');
   const body = await res.json();
   assert.deepEqual(body.answers.map((a) => a.key), [`report:${ID}`, `uninstall:${OLD}`]);
-  assert.deepEqual(body.answers[0], { key: `report:${ID}`, at: '2026-11-20T18:42Z', t: 'bug', r: ['slow'], v: '1.2.4', b: 'chrome', s: 1, d: 0, p: 'Full note <b>here</b>', done: false });
-  assert.deepEqual(body.answers[1], { key: `uninstall:${OLD}`, at: '2026-11-01T08:00Z', t: 'uninstall', r: ['trying'], v: '1.2.3', b: '', s: 0, d: 0, p: '', done: false });
+  assert.deepEqual(body.answers[0], { key: `report:${ID}`, at: '2026-11-20T18:42Z', t: 'bug', r: ['slow'], v: '1.2.4', b: 'chrome', s: 1, d: 0, p: 'Full note <b>here</b>', status: 'open', star: false, archived: false, since: '' });
+  assert.deepEqual(body.answers[1], { key: `uninstall:${OLD}`, at: '2026-11-01T08:00Z', t: 'uninstall', r: ['trying'], v: '1.2.3', b: '', s: 0, d: 0, p: '', status: 'open', star: false, archived: false, since: '' });
   assert.deepEqual(Object.keys(body.caps).sort(), ['report', 'shots', 'uninstall']);
 });
 
@@ -308,23 +313,67 @@ test('screenshots are served as sandboxed JPEG, only for shot keys', async () =>
   }
 });
 
-test('mark done and undo', async () => {
+const postAs = (e, cookie) => (path, body, opts = {}) => handleAdmin(req(path, { method: 'POST', body, cookie, ...opts }), e, UI, passTurnstile);
+const listed = async (e, cookie) => (await (await go('/admin/api/answers', e, { cookie })).json()).answers[0];
+
+test('mark sets status, star and archive; the list shows them without reading values', async () => {
   const { e, kv, cookie } = await seeded();
-  const post = (path, body, opts = {}) => handleAdmin(req(path, { method: 'POST', body, cookie, ...opts }), e, UI, passTurnstile);
-  assert.equal((await post('/admin/api/done', { key: `report:${ID}`, done: true })).status, 204);
-  assert.ok(kv.store.has(`done:report:${ID}`));
-  const list = await (await go('/admin/api/answers', e, { cookie })).json();
-  assert.equal(list.answers[0].done, true);
-  assert.equal((await post('/admin/api/done', { key: `report:${ID}`, done: false })).status, 204);
-  assert.ok(!kv.store.has(`done:report:${ID}`));
-  assert.equal((await post('/admin/api/done', { key: 'shot:x', done: true })).status, 400);
-  assert.equal((await post('/admin/api/done', { key: `report:${ID}`, done: true }, { origin: 'https://evil.example' })).status, 403);
+  const post = postAs(e, cookie);
+  assert.equal((await post('/admin/api/mark', { key: `report:${ID}`, status: 'progress' })).status, 204);
+  let a = await listed(e, cookie);
+  assert.equal(a.status, 'progress');
+  assert.match(a.since, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z$/);
+  assert.equal((await post('/admin/api/mark', { key: `report:${ID}`, star: true, archived: true })).status, 204);
+  a = await listed(e, cookie);
+  assert.deepEqual([a.status, a.star, a.archived], ['progress', true, true]);
+  assert.deepEqual(kv.store.get(`mark:report:${ID}`).opts.metadata, { s: 'progress', st: 1, a: 1, at: a.since });
 });
 
-test('delete removes the answer, its screenshots and its done mark', async () => {
+test('the private note is stored as the mark value and comes back with the answer', async () => {
+  const { e, kv, cookie } = await seeded();
+  const post = postAs(e, cookie);
+  assert.equal((await post('/admin/api/mark', { key: `report:${ID}`, memo: 'Fix in 1.2.6' })).status, 204);
+  assert.equal(kv.store.get(`mark:report:${ID}`).value, 'Fix in 1.2.6');
+  assert.equal((await (await go(`/admin/api/answer?key=report:${ID}`, e, { cookie })).json()).memo, 'Fix in 1.2.6');
+  // Changing the status keeps the note.
+  await post('/admin/api/mark', { key: `report:${ID}`, status: 'done' });
+  assert.equal(kv.store.get(`mark:report:${ID}`).value, 'Fix in 1.2.6');
+});
+
+test('a mark back to all defaults removes its key', async () => {
+  const { e, kv, cookie } = await seeded();
+  const post = postAs(e, cookie);
+  await post('/admin/api/mark', { key: `report:${ID}`, star: true, memo: 'x' });
+  await post('/admin/api/mark', { key: `report:${ID}`, star: false, memo: '' });
+  assert.ok(!kv.store.has(`mark:report:${ID}`));
+});
+
+test('an old done key reads as Done and is replaced by the first mark', async () => {
+  const { e, kv, cookie } = await seeded();
+  await kv.put(`done:report:${ID}`, '1');
+  assert.equal((await listed(e, cookie)).status, 'done');
+  await postAs(e, cookie)('/admin/api/mark', { key: `report:${ID}`, star: true });
+  assert.ok(!kv.store.has(`done:report:${ID}`));
+  const a = await listed(e, cookie);
+  assert.deepEqual([a.status, a.star], ['done', true]);
+});
+
+test('mark rejects bad input and other origins', async () => {
+  const { e, cookie } = await seeded();
+  const post = postAs(e, cookie);
+  const key = `report:${ID}`;
+  for (const body of [{ key, status: 'closed' }, { key, star: 'yes' }, { key, archived: 1 }, { key, memo: 5 }, { key, memo: 'x'.repeat(2001) }, { key, extra: 1 }, { key: 'shot:x', star: true }, { key }]) {
+    assert.equal((await post('/admin/api/mark', body)).status, 400, JSON.stringify(body).slice(0, 50));
+  }
+  assert.equal((await post('/admin/api/mark', { key, star: true }, { origin: 'https://evil.example' })).status, 403);
+  assert.equal((await post('/admin/api/done', { key, done: true })).status, 404);
+});
+
+test('delete removes the answer, its screenshots and its marks', async () => {
   const { e, kv, cookie } = await seeded();
   const post = (body) => handleAdmin(req('/admin/api/delete', { method: 'POST', body, cookie }), e, UI, passTurnstile);
   await kv.put(`done:report:${ID}`, '1');
+  await kv.put(`mark:report:${ID}`, 'note', { metadata: { s: 'progress' } });
   assert.equal((await post({ key: `report:${ID}` })).status, 204);
   assert.deepEqual([...kv.store.keys()].filter((k) => k.includes(ID)), []);
   assert.ok(kv.store.has(`uninstall:${OLD}`));

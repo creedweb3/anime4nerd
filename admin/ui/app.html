@@ -99,16 +99,47 @@ button { cursor: pointer; }
 .a-item .snip { color: var(--dim); font-size: 12px; line-height: 1.5; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
 .a-item.unread .snip { color: var(--fg); }
 .a-item.unread .when::before { content: ""; width: 5px; height: 5px; background: var(--on); }
-.a-read { overflow: auto; padding: 28px 36px; display: grid; align-content: start; gap: 22px; max-width: 820px; }
+.a-read { overflow: auto; padding: 28px 36px; display: grid; align-content: start; gap: 22px; }
+/* Cap the text width, not the pane, so the scrollbar sits at the window edge. */
+.a-read > * { max-width: 748px; }
 .a-read h1 { font-size: 20px; margin: 0; letter-spacing: -.01em; }
 .a-meta { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 0; }
 .a-meta dt { color: var(--faint); }
 .a-meta dd { margin: 0; }
 .a-actions { display: flex; gap: 8px; }
-.a-actions .ghost:first-child { background: var(--on); color: #000; border-color: var(--on); }
-.a-actions .ghost:first-child::before { content: "✓ "; }
+.a-actions .ghost.arch::before { content: "↓ "; }
 .a-ctx { border: 1px solid var(--line); background: #141414; padding: 10px 12px; color: var(--dim); display: grid; gap: 4px; font-size: 12px; }
 .a-ctx b { color: var(--fg); font-weight: 400; }
+
+/* status, star and private note */
+.stat-tag { display: inline-flex; align-items: center; gap: 6px; flex: none; color: var(--faint); }
+.stat-tag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.stat-tag.progress { color: var(--s-warn); }
+.stat-tag.done { color: var(--s-ok); }
+.stat-tag.wontfix { color: var(--dim); text-decoration: line-through; }
+.a-item .star { color: var(--s-warn); flex: none; }
+.a-item.closed .snip { color: var(--faint); }
+.a-title { display: flex; align-items: center; gap: 12px; }
+.star-btn { background: none; border: 1px solid var(--line2); color: var(--faint); width: 30px; height: 30px; font-size: 15px; line-height: 1; display: grid; place-items: center; }
+.star-btn:hover { color: var(--fg); border-color: var(--fg); }
+.star-btn[aria-pressed="true"] { color: var(--s-warn); border-color: rgba(227, 197, 138, .6); }
+.status-seg { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line); max-width: 520px; }
+.status-seg button { display: flex; justify-content: center; align-items: center; gap: 8px; background: none; border: 0; border-left: 1px solid var(--line); color: var(--dim); font-size: 11px; padding: 8px 10px; }
+.status-seg button:first-child { border-left: 0; }
+.status-seg button::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--c, var(--faint)); }
+.status-seg button:hover { color: var(--fg); background: #161616; }
+.status-seg button[aria-pressed="true"] { color: var(--fg); background: #1c1c1c; box-shadow: inset 0 -2px 0 var(--c, var(--fg)); }
+.status-seg button:disabled { cursor: default; }
+.status-seg [data-s="progress"] { --c: var(--s-warn); }
+.status-seg [data-s="done"] { --c: var(--s-ok); }
+.status-seg [data-s="wontfix"] { --c: var(--dim); }
+.status-since { color: var(--faint); font-size: 11px; }
+.memo { width: 100%; min-height: 64px; resize: vertical; background: var(--panel); border: 1px solid var(--line); color: var(--fg); padding: 8px 10px; font: 12px/1.6 var(--mono); }
+.memo::placeholder { color: var(--faint); }
+.memo:focus { outline: none; border-color: var(--line2); }
+.memo-head { display: flex; justify-content: space-between; align-items: baseline; }
+.saved { color: var(--s-ok); font-size: 10px; letter-spacing: .16em; text-transform: uppercase; opacity: 0; transition: opacity .3s; }
+.saved.on { opacity: 1; }
 
 /* custom dropdown over each hidden <select> */
 .dd { position: relative; min-width: 0; }
@@ -225,7 +256,7 @@ button { cursor: pointer; }
       <div class="a-sub">
         <select id="f-ver" aria-label="Version"><option value="">All</option></select>
         <select id="f-br" aria-label="Browser"><option value="">All</option><option>chrome</option><option>firefox</option></select>
-        <select id="f-st" aria-label="Status"><option value="open">Open</option><option value="done">Done</option><option value="">Any</option></select>
+        <select id="f-st" aria-label="Status"><option value="active">Active</option><option value="open">Open</option><option value="progress">In progress</option><option value="starred">Starred</option><option value="done">Done</option><option value="wontfix">Won't fix</option><option value="">Any</option><option value="archived">Archived</option></select>
       </div>
     </div>
     <div class="a-count" id="a-count">Loading…</div>
@@ -346,9 +377,22 @@ const matches = (r) => {
   const full = NOTES.get(r.key)?.note ?? r.p;
   return `${full} ${r.r.join(' ')}`.toLowerCase().includes(query);
 };
+const STATUSES = [['open', 'Open'], ['progress', 'In progress'], ['done', 'Done'], ['wontfix', "Won't fix"]];
+const statusLabel = (s) => STATUSES.find(([k]) => k === s)[1];
+const statusOk = (r) => {
+  const f = fv('f-st');
+  // Archived answers leave every view except the Archived one.
+  if (f === 'archived') return r.archived;
+  if (r.archived) return false;
+  if (!f) return true;
+  if (f === 'active') return r.status === 'open' || r.status === 'progress';
+  if (f === 'starred') return r.star;
+  return r.status === f;
+};
+// Starred answers first, then newest first (sort is stable).
 const rows = () => DATA.filter((r) => (filter === 'all' || r.t === filter)
   && (!fv('f-ver') || r.v === fv('f-ver')) && (!fv('f-br') || r.b === fv('f-br'))
-  && (!fv('f-st') || (fv('f-st') === 'done') === r.done) && matches(r));
+  && statusOk(r) && matches(r)).sort((a, b) => b.star - a.star);
 
 function renderKinds() {
   $('kinds').replaceChildren(...FILTERS.map(([k, label]) => el('button', { 'aria-pressed': String(filter === k), onclick: () => { filter = k; currentKey = null; renderA(); renderKinds(); } },
@@ -373,15 +417,77 @@ function shotsRow(r) {
   }));
 }
 
-function actions(r) {
-  const doneBtn = el('button', { class: 'ghost' }, r.done ? 'Reopen' : 'Mark done');
-  doneBtn.onclick = async () => {
-    doneBtn.disabled = true;
+// One call saves any of status, star, archived and the private note; true when it worked.
+// The server merges each change into the stored mark, so saves run one at a time: a note saved
+// on blur and the click that caused the blur would otherwise overwrite each other.
+let saving = Promise.resolve();
+function saveMark(r, patch) {
+  const run = saving.then(async () => {
     try {
-      await post('/admin/api/done', { key: r.key, done: !r.done });
-      r.done = !r.done;
+      await post('/admin/api/mark', { key: r.key, ...patch });
+      showError('');
+      return true;
+    } catch (e) {
+      if (e.message !== 'signed out') showError(`Could not save (${e.message}).`);
+      return false;
+    }
+  });
+  saving = run;
+  return run;
+}
+const nowMinute = () => new Date().toISOString().slice(0, 16) + 'Z';
+
+function starBtn(r) {
+  const btn = el('button', { class: 'star-btn', 'aria-pressed': String(r.star), title: r.star ? 'Unstar' : 'Star', 'aria-label': 'Star' }, r.star ? '★' : '☆');
+  btn.onclick = async () => {
+    btn.disabled = true;
+    if (await saveMark(r, { star: !r.star })) r.star = !r.star;
+    renderA();
+  };
+  return btn;
+}
+
+function statusRow(r) {
+  const seg = el('div', { class: 'status-seg', role: 'group', 'aria-label': 'Status' }, ...STATUSES.map(([s, label]) => el('button', {
+    'data-s': s, 'aria-pressed': String(r.status === s),
+    onclick: async () => {
+      if (r.status === s) return;
+      seg.querySelectorAll('button').forEach((b) => (b.disabled = true));
+      if (await saveMark(r, { status: s })) Object.assign(r, { status: s, since: nowMinute() });
       renderA();
-    } catch (e) { doneBtn.disabled = false; showError(`Could not save (${e.message}).`); }
+    },
+  }, label)));
+  return el('div', { style: 'display:grid;gap:8px' },
+    el('div', { class: 'memo-head' }, el('span', { class: 'label' }, 'Status'), r.since ? el('span', { class: 'status-since' }, `since ${when(r.since)} UTC`) : null),
+    seg);
+}
+
+// The private note loads with the full answer; until then the box stays read-only.
+function memoBox(r) {
+  const full = NOTES.get(r.key);
+  const saved = el('span', { class: 'saved' }, 'Saved');
+  const box = el('textarea', { class: 'memo', maxlength: '2000', 'aria-label': 'Private note',
+    placeholder: full ? 'Only you see this. Repro steps, fix plan, version it shipped in…' : 'Loading…' });
+  box.value = full?.memo ?? '';
+  box.readOnly = !full;
+  box.onblur = async () => {
+    const now = NOTES.get(r.key);
+    if (!now || box.value === now.memo) return;
+    if (await saveMark(r, { memo: box.value })) {
+      NOTES.set(r.key, { ...now, memo: box.value });
+      saved.classList.add('on');
+      setTimeout(() => saved.classList.remove('on'), 1400);
+    }
+  };
+  return el('div', { style: 'display:grid;gap:8px' }, el('div', { class: 'memo-head' }, el('span', { class: 'label' }, 'Private note'), saved), box);
+}
+
+function actions(r) {
+  const archBtn = el('button', { class: 'ghost arch' }, r.archived ? 'Unarchive' : 'Archive');
+  archBtn.onclick = async () => {
+    archBtn.disabled = true;
+    if (await saveMark(r, { archived: !r.archived })) { r.archived = !r.archived; currentKey = null; }
+    renderA();
   };
   // Delete asks once more on the button itself, and forgets after 4 seconds.
   const delBtn = el('button', { class: 'ghost' }, 'Delete');
@@ -402,7 +508,7 @@ function actions(r) {
       renderAll();
     } catch (e) { delBtn.disabled = false; showError(`Could not delete (${e.message}).`); }
   };
-  return el('div', { class: 'a-actions' }, doneBtn, delBtn);
+  return el('div', { class: 'a-actions' }, archBtn, delBtn);
 }
 
 function reader(r) {
@@ -410,7 +516,8 @@ function reader(r) {
   const note = full ? full.note : r.p;
   return [
     el('div', { style: 'display:flex;gap:6px;align-items:center' }, el('span', { class: `chip ${r.t}` }, r.t), el('span', { class: 'muted' }, when(r.at) + ' UTC')),
-    el('h1', {}, titleOf(r)),
+    el('div', { class: 'a-title' }, el('h1', {}, titleOf(r)), starBtn(r)),
+    statusRow(r),
     el('dl', { class: 'a-meta' }, el('dt', {}, 'Reasons'), el('dd', {}, r.r.join(', ') || '—'), el('dt', {}, 'Version'), el('dd', {}, r.v ? 'v' + r.v : '—'),
       r.t === 'uninstall' ? null : el('dt', {}, 'Browser'), r.t === 'uninstall' ? null : el('dd', {}, r.b || '—')),
     context(r),
@@ -418,12 +525,13 @@ function reader(r) {
       el('div', { class: 'note' }, note || el('span', { class: 'muted' }, 'No note'), !full && note ? el('span', { class: 'muted' }, ' …') : null)),
     r.s ? el('div', { style: 'display:grid;gap:8px' }, el('span', { class: 'label' }, `Screenshots · ${r.s}`), shotsRow(r)) : null,
     r.d ? el('span', { class: 'muted' }, `${r.d} more ${r.d === 1 ? 'screenshot was' : 'screenshots were'} dropped by the daily cap.`) : null,
+    memoBox(r),
     actions(r),
   ].filter(Boolean);
 }
 
 async function fetchNote(r) {
-  if (NOTES.has(r.key) || !r.p) return;
+  if (NOTES.has(r.key)) return;
   try {
     const res = await api(`/admin/api/answer?key=${encodeURIComponent(r.key)}`);
     NOTES.set(r.key, await res.json());
@@ -439,10 +547,13 @@ function renderA() {
   $('a-count').textContent = `${list.length} shown${unread ? ` · ${unread} new` : ''} · newest first`;
   if (!list.some((r) => r.key === currentKey)) currentKey = list[0]?.key ?? null;
   $('a-items').replaceChildren(...list.map((r) => el('button', {
-    class: `a-item${r.unread ? ' unread' : ''}`, 'aria-current': String(r.key === currentKey),
+    class: `a-item${r.unread ? ' unread' : ''}${r.status === 'done' || r.status === 'wontfix' ? ' closed' : ''}`, 'aria-current': String(r.key === currentKey),
     onclick: () => { currentKey = r.key; r.unread = false; renderA(); },
   },
-  el('div', { class: 'row' }, el('span', { class: 'kind' }, el('i', { style: `background:${COLOR[r.t]}` }), r.t), el('span', { class: 'why' }, r.r.join(' · ')), el('span', { class: 'when' }, when(r.at))),
+  el('div', { class: 'row' }, r.star ? el('span', { class: 'star', 'aria-label': 'Starred' }, '★') : null,
+    el('span', { class: 'kind' }, el('i', { style: `background:${COLOR[r.t]}` }), r.t),
+    r.status !== 'open' ? el('span', { class: `stat-tag ${r.status}` }, statusLabel(r.status)) : null,
+    el('span', { class: 'why' }, r.r.join(' · ')), el('span', { class: 'when' }, when(r.at))),
   el('div', { class: 'snip' }, r.p || el('span', { class: 'muted' }, 'No note')))));
   const r = list.find((x) => x.key === currentKey);
   if (!r) return $('a-read').replaceChildren(el('p', { class: 'muted' }, DATA.length ? 'Nothing matches these filters.' : 'No answers yet.'));

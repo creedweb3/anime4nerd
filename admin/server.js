@@ -38,6 +38,11 @@ const ANSWER_KEY = /^(report|uninstall):(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z)-[0-9a-f
 const SHOT_KEY = /^shot:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z-[0-9a-f]{16}:[1-3]$/;
 const TAGS = ['bug', 'idea', 'uninstall'];
 const BROWSERS = ['', 'chrome', 'firefox'];
+// Admin marks, one KV key per answer: "mark:<answer key>". Status, star, archive and the time the
+// status last changed live in the key's metadata, so the list needs no reads; the private note is
+// the value, read only when one answer is opened. Older answers may still have a "done:<key>" mark.
+const STATUSES = ['open', 'progress', 'done', 'wontfix'];
+const MAX_MEMO = 2000;
 const TURNSTILE = 'https://challenges.cloudflare.com';
 
 const BASE_HEADERS = {
@@ -178,8 +183,18 @@ const str = (v, max) => (typeof v === 'string' ? v.slice(0, max) : '');
 const int = (v, max) => (Number.isInteger(v) && v >= 0 ? Math.min(v, max) : 0);
 const reasons = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string').slice(0, 10).map((x) => x.slice(0, 20)) : []);
 
+// The admin mark of one answer, from its mark metadata or an old done key.
+function markOf(meta, isDone) {
+  return {
+    status: STATUSES.includes(meta?.s) ? meta.s : isDone ? 'done' : 'open',
+    star: meta?.st === 1,
+    archived: meta?.a === 1,
+    since: typeof meta?.at === 'string' ? meta.at.slice(0, 17) : '',
+  };
+}
+
 // One list row, from key metadata or (answers stored before metadata existed) from the value.
-function row(key, at, meta, isDone) {
+function row(key, at, meta, mark) {
   return {
     key,
     at,
@@ -190,7 +205,7 @@ function row(key, at, meta, isDone) {
     s: int(meta.s, 3),
     d: int(meta.d, 3),
     p: str(meta.p, 400),
-    done: isDone,
+    ...mark,
   };
 }
 
@@ -222,17 +237,19 @@ async function listKeys(kv, prefix, max) {
 
 async function answers(env) {
   const kv = env.FEEDBACK;
-  const [reports, uninstalls, doneKeys] = await Promise.all([
-    listKeys(kv, 'report:', MAX_ANSWERS), listKeys(kv, 'uninstall:', MAX_ANSWERS), listKeys(kv, 'done:', 2 * MAX_ANSWERS),
+  const [reports, uninstalls, doneKeys, markKeys] = await Promise.all([
+    listKeys(kv, 'report:', MAX_ANSWERS), listKeys(kv, 'uninstall:', MAX_ANSWERS),
+    listKeys(kv, 'done:', 2 * MAX_ANSWERS), listKeys(kv, 'mark:', 2 * MAX_ANSWERS),
   ]);
   const doneSet = new Set(doneKeys.map((k) => k.name.slice('done:'.length)));
+  const marks = new Map(markKeys.map((k) => [k.name.slice('mark:'.length), k.metadata]));
   const valid = [...reports, ...uninstalls].filter((k) => ANSWER_KEY.test(k.name));
   const old = valid.filter((k) => typeof k.metadata?.t !== 'string').slice(0, MAX_OLD_READS);
   const oldMeta = new Map(await Promise.all(old.map(async (k) => [k.name, metaFromValue(await kvCall(() => kv.get(k.name)))])));
   const rows = [];
   for (const k of valid) {
     const meta = typeof k.metadata?.t === 'string' ? k.metadata : oldMeta.get(k.name);
-    if (meta) rows.push(row(k.name, ANSWER_KEY.exec(k.name)[2], meta, doneSet.has(k.name)));
+    if (meta) rows.push(row(k.name, ANSWER_KEY.exec(k.name)[2], meta, markOf(marks.get(k.name), doneSet.has(k.name))));
   }
   rows.sort((a, b) => b.at.localeCompare(a.at) || b.key.localeCompare(a.key));
   const day = new Date().toISOString().slice(0, 10);
@@ -251,7 +268,7 @@ function answerKey(value) {
 
 async function answer(env, url) {
   const key = answerKey(url.searchParams.get('key'));
-  const raw = await kvCall(() => env.FEEDBACK.get(key));
+  const [raw, memo] = await Promise.all([kvCall(() => env.FEEDBACK.get(key)), kvCall(() => env.FEEDBACK.get(`mark:${key}`))]);
   if (raw === null) reject(404, 'not_found');
   let a;
   try {
@@ -261,7 +278,7 @@ async function answer(env, url) {
   }
   return json(200, {
     note: str(a.note, 2000), reasons: reasons(a.reasons), v: str(a.v, 20), b: BROWSERS.includes(a.b) ? a.b : '',
-    shots: int(a.shots, 3), shotsDropped: int(a.shotsDropped, 3),
+    shots: int(a.shots, 3), shotsDropped: int(a.shotsDropped, 3), memo: str(memo, MAX_MEMO),
   });
 }
 
@@ -277,13 +294,32 @@ async function shot(env, url) {
   });
 }
 
-async function markDone(request, env, url) {
+// Changes any of status, star, archived and the private note; fields left out keep their value.
+async function mark(request, env, url) {
   checkPost(request, url);
-  const input = await readJson(request, ['key', 'done']);
+  const input = await readJson(request, ['key', 'status', 'star', 'archived', 'memo']);
   const key = answerKey(input.key);
-  if (typeof input.done !== 'boolean') reject(400, 'bad_done');
+  if (Object.keys(input).length < 2) reject(400, 'nothing_to_change');
+  if ('status' in input && !STATUSES.includes(input.status)) reject(400, 'bad_status');
+  if ('star' in input && typeof input.star !== 'boolean') reject(400, 'bad_star');
+  if ('archived' in input && typeof input.archived !== 'boolean') reject(400, 'bad_archived');
+  if ('memo' in input && (typeof input.memo !== 'string' || input.memo.length > MAX_MEMO)) reject(400, 'bad_memo');
+
   const kv = env.FEEDBACK;
-  await kvCall(() => (input.done ? kv.put(`done:${key}`, '1') : kv.delete(`done:${key}`)));
+  const [current, wasDone] = await Promise.all([kvCall(() => kv.getWithMetadata(`mark:${key}`)), kvCall(() => kv.get(`done:${key}`))]);
+  const before = markOf(current.metadata, wasDone !== null);
+  const status = input.status ?? before.status;
+  const star = input.star ?? before.star;
+  const archived = input.archived ?? before.archived;
+  const memo = input.memo ?? str(current.value, MAX_MEMO);
+  const since = status === before.status ? before.since : new Date().toISOString().slice(0, 16) + 'Z';
+
+  if (status === 'open' && !star && !archived && !memo) await kvCall(() => kv.delete(`mark:${key}`));
+  else {
+    const metadata = { s: status, ...(star ? { st: 1 } : {}), ...(archived ? { a: 1 } : {}), ...(since ? { at: since } : {}) };
+    await kvCall(() => kv.put(`mark:${key}`, memo, { metadata }));
+  }
+  if (wasDone !== null) await kvCall(() => kv.delete(`done:${key}`));
   return done();
 }
 
@@ -292,7 +328,7 @@ async function remove(request, env, url) {
   const key = answerKey((await readJson(request, ['key'])).key);
   const id = key.slice(key.indexOf(':') + 1);
   const kv = env.FEEDBACK;
-  for (const k of [key, `done:${key}`, `shot:${id}:1`, `shot:${id}:2`, `shot:${id}:3`]) await kvCall(() => kv.delete(k));
+  for (const k of [key, `done:${key}`, `mark:${key}`, `shot:${id}:1`, `shot:${id}:2`, `shot:${id}:3`]) await kvCall(() => kv.delete(k));
   log(204, 'deleted');
   return done();
 }
@@ -323,7 +359,7 @@ export async function handleAdmin(request, env, ui, fetchFn = fetch) {
     if (method === 'GET' && path === '/admin/api/answers') return await answers(env);
     if (method === 'GET' && path === '/admin/api/answer') return await answer(env, url);
     if (method === 'GET' && path === '/admin/api/shot') return await shot(env, url);
-    if (method === 'POST' && path === '/admin/api/done') return await markDone(request, env, url);
+    if (method === 'POST' && path === '/admin/api/mark') return await mark(request, env, url);
     if (method === 'POST' && path === '/admin/api/delete') return await remove(request, env, url);
     return notFound();
   } catch (e) {
