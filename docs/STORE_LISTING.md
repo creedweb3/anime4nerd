@@ -60,7 +60,7 @@ at the top of `shots.html`); the earlier presets, performance and fullscreen ima
 
 - Privacy policy URL: https://anime4nerd.pages.dev/privacy
 - Homepage URL: https://anime4nerd.pages.dev/
-- Support URL: https://github.com/creedweb3/anime4nerd/issues
+- Support URL: https://anime4nerd.pages.dev/report
 
 ## Privacy practices tab
 
