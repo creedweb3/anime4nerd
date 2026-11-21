@@ -61,6 +61,7 @@ in the notes (they are also in `PRIVACY.md`):
 - `storage`: saves the preset, line effects and upscale factor (`storage.sync`, synced by Firefox Sync if the user has it on), the per-site on/off map (`storage.local`, key `anime4k-sources`) and a one-off "updated to x.y.z" flag for the What's new notice (`storage.local`), and local usage counts (upscaled time and episodes, `storage.local` key `anime4k-rate`) that decide when the popup shows a "rate it" card linking to this add-on's reviews page; never synced or sent. See `src/settings.ts`, `src/whats-new.ts` and `src/rate-prompt.ts`.
 - `scripting`: on install or update, `src/background.ts` injects `content.css`, `content.js` and `fullscreen-redirect.js` into frames of tabs that were already open, so the user does not have to reload them. That is its only use.
 - `webNavigation`: `webNavigation.getAllFrames` lists the frames of a tab. The background uses it to inject frame by frame (one refused frame does not stop the rest), and the popup uses it to ask each frame for its videos, because players are usually in iframes.
+- `webRequest` (manga mode): the background reads, with no blocking and no changes, the IP address that answered (`details.ip`) for two kinds of request: page and frame loads, and its own fetches of manga page images. Manga readers serve page images from other hosts without CORS, so the background downloads them for the content script; the address check makes sure a page cannot use this to read local network or cloud metadata addresses (a public name that resolves to a private address is refused). It also reads the `Location` header of its own fetches to check each redirect hop the same way. Nothing is recorded beyond the current session (`storage.session`) and nothing is sent anywhere.
 - Host permission `<all_urls>`: video players are embedded from many different domains (the page and the player's host differ), so the content script must run in every frame to find `<video>` elements, and must be able to read the frames of a video the user switches on. Until the user switches a video on in the popup, the content script only looks for `<video>` elements. Nothing is sent anywhere.
 
 ## Source code and notes to reviewer
@@ -85,8 +86,9 @@ would make that file differ from a reviewer's build.
 **Notes to reviewer (paste into the AMO field):**
 
 ```text
-Anime4Nerd runs the Anime4K upscaling shaders over web <video> elements with WebGL2. It has no
-network code, no remote code, no analytics and no accounts. The full source is attached and is
+Anime4Nerd runs the Anime4K upscaling shaders over web <video> elements and manga reader page
+images with WebGL2. Its only network code downloads manga page images the user's reader already
+shows (see webRequest below). No remote code, no analytics and no accounts. The full source is attached and is
 also at https://github.com/creedweb3/anime4nerd (MIT).
 
 Website pages it opens (no data is sent by the add-on itself):
@@ -114,14 +116,21 @@ What the build does (build.mjs)
   THIRD_PARTY_NOTICES.md). src/mpv-hooks.ts turns them into WebGL2 fragment shaders.
 - The manifest is manifest.json with Firefox changes (firefoxManifest() in build.mjs):
   background.scripts instead of a service worker, gecko id anime4nerd@creedweb3.github.io,
-  strict_min_version 140.0 (desktop only), data_collection_permissions none.
+  strict_min_version 140.0 (desktop only), data_collection_permissions none, and an extension-page
+  CSP of "script-src 'self'": Firefox's default adds upgrade-insecure-requests, which would turn
+  manga page images on http readers into failing https requests (Chrome's default has no such
+  rule).
 - No runtime npm dependencies. Dev dependencies: esbuild, typescript, @types/chrome.
 
 Files in the package
 - background.js: on install/update, injects the content scripts into tabs already open, and
-  sets the uninstall page URL (runtime.setUninstallURL, version only). It accepts only the
-  two "rate it" card messages from the add-on's own pages (sender.id is checked, values
-  clamped) and stores the counts locally.
+  sets the uninstall page URL (runtime.setUninstallURL, version only). It accepts messages only
+  from the add-on's own pages and content scripts (sender.id is checked): the two "rate it" card
+  counters (clamped, stored locally), the manga mode badge hint, and manga page image requests.
+  An image request is fetched only over http(s), without cookies, size-capped (25 MB), with a
+  timeout and at most 5 redirects followed by hand; local, private and cloud metadata hosts are
+  refused by name and by the address that answered (webRequest details.ip), unless the asking
+  page is itself on such an address (self-hosted readers; metadata hosts are always refused).
 - content.js (+ content.css): runs in every frame, finds <video> elements, answers the
   popup, and draws the upscaled canvas over videos the user switched on.
 - gpu.js: the WebGL2 renderer and the bundled shaders. Loaded with
@@ -140,7 +149,11 @@ Permissions
   a "what's new" flag and local usage counts for the "rate it" card (storage.local, never sent).
 - scripting: injection into already-open tabs on install/update (background.js only).
 - webNavigation: getAllFrames, to inject per frame and to let the popup query every frame,
-  because video players are usually in iframes.
+  because video players are usually in iframes; onCommitted, to file the address each page
+  was loaded from (manga mode's address check, below).
+- webRequest: read-only listeners (onBeforeRequest, onResponseStarted, onBeforeRedirect) that
+  read details.ip and the Location header, for page/frame loads and the background's own manga
+  image fetches. Used only to refuse images from local, private or cloud metadata addresses.
 - <all_urls>: players are embedded from arbitrary domains, so the content script must run in
   every frame. It does nothing beyond finding <video> elements until the user switches a
   video on.
@@ -148,7 +161,8 @@ Permissions
 Testing
 Open any page with a CORS-enabled <video> (for example a .webm or .mp4 file opened directly),
 click the toolbar button and switch the video on. test/firefox-smoke.mjs is the automated
-Firefox test (needs ffmpeg and Playwright's Firefox; see README.md).
+Firefox test (needs ffmpeg and Playwright's Firefox; see README.md). Manga mode: open a manga
+chapter page, open the popup and click the chapter card; test/firefox-manga-e2e.mjs automates it.
 ```
 
 ## Screenshots

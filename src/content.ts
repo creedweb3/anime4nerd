@@ -331,9 +331,9 @@ class VideoUpscaler {
     this.sync();
   }
 
-  /** Mode 'manga': videos are left alone. The Firefox build has no manga mode. */
+  /** Mode 'manga': videos are left alone. */
   private mangaOnly(): boolean {
-    return !__FIREFOX__ && this.settings.mode === 'manga';
+    return this.settings.mode === 'manga';
   }
 
   highlight(on: boolean) {
@@ -1294,7 +1294,6 @@ function checkSuggestion() {
  */
 function onMutations(records: MutationRecord[]) {
   queueScan();
-  if (__FIREFOX__) return;
   const frameGone = records.some((r) => [...r.removedNodes].some((n) => n instanceof Element && (n.matches('iframe, frame') || !!n.querySelector('iframe, frame'))));
   if (!frameGone) return;
   try {
@@ -1366,7 +1365,7 @@ const menu = new FullscreenMenu(() => fullscreenTarget()?.u.info() ?? null, () =
 // Not offered in mode 'manga': its switch and presets would do nothing to a video there.
 function syncMenu() {
   if (stopped) return;
-  const videosOff = !__FIREFOX__ && settings?.mode === 'manga';
+  const videosOff = settings?.mode === 'manga';
   menu.mount(videosOff ? null : fullscreenTarget()?.container ?? null);
 }
 
@@ -1406,14 +1405,12 @@ if (!window.__a4kLoaded) {
     notify();
   });
   onLoadCapLifted(() => { if (stopped) return; for (const u of upscalers.values()) u.liftLoadCap(); applyRendererCap(); notify(); });
-  onSettingsChanged((s) => { if (stopped) return; settings = s; for (const u of upscalers.values()) u.configure(s); manga?.refresh(); syncMenu(); notify(); if (!__FIREFOX__) checkSuggestion(); });
-  if (!__FIREFOX__) {
-    manga = startManga(() => settings, loadGpu);
-    window.setTimeout(checkSuggestion, SUGGEST_FIRST_MS);
-    suggestTimer = window.setInterval(checkSuggestion, SUGGEST_MS);
-    document.addEventListener('visibilitychange', checkSuggestion);
-    window.addEventListener('pageshow', onPageShow);
-  }
+  onSettingsChanged((s) => { if (stopped) return; settings = s; for (const u of upscalers.values()) u.configure(s); manga?.refresh(); syncMenu(); notify(); checkSuggestion(); });
+  manga = startManga(() => settings, loadGpu);
+  window.setTimeout(checkSuggestion, SUGGEST_FIRST_MS);
+  suggestTimer = window.setInterval(checkSuggestion, SUGGEST_MS);
+  document.addEventListener('visibilitychange', checkSuggestion);
+  window.addEventListener('pageshow', onPageShow);
   onSourcesChanged((s) => {
     if (stopped) return;
     sources = s;

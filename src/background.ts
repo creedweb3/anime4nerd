@@ -10,6 +10,7 @@ import { markUpdated, onWhatsNewChanged, pendingWhatsNew, restoreBadge } from '.
 import { RateAction, addWatch, applyAction, markReturning, updateRate } from './rate-prompt';
 import type { Message, Suggest } from './settings';
 import { addressBlocked, isMetadataHost, isPrivateHost } from './private-host';
+import { DocIps } from './doc-ips';
 import { uninstallUrl } from './site-links';
 
 const RATE_ACTIONS: readonly RateAction[] = ['dismiss', 'clicked', 'rated'];
@@ -48,7 +49,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 
 chrome.runtime.onStartup.addListener(() => { void restoreBadge().catch(() => {}); });
 
-// Rating card counters, and manga page images (Chrome build only). Only this extension's own
+// Rating card counters, and manga page images. Only this extension's own
 // pages and content scripts can send runtime messages here; values are clamped again in addWatch.
 chrome.runtime.onMessage.addListener((msg: Message, sender, respond) => {
   if (sender.id !== chrome.runtime.id) return false;
@@ -65,13 +66,13 @@ chrome.runtime.onMessage.addListener((msg: Message, sender, respond) => {
       .then((meta: unknown) => respond({ meta: meta ?? null, host }), () => respond({ meta: null, host }));
     return true; // answers asynchronously
   }
-  else if (!__FIREFOX__ && msg?.type === 'a4k-suggest') {
+  else if (msg?.type === 'a4k-suggest') {
     const { tab, frameId } = sender;
     const kind = msg.kind === 'manga' || msg.kind === 'anime' || msg.kind === 'reader' ? msg.kind : null;
     if (tab?.id !== undefined && frameId !== undefined) updateSuggestions((m) => withFrame(m, `${tab.id}:${frameId}`, kind));
-  } else if (!__FIREFOX__ && msg?.type === 'a4k-frames-gone') {
+  } else if (msg?.type === 'a4k-frames-gone') {
     if (sender.tab?.id !== undefined) forgetGoneFrames(sender.tab.id);
-  } else if (!__FIREFOX__ && msg?.type === 'a4k-fetch-image') {
+  } else if (msg?.type === 'a4k-fetch-image') {
     if (!sender.tab?.url || sender.frameId === undefined) { respond({ error: 'Only page frames may ask.' }); return false; }
     // The asking frame's own origin decides the local-address exemption, not the tab around it.
     const frame = `${sender.tab.id}:${sender.documentId}`;
@@ -120,7 +121,7 @@ function hostOf(url: string): string {
   try { return new URL(url).hostname; } catch { return ''; }
 }
 
-// ---- response addresses (Chrome) ---------------------------------------------------------
+// ---- response addresses -----------------------------------------------------------------
 // fetch() does not say which address answered; webRequest does. Two things are recorded: the
 // address each document came from, and the address of each image fetch made below.
 
@@ -143,7 +144,7 @@ function updateFrameIps(change: (m: FrameIps) => FrameIps): void {
 
 const withoutTab = <T>(m: Record<string, T>, tabId: number): Record<string, T> => Object.fromEntries(Object.entries(m).filter(([k]) => !k.startsWith(`${tabId}:`)));
 
-// ---- mode suggestion badge (Chrome) ------------------------------------------------------
+// ---- mode suggestion badge -------------------------------------------------------------
 // Page scripts say when the mode leaves their frame's content alone (content.ts); the tab then
 // gets a one-letter badge on the toolbar icon, so the user notices without opening the popup.
 // The badge is set for the tab only. While the "what's new" badge is pending it is held back,
@@ -215,53 +216,64 @@ function forgetGoneFrames(tabId: number): void {
   }).catch(() => {});
 }
 
-if (!__FIREFOX__) {
-  // A new page in the tab: the browser drops the tab's badge itself; forget what the old page said.
-  chrome.webNavigation.onCommitted.addListener((d) => {
-    updateSuggestions((m) => (d.frameId === 0 ? withoutTab(m, d.tabId) : withFrame(m, `${d.tabId}:${d.frameId}`, null)));
-  });
-  chrome.tabs.onRemoved.addListener((tabId) => updateSuggestions((m) => withoutTab(m, tabId)));
-  // A discarded tab comes back under a new id; its page reports again when it loads.
-  chrome.tabs.onReplaced.addListener((_added, removed) => updateSuggestions((m) => withoutTab(m, removed)));
-  // NEW became pending or was seen: every badge is decided again.
-  onWhatsNewChanged(() => updateSuggestions((m) => m));
-}
+// A new page in the tab: the browser drops the tab's badge itself; forget what the old page said.
+chrome.webNavigation.onCommitted.addListener((d) => {
+  updateSuggestions((m) => (d.frameId === 0 ? withoutTab(m, d.tabId) : withFrame(m, `${d.tabId}:${d.frameId}`, null)));
+});
+chrome.tabs.onRemoved.addListener((tabId) => updateSuggestions((m) => withoutTab(m, tabId)));
+// A discarded tab comes back under a new id; its page reports again when it loads.
+chrome.tabs.onReplaced.addListener((_added, removed) => updateSuggestions((m) => withoutTab(m, removed)));
+// NEW became pending or was seen: every badge is decided again.
+onWhatsNewChanged(() => updateSuggestions((m) => m));
 
 interface Hop { ip: string | null; next?: string }
 interface PendingFetch { id?: string; settle: (hop: Hop) => void; done: Promise<void> }
 const pendingByUrl = new Map<string, PendingFetch>();
 const pendingById = new Map<string, PendingFetch>();
 
-if (!__FIREFOX__) {
-  // The address is filed under the document that commits, not under the frame: a navigation that
-  // never replaces the document (a 204, a download) must not change what its frame may read.
-  const navIps = new Map<string, { url: string; ip?: string }>();
-  const sansHash = (url: string) => url.split('#')[0];
+{
+  // The address each document came from, in either event order (src/doc-ips.ts).
+  const docIps = new DocIps();
+  const frameKey = (d: { tabId: number; frameId: number }) => `${d.tabId}:${d.frameId}`;
+  chrome.webNavigation.onBeforeNavigate.addListener((d) => docIps.beforeNavigate(frameKey(d)));
   chrome.webRequest.onResponseStarted.addListener((d) => {
-    navIps.set(`${d.tabId}:${d.frameId}`, { url: sansHash(d.url), ip: d.ip });
+    const filed = docIps.response(frameKey(d), d.url, d.statusCode, d.ip);
+    if (filed) updateFrameIps((m) => ({ ...m, [filed.doc]: filed.ip }));
   }, { urls: ['http://*/*', 'https://*/*'], types: ['main_frame', 'sub_frame'] });
   chrome.webNavigation.onCommitted.addListener((d) => {
-    const nav = `${d.tabId}:${d.frameId}`;
-    const seen = navIps.get(nav);
-    navIps.delete(nav);
-    const ip = seen?.url === sansHash(d.url) ? seen.ip : undefined;
+    const doc = `${d.tabId}:${d.documentId}`;
+    const ip = docIps.commit(frameKey(d), d.url, doc);
     updateFrameIps((m) => {
       const rest = d.frameId === 0 ? withoutTab(m, d.tabId) : m; // a new page: its old documents are gone
-      return ip ? { ...rest, [`${d.tabId}:${d.documentId}`]: ip } : rest;
+      return ip ? { ...rest, [doc]: ip } : rest;
     });
   });
+  chrome.tabs.onRemoved.addListener((tabId) => docIps.forgetTab(tabId));
   chrome.tabs.onRemoved.addListener((tabId) => updateFrameIps((m) => withoutTab(m, tabId)));
 
   // This worker's own requests have no tab. fetchWithIp() lets one request per URL run at a time,
   // so the URL names exactly one of them; from there on the request id does.
   const own = { urls: ['http://*/*', 'https://*/*'], tabId: -1 };
+  // Chrome names the worker as the initiator; Firefox gives the URL of its background page instead.
+  const fromHere = (d: { initiator?: string; originUrl?: string }) => (__FIREFOX__
+    ? (d.originUrl ?? '').startsWith(`${location.origin}/`) : d.initiator === location.origin);
   chrome.webRequest.onBeforeRequest.addListener((d) => {
-    const p = d.initiator === location.origin ? pendingByUrl.get(d.url) : undefined;
+    const p = fromHere(d) ? pendingByUrl.get(d.url) : undefined;
     // Not a redirect hop of a request that is already matched: it would claim another fetch.
     if (p && !p.id && !pendingById.has(d.requestId)) { p.id = d.requestId; pendingById.set(d.requestId, p); }
   }, own);
-  chrome.webRequest.onResponseStarted.addListener((d) => { pendingById.get(d.requestId)?.settle({ ip: d.ip ?? null }); }, own);
-  // Redirects are not followed by fetch() (redirect: 'manual'); this says where one points.
+  // Firefox reports a redirect that fetch() does not follow (redirect: 'manual') here, as a response
+  // with a Location header, and never calls onBeforeRedirect for it.
+  chrome.webRequest.onResponseStarted.addListener((d) => {
+    const p = pendingById.get(d.requestId);
+    if (!p) return;
+    const target = __FIREFOX__ && d.statusCode >= 300 && d.statusCode < 400
+      ? d.responseHeaders?.find((h) => h.name.toLowerCase() === 'location')?.value : undefined;
+    let next: string | undefined;
+    try { next = target ? new URL(target, d.url).href : undefined; } catch { /* not a URL: no next hop */ }
+    p.settle({ ip: d.ip ?? null, next });
+  }, own, __FIREFOX__ ? ['responseHeaders'] : undefined);
+  // Redirects are not followed by fetch() (redirect: 'manual'); in Chrome this says where one points.
   // A redirect with no address is the browser's own (HSTS upgrade): fetch() follows it, and the
   // response that comes after has the address.
   chrome.webRequest.onBeforeRedirect.addListener((d) => { if (d.ip) pendingById.get(d.requestId)?.settle({ ip: d.ip, next: d.redirectUrl }); }, own);

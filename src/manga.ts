@@ -330,6 +330,9 @@ export function startManga(getSettings: () => Settings, loadGpu: () => Promise<G
 
   /** Whether the browser lets us read this image's pixels (same-origin, blob:, data:, CORS). */
   function canRead(img: HTMLImageElement): boolean {
+    // Firefox lets a content script read any image on a 2D canvas, but WebGL still refuses a
+    // cross-origin image without CORS: there, only what a web page itself could read counts.
+    if (__FIREFOX__ && img.crossOrigin === null && /^https?:/.test(img.currentSrc) && new URL(img.currentSrc).origin !== location.origin) return false;
     try {
       const g = probe.getContext('2d', { willReadFrequently: true })!;
       g.drawImage(img, 0, 0, 1, 1);

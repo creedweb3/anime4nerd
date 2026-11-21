@@ -8,7 +8,7 @@
 //   node test/popup-long-lists-e2e.mjs "C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"
 //   node test/popup-long-lists-e2e.mjs firefox
 //
-// Firefox runs dist-firefox/popup.js, which has no manga side, so only the profile checks run there.
+// Firefox runs dist-firefox/popup.js; every check runs on both builds.
 
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
@@ -105,8 +105,8 @@ await changeValue();
 const under = await page.evaluate(() => ({ saveNew: !!document.querySelector('[data-act="new"]'), full: !!document.querySelector('.pf-full') }));
 check('below the limit: "save new" is offered', under.saveNew && !under.full, JSON.stringify(under));
 
-// --- page map (the Chrome build: Firefox has no manga side) --------------------------------------
-if (!firefox) {
+// --- page map --------------------------------------------------------------------------------------
+{
   const map = () => page.evaluate(() => {
     const shown = [...document.querySelectorAll('#pmap-grid .pcell')].filter((el) => !el.hidden);
     const headEl = document.querySelector('#pmap .panel-head');

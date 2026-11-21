@@ -225,42 +225,34 @@ function onModeKey(e: KeyboardEvent) {
   if (to >= 0) { openModeList(true); setModeActive(to); }
 }
 
-// The Firefox build has no manga mode: a plain chip stands in and mode stays 'auto'.
-if (__FIREFOX__) {
-  const plain = document.createElement('span');
-  plain.className = 'chip';
-  plain.textContent = 'anime4k';
-  $('#modeChip').replaceWith(plain);
-} else {
-  // A click from the keyboard (Enter, Space: detail 0) on the open list picks the highlighted row.
-  modeBtn.addEventListener('click', (e) => {
-    const open = !modeList.hidden;
-    if (open && e.detail === 0) pickMode(modeActive); else openModeList(!open);
-  });
-  modeBtn.addEventListener('keydown', onModeKey);
-  modeBtn.addEventListener('blur', () => openModeList(false));
-  // A press outside the open list only closes it: caught before any button sees it (capture
-  // phase), and its click is swallowed, so the control under the dimmed popup does not fire.
-  let swallowClick = false;
-  document.addEventListener('pointerdown', (e) => {
-    swallowClick = false; // a press that ended without a click (dragged away) must not eat the next one
-    if (modeList.hidden || $('#modeChip').contains(e.target as Node)) return;
-    e.preventDefault();
-    e.stopPropagation();
-    openModeList(false);
-    swallowClick = true;
-  }, true);
-  document.addEventListener('click', (e) => {
-    if (!swallowClick) return;
-    swallowClick = false;
-    e.preventDefault();
-    e.stopPropagation();
-  }, true);
-  modeList.addEventListener('mousedown', (e) => e.preventDefault()); // a press on a row must not take the focus off the button
-  modeList.addEventListener('pointermove', (e) => { const i = modeOptAt(e); if (i >= 0 && i !== modeActive) setModeActive(i); });
-  modeList.addEventListener('click', (e) => { const i = modeOptAt(e); if (i >= 0) pickMode(i); });
-}
-function mode(): Mode { return __FIREFOX__ || !settings ? 'auto' : settings.mode; }
+// A click from the keyboard (Enter, Space: detail 0) on the open list picks the highlighted row.
+modeBtn.addEventListener('click', (e) => {
+  const open = !modeList.hidden;
+  if (open && e.detail === 0) pickMode(modeActive); else openModeList(!open);
+});
+modeBtn.addEventListener('keydown', onModeKey);
+modeBtn.addEventListener('blur', () => openModeList(false));
+// A press outside the open list only closes it: caught before any button sees it (capture
+// phase), and its click is swallowed, so the control under the dimmed popup does not fire.
+let swallowClick = false;
+document.addEventListener('pointerdown', (e) => {
+  swallowClick = false; // a press that ended without a click (dragged away) must not eat the next one
+  if (modeList.hidden || $('#modeChip').contains(e.target as Node)) return;
+  e.preventDefault();
+  e.stopPropagation();
+  openModeList(false);
+  swallowClick = true;
+}, true);
+document.addEventListener('click', (e) => {
+  if (!swallowClick) return;
+  swallowClick = false;
+  e.preventDefault();
+  e.stopPropagation();
+}, true);
+modeList.addEventListener('mousedown', (e) => e.preventDefault()); // a press on a row must not take the focus off the button
+modeList.addEventListener('pointermove', (e) => { const i = modeOptAt(e); if (i >= 0 && i !== modeActive) setModeActive(i); });
+modeList.addEventListener('click', (e) => { const i = modeOptAt(e); if (i >= 0) pickMode(i); });
+function mode(): Mode { return settings ? settings.mode : 'auto'; }
 
 function paintSettings(s: Settings) {
   settings = s;
@@ -618,7 +610,7 @@ async function refresh() {
     const [found, metas, mangaReplies] = await Promise.all([
       sendToFrames<VideoInfo[]>({ type: 'a4k-list' }),
       sendToFrames<MediaMeta | null>({ type: 'a4k-page-meta' }),
-      __FIREFOX__ ? Promise.resolve([]) : sendToFrames<MangaStatus | null>({ type: 'a4k-manga-status' }),
+      sendToFrames<MangaStatus | null>({ type: 'a4k-manga-status' }),
     ]);
     const top = metas.find((m) => m.frameId === 0)?.value;
     if (top) pageMeta = top;
@@ -655,12 +647,12 @@ async function refresh() {
     countEl.textContent = list.length > 1 ? `${list.length} videos` : '';
     // No frame answered at all: the page's content script is missing or orphaned (tab opened
     // before an extension reload). Inject a fresh copy once, as the background does on install.
-    if (!__FIREFOX__ && !found.length && !mangaReplies.length && !injected && tabId !== undefined && mangaHost) {
+    if (!found.length && !mangaReplies.length && !injected && tabId !== undefined && mangaHost) {
       injected = true;
       void injectContent(tabId);
     }
     try { paintMangaCard(manga); paintPageMap(manga); } catch { /* never let the manga card stop the rest of the popup */ }
-    const offered = __FIREFOX__ ? null : paintPrompt(detected, list.map((x) => x.v));
+    const offered = paintPrompt(detected, list.map((x) => x.v));
     sourcesEl.hidden = offered === 'anime'; // the preview stands in for the paused video cards
     emptyEl.hidden = list.length > 0 || !!manga || !!offered; // "No video found yet" would contradict the preview
     const reading = !!manga && list.length === 0;
@@ -1067,7 +1059,6 @@ function paintMangaPerf({ s }: MangaView) {
 }
 
 function initMangaCard(url: string | undefined) {
-  if (__FIREFOX__) return;
   try { const u = new URL(url ?? ''); if (u.protocol === 'http:' || u.protocol === 'https:') mangaHost = u.hostname; } catch { /* no url */ }
   if (!mangaHost) return;
   pmap.grid.addEventListener('click', onPageMapClick);
@@ -1171,7 +1162,6 @@ async function promptSwitch(to: Mode) {
 }
 
 function initPrompt() {
-  if (__FIREFOX__) return;
   prompt.go.addEventListener('click', () => { if (promptKind) void promptSwitch(promptKind); });
   prompt.auto.addEventListener('click', () => { void promptSwitch('auto'); });
   prompt.undo.addEventListener('click', () => {
