@@ -229,7 +229,8 @@ try {
       const step = `${info?.status}${st ? `@${st.outputWidth} ${st.fps}/${st.sourceFps?.toFixed(1)}fps busy${st.busySamples?.length ?? '-'}` : ''}${info?.loadCapped ? ' capped' : ''}`;
       if (trail.at(-1) !== step) trail.push(step);
       if ((st?.busySamples?.length ?? 0) > 0 || st?.timerSupported) fenced = true;
-      if (info?.loadCapped && st?.outputWidth === 1920) break;
+      // Capped at 2x, and fence timings seen: a 4x that stalled outright can cap before its first one.
+      if (info?.loadCapped && st?.outputWidth === 1920 && fenced) break;
     }
     const st = info?.stats;
     const fpsRight = Math.abs((st?.sourceFps ?? 0) - 60) <= 3;

@@ -30,6 +30,7 @@ function loadGpu(): Promise<GpuModule> {
 
 const MIN_VIDEO_PX = 200; // ignore thumbnails / preview videos
 const BUSY_RETRY_MS = 8; // wait before retrying a frame skipped because the GPU was still busy
+const NOT_READY_RETRY_MS = 50; // wait before retrying a frame skipped mid-seek or while buffering
 // Each renderer holds a WebGL context, compiled shaders and large float textures; browsers
 // cap live contexts (~16) and evict the oldest, so a page full of videos must not get one each.
 const MAX_ACTIVE_RENDERERS = 2;
@@ -490,7 +491,13 @@ class VideoUpscaler {
     if (this.rendering) { this.rerender = true; return; }
     const v = this.video;
     const r = this.renderer;
-    if (!v || !r || v.seeking || v.readyState < 2 || this.suspended()) return;
+    if (!v || !r || this.suspended()) return;
+    if (v.seeking || v.readyState < 2) {
+      // Mid-seek or no frame yet: try again shortly rather than wait for an event that may already
+      // have passed (a seek hid the canvas; without a draw it would stay hidden).
+      if (!v.paused) this.busyTimer = window.setTimeout(() => { this.busyTimer = null; this.frame(); }, NOT_READY_RETRY_MS);
+      return;
+    }
     if (v.videoWidth !== this.width || v.videoHeight !== this.height) { this.teardown(); this.sync(); return; }
     if (r.busy()) {
       // The GPU is still on the last frame: queueing another only adds lag and load. Draw
