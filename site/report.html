@@ -82,8 +82,10 @@
   .thumbs figure { position: relative; margin: 0; width: 96px; height: 60px; border: 1px solid var(--line2); background: center/cover no-repeat; }
   .thumbs button { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border: 0; background: rgba(0,0,0,.75); color: var(--on); font: 11px/1 var(--mono); cursor: pointer; }
   .send small b { color: var(--dim); font-weight: 500; }
-  /* Reinstall: one slim strip under the form. */
-  .body > .panel.again { display: flex; flex-direction: row; align-items: center; gap: 6px; flex-wrap: wrap; padding-block: 14px; }
+  /* Reinstall: one slim strip under the form. flex: none keeps it slim after sending, when the
+     form panel shrinks and the column would otherwise stretch this strip to fill the space. */
+  .body.sent > .panel { flex: none; }
+  .body > .panel.again { flex: none; display: flex; flex-direction: row; align-items: center; gap: 6px; flex-wrap: wrap; padding-block: 14px; }
   .body > .panel.again .phead { margin: 0 auto 0 0; }
   @media (max-width: 760px) { .why { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 520px) { .why { grid-template-columns: minmax(0, 1fr); } .send .btn { width: 100%; } }
@@ -175,6 +177,7 @@
 </footer>
 
 <script src="assets/send.js"></script>
+<script src="assets/tickets.js"></script>
 <script>
   (function () {
     // Version and browser come from the link the extension opens (?v=1.2.4&b=chrome).
@@ -325,8 +328,13 @@
           b: br,
           shots: shots,
         });
-      }).then(function () {
+      }).then(function (res) {
         document.getElementById('page').classList.add('sent');
+        // The ticket: saved in this browser, and shown with its link and code.
+        if (res && window.a4nTickets && window.a4nTickets.CODE.test(res.code || '')) {
+          window.a4nTickets.add(res.code);
+          document.querySelector('.thanks').append(window.a4nTickets.box(res.code, false));
+        }
       }, function (x) {
         sending = false;
         // The server refused a screenshot: drop them all so the text can still be sent.

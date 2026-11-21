@@ -66,17 +66,20 @@
     });
   };
 
-  // Resolves on success; rejects with an Error whose message is the server's error code.
-  window.a4nSend = function (payload) {
+  // Resolves with the server's answer (/api/send: {ok, code?}); rejects with an Error whose
+  // message is the server's error code. path is /api/send, or /api/reply on the tickets page.
+  window.a4nSend = function (payload, path) {
     return token().then(function (t) {
-      return fetch('/api/send', {
+      return fetch(path || '/api/send', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(Object.assign({}, payload, { token: t })),
       });
     }).then(function (res) {
-      if (res.ok) return;
-      return res.json().catch(function () { return {}; }).then(function (b) { throw new Error(b.error || 'http_' + res.status); });
+      return res.json().catch(function () { return {}; }).then(function (b) {
+        if (res.ok) return b;
+        throw new Error(b.error || 'http_' + res.status);
+      });
     });
   };
 

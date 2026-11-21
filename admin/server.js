@@ -23,6 +23,7 @@
 
 import { PER_KIND_PER_DAY, Rejected, SHOTS_PER_DAY, ipBucket, readCapped, sha256Hex, verifyTurnstile } from '../functions/api/send.js';
 import { b64url, isPasswordHash, sameBytes, verifyPassword } from './password.js';
+import { MAX_ADMIN_TEXT, MAX_MSGS, STATUSES, markMetadata, markOf, merged, sideFrom, threadSummary, withMessage } from '../server/tickets.js';
 
 export const SESSION_COOKIE = '__Host-a4n_admin';
 const SESSION_SECONDS = 12 * 60 * 60;
@@ -36,12 +37,15 @@ const MAX_ANSWERS = 5000; // per kind; far above the 60-a-day cap for the 180 da
 const MAX_OLD_READS = 300; // answers stored before metadata existed are read one by one
 const ANSWER_KEY = /^(report|uninstall):(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z)-[0-9a-f]{16}$/;
 const SHOT_KEY = /^shot:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z-[0-9a-f]{16}:[1-3]$/;
+// Screenshots the reporter attached when writing back: message number, then 1-3 (server/tickets.js).
+const RSHOT_KEY = /^rshot:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z-[0-9a-f]{16}:\d{1,2}:[1-3]$/;
 const TAGS = ['bug', 'idea', 'uninstall'];
 const BROWSERS = ['', 'chrome', 'firefox'];
 // Admin marks, one KV key per answer: "mark:<answer key>". Status, star, archive and the time the
 // status last changed live in the key's metadata, so the list needs no reads; the private note is
 // the value, read only when one answer is opened. Older answers may still have a "done:<key>" mark.
-const STATUSES = ['open', 'progress', 'done', 'wontfix'];
+// The ticket conversation is "msgu:" (reporter) and "msga:" (us) plus "seen:" (server/tickets.js);
+// their metadata feeds the list.
 const MAX_MEMO = 2000;
 const TURNSTILE = 'https://challenges.cloudflare.com';
 
@@ -183,18 +187,8 @@ const str = (v, max) => (typeof v === 'string' ? v.slice(0, max) : '');
 const int = (v, max) => (Number.isInteger(v) && v >= 0 ? Math.min(v, max) : 0);
 const reasons = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string').slice(0, 10).map((x) => x.slice(0, 20)) : []);
 
-// The admin mark of one answer, from its mark metadata or an old done key.
-function markOf(meta, isDone) {
-  return {
-    status: STATUSES.includes(meta?.s) ? meta.s : isDone ? 'done' : 'open',
-    star: meta?.st === 1,
-    archived: meta?.a === 1,
-    since: typeof meta?.at === 'string' ? meta.at.slice(0, 17) : '',
-  };
-}
-
 // One list row, from key metadata or (answers stored before metadata existed) from the value.
-function row(key, at, meta, mark) {
+function row(key, at, meta, mark, thread) {
   return {
     key,
     at,
@@ -206,6 +200,9 @@ function row(key, at, meta, mark) {
     d: int(meta.d, 3),
     p: str(meta.p, 400),
     ...mark,
+    // Whether the answer has a ticket the reporter can read, and its conversation so far.
+    ticket: meta.k === 1,
+    thread,
   };
 }
 
@@ -237,10 +234,13 @@ async function listKeys(kv, prefix, max) {
 
 async function answers(env) {
   const kv = env.FEEDBACK;
-  const [reports, uninstalls, doneKeys, markKeys] = await Promise.all([
+  const [reports, uninstalls, doneKeys, markKeys, uKeys, aKeys, seenKeys] = await Promise.all([
     listKeys(kv, 'report:', MAX_ANSWERS), listKeys(kv, 'uninstall:', MAX_ANSWERS),
     listKeys(kv, 'done:', 2 * MAX_ANSWERS), listKeys(kv, 'mark:', 2 * MAX_ANSWERS),
+    listKeys(kv, 'msgu:', 2 * MAX_ANSWERS), listKeys(kv, 'msga:', 2 * MAX_ANSWERS), listKeys(kv, 'seen:', 2 * MAX_ANSWERS),
   ]);
+  const byKey = (keys, prefix) => new Map(keys.map((k) => [k.name.slice(prefix.length), k.metadata]));
+  const [uMeta, aMeta, seenMeta] = [byKey(uKeys, 'msgu:'), byKey(aKeys, 'msga:'), byKey(seenKeys, 'seen:')];
   const doneSet = new Set(doneKeys.map((k) => k.name.slice('done:'.length)));
   const marks = new Map(markKeys.map((k) => [k.name.slice('mark:'.length), k.metadata]));
   const valid = [...reports, ...uninstalls].filter((k) => ANSWER_KEY.test(k.name));
@@ -249,7 +249,7 @@ async function answers(env) {
   const rows = [];
   for (const k of valid) {
     const meta = typeof k.metadata?.t === 'string' ? k.metadata : oldMeta.get(k.name);
-    if (meta) rows.push(row(k.name, ANSWER_KEY.exec(k.name)[2], meta, markOf(marks.get(k.name), doneSet.has(k.name))));
+    if (meta) rows.push(row(k.name, ANSWER_KEY.exec(k.name)[2], meta, markOf(marks.get(k.name), doneSet.has(k.name)), threadSummary(uMeta.get(k.name), aMeta.get(k.name), seenMeta.get(k.name))));
   }
   rows.sort((a, b) => b.at.localeCompare(a.at) || b.key.localeCompare(a.key));
   const day = new Date().toISOString().slice(0, 10);
@@ -268,7 +268,10 @@ function answerKey(value) {
 
 async function answer(env, url) {
   const key = answerKey(url.searchParams.get('key'));
-  const [raw, memo] = await Promise.all([kvCall(() => env.FEEDBACK.get(key)), kvCall(() => env.FEEDBACK.get(`mark:${key}`))]);
+  const [raw, memo, mine, ours] = await Promise.all([
+    kvCall(() => env.FEEDBACK.get(key)), kvCall(() => env.FEEDBACK.get(`mark:${key}`)),
+    kvCall(() => env.FEEDBACK.get(`msgu:${key}`)), kvCall(() => env.FEEDBACK.get(`msga:${key}`)),
+  ]);
   if (raw === null) reject(404, 'not_found');
   let a;
   try {
@@ -279,6 +282,8 @@ async function answer(env, url) {
   return json(200, {
     note: str(a.note, 2000), reasons: reasons(a.reasons), v: str(a.v, 20), b: BROWSERS.includes(a.b) ? a.b : '',
     shots: int(a.shots, 3), shotsDropped: int(a.shotsDropped, 3), memo: str(memo, MAX_MEMO),
+    // k: the reporter's message number, which names its screenshots (rshot:<id>:<k>:<i>).
+    msgs: merged(sideFrom(mine, 'u'), sideFrom(ours, 'a')).map(({ f, t, at, s, k }) => ({ f, t, at, ...(s ? { s, k } : {}) })),
   });
 }
 
@@ -286,7 +291,7 @@ async function answer(env, url) {
 // nosniff and a sandbox policy, so even opened directly in a tab nothing in them can run.
 async function shot(env, url) {
   const key = url.searchParams.get('key') ?? '';
-  if (!SHOT_KEY.test(key)) reject(400, 'bad_key');
+  if (!SHOT_KEY.test(key) && !RSHOT_KEY.test(key)) reject(400, 'bad_key');
   const bytes = await kvCall(() => env.FEEDBACK.get(key, 'arrayBuffer'));
   if (bytes === null) reject(404, 'not_found');
   return new Response(bytes, {
@@ -314,12 +319,31 @@ async function mark(request, env, url) {
   const memo = input.memo ?? str(current.value, MAX_MEMO);
   const since = status === before.status ? before.since : new Date().toISOString().slice(0, 16) + 'Z';
 
-  if (status === 'open' && !star && !archived && !memo) await kvCall(() => kv.delete(`mark:${key}`));
-  else {
-    const metadata = { s: status, ...(star ? { st: 1 } : {}), ...(archived ? { a: 1 } : {}), ...(since ? { at: since } : {}) };
-    await kvCall(() => kv.put(`mark:${key}`, memo, { metadata }));
-  }
+  const metadata = markMetadata({ status, star, archived, since }, memo);
+  if (!metadata) await kvCall(() => kv.delete(`mark:${key}`));
+  else await kvCall(() => kv.put(`mark:${key}`, memo, { metadata }));
   if (wasDone !== null) await kvCall(() => kv.delete(`done:${key}`));
+  return done();
+}
+
+// Adds our message to the ticket's conversation; the reporter sees it on their ticket page.
+async function replyTo(request, env, url) {
+  checkPost(request, url);
+  const input = await readJson(request, ['key', 'text']);
+  const key = answerKey(input.key);
+  const text = typeof input.text === 'string' ? input.text.replace(/\r\n?/g, '\n').trim() : '';
+  if (!text || text.length > MAX_ADMIN_TEXT) reject(400, 'bad_text');
+  const kv = env.FEEDBACK;
+  const [answer, mine, ours] = await Promise.all([
+    kvCall(() => kv.getWithMetadata(key)), kvCall(() => kv.getWithMetadata(`msgu:${key}`)), kvCall(() => kv.get(`msga:${key}`)),
+  ]);
+  if (answer.value === null) reject(404, 'not_found');
+  if (answer.metadata?.k !== 1) reject(400, 'no_ticket');
+  const ourMsgs = sideFrom(ours, 'a');
+  if (ourMsgs.length + (Number.isInteger(mine.metadata?.n) ? mine.metadata.n : 0) >= MAX_MSGS) reject(409, 'thread_full');
+  // Only our own key is written: the reporter's messages live in msgu: and can't be overwritten.
+  const next = withMessage(ourMsgs, { t: text, at: `${new Date().toISOString().slice(0, 16)}Z`, ts: Date.now() });
+  await kvCall(() => kv.put(`msga:${key}`, next.value, { metadata: next.metadata }));
   return done();
 }
 
@@ -328,7 +352,9 @@ async function remove(request, env, url) {
   const key = answerKey((await readJson(request, ['key'])).key);
   const id = key.slice(key.indexOf(':') + 1);
   const kv = env.FEEDBACK;
-  for (const k of [key, `done:${key}`, `mark:${key}`, `shot:${id}:1`, `shot:${id}:2`, `shot:${id}:3`]) await kvCall(() => kv.delete(k));
+  // The ticket index ("tk:…") stays: the reporter's link then says the report was removed.
+  const replyShots = (await listKeys(kv, `rshot:${id}:`, 200)).map((k) => k.name);
+  for (const k of [key, `done:${key}`, `mark:${key}`, `msgu:${key}`, `msga:${key}`, `seen:${key}`, `shot:${id}:1`, `shot:${id}:2`, `shot:${id}:3`, ...replyShots]) await kvCall(() => kv.delete(k));
   log(204, 'deleted');
   return done();
 }
@@ -360,6 +386,7 @@ export async function handleAdmin(request, env, ui, fetchFn = fetch) {
     if (method === 'GET' && path === '/admin/api/answer') return await answer(env, url);
     if (method === 'GET' && path === '/admin/api/shot') return await shot(env, url);
     if (method === 'POST' && path === '/admin/api/mark') return await mark(request, env, url);
+    if (method === 'POST' && path === '/admin/api/reply') return await replyTo(request, env, url);
     if (method === 'POST' && path === '/admin/api/delete') return await remove(request, env, url);
     return notFound();
   } catch (e) {

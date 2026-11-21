@@ -14,6 +14,8 @@
 // Order of work, cheapest first: headers, a capped body read, shape checks on every field,
 // Turnstile, the daily counters, and only then decoding and checking the screenshots.
 
+import { newCode, ticketKey } from '../../server/tickets.js';
+
 const MAX_BODY = 1_050_000; // 3 screenshots of 260 KB as base64, plus the text fields
 const MAX_SHOT = 260_000; // bytes per decoded JPEG (the page re-encodes to at most 250 KB)
 const MAX_SHOT_B64 = Math.ceil(MAX_SHOT / 3) * 4;
@@ -22,11 +24,15 @@ const MAX_TOKEN = 2048;
 const PER_VISITOR_PER_DAY = 5;
 const SHOTS_PER_VISITOR_PER_DAY = 3;
 // Daily ceilings for everyone together, kept per form so a flood of one kind can't use up the
-// other's. They keep KV inside the Free plan: at most 120 answers x 3 writes plus 30 screenshots
-// x 3 writes = 450 of the 1,000 daily writes (the /admin sign-in can add at most 60 more), and 30 x 260 KB x 60 days = 468 MB of 1 GB.
+// other's. They keep KV inside the Free plan: at most 120 answers x 4 writes (the answer, its
+// ticket index and two counters) plus 30 screenshots x 3 writes = 570 of the 1,000 daily writes;
+// /api/reply adds at most 50 x 4 = 200 for write-backs (their screenshots share the 30 below),
+// the /admin sign-in at most 60, leaving room for marking replies read and admin work.
+// Storage: 30 x 260 KB x 60 days = 468 MB of 1 GB.
 export const PER_KIND_PER_DAY = { uninstall: 60, report: 60 };
 export const SHOTS_PER_DAY = 30;
-const SHOT_TTL = 60 * 24 * 60 * 60; // screenshots expire after 60 days; text answers are kept
+export const SHOTS_PER_VISITOR = SHOTS_PER_VISITOR_PER_DAY;
+export const SHOT_TTL = 60 * 24 * 60 * 60; // screenshots expire after 60 days; text answers are kept
 const COUNTER_TTL = 2 * 24 * 60 * 60; // counters expire after two days
 const VERIFY_TIMEOUT_MS = 5000;
 
@@ -67,7 +73,7 @@ const SITEVERIFY = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 // JPEG start-of-frame markers (baseline, progressive, lossless, arithmetic variants).
 const SOF = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]);
 
-const reply = (status, body) =>
+export const reply = (status, body) =>
   new Response(JSON.stringify(body), {
     status,
     headers: {
@@ -112,7 +118,7 @@ export async function readCapped(request, limit) {
   return new TextDecoder('utf-8', { fatal: true }).decode(all);
 }
 
-function cleanText(value, max) {
+export function cleanText(value, max) {
   if (value === undefined) return '';
   if (typeof value !== 'string') reject(400, 'bad_note');
   const text = value.toWellFormed().replace(/\r\n?/g, '\n').replace(INVISIBLE, '').trim();
@@ -175,7 +181,7 @@ export function isJpeg(b) {
 }
 
 // Shape-checks one screenshot without decoding it (that waits until after Turnstile).
-function checkShotShape(value) {
+export function checkShotShape(value) {
   if (typeof value !== 'string' || !value || value.length > MAX_SHOT_B64 || value.length % 4 !== 0) {
     reject(400, 'bad_shot');
   }
@@ -183,7 +189,7 @@ function checkShotShape(value) {
   if (!BASE64.test(value.slice(0, 64)) || !BASE64.test(value.slice(-64))) reject(400, 'bad_shot');
 }
 
-function decodeShot(value) {
+export function decodeShot(value) {
   let bytes;
   try {
     bytes = base64Bytes(value);
@@ -269,18 +275,18 @@ export async function verifyTurnstile(env, token, action, host, fetchFn) {
 
 // KV reads and stored writes that fail (most likely a Free-plan daily quota) answer 503
 // "unavailable"; any other unexpected error stays a plain 500.
-async function kvCall(fn) {
+export async function kvCall(fn) {
   try {
     return await fn();
   } catch {
     reject(503, 'unavailable');
   }
 }
-const count = async (kv, key) => Number((await kvCall(() => kv.get(key))) ?? 0);
+export const count = async (kv, key) => Number((await kvCall(() => kv.get(key))) ?? 0);
 
 // Counters are approximate (KV is eventually consistent and allows one write per second per
 // key), so a failed write must not fail an answer that is already stored.
-async function setCount(kv, key, value) {
+export async function setCount(kv, key, value) {
   try {
     await kv.put(key, String(value), { expirationTtl: COUNTER_TTL });
   } catch {
@@ -305,7 +311,7 @@ export function summary(record, shots, dropped) {
 }
 
 // One log line per refused or failed request: the code only, never the body, IP or headers.
-function logOutcome(status, code) {
+export function logOutcome(status, code) {
   console.info(JSON.stringify({ event: 'feedback_rejected', status, code }));
 }
 
@@ -369,14 +375,26 @@ export async function handle(request, env, fetchFn = fetch) {
       await kvCall(() => kv.put(`shot:${id}:${i + 1}`, bytes, { expirationTtl: SHOT_TTL, metadata: { contentType: 'image/jpeg' } }));
     }
     const dropped = shots.length - kept.length;
-    await kvCall(() => kv.put(`${record.kind}:${id}`, JSON.stringify({ ...record, at: minute, shots: kept.length, ...(dropped ? { shotsDropped: dropped } : {}) }), { metadata: summary(record, kept.length, dropped) }));
+    // A ticket for every report, and for uninstall answers with something written to answer to.
+    const code = record.kind === 'report' || record.note ? newCode() : null;
+    const key = `${record.kind}:${id}`;
+    const metadata = { ...summary(record, kept.length, dropped), ...(code ? { k: 1 } : {}) };
+    await kvCall(() => kv.put(key, JSON.stringify({ ...record, at: minute, shots: kept.length, ...(dropped ? { shotsDropped: dropped } : {}) }), { metadata }));
+    // The answer is stored: a failed index write only means no code to hand out, not a failed send.
+    let ticket = null;
+    if (code) {
+      try {
+        await kv.put(await ticketKey(code), key);
+        ticket = code;
+      } catch { /* the answer stays, without a ticket */ }
+    }
 
     await setCount(kv, kindKey, kindCount + 1);
     if (kept.length) {
       await setCount(kv, shotKey, shotCount + kept.length);
       await setCount(kv, visitorShotKey, visitorShots + kept.length);
     }
-    return reply(200, { ok: true });
+    return reply(200, ticket ? { ok: true, code: ticket } : { ok: true });
   } catch (e) {
     if (e instanceof Rejected) {
       logOutcome(e.status, e.message);

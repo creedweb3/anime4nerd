@@ -9,6 +9,7 @@ import { MANGA_PROTOCOL, loadMangaSites, onMangaSitesChanged, setMangaSites } fr
 import type { MangaStatus } from './manga';
 import type { MangaMeta } from './manga-meta';
 import { BROWSER, reportUrl } from './site-links';
+import { TICKETS_URL, hasTickets } from './tickets';
 import { initColorTab, setColorVideo } from './popup-color';
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
@@ -23,6 +24,14 @@ const emptyEl = $('#empty');
 const presetsEl = $('#presets');
 // popup.html carries a plain /report link; this adds the version and browser.
 $<HTMLAnchorElement>('#report').href = reportUrl(chrome.runtime.getManifest().version, BROWSER);
+// With report tickets on the site (tickets.ts), the icon opens them; replies are shown there.
+hasTickets().then((yes) => {
+  if (!yes) return;
+  const report = $<HTMLAnchorElement>('#report');
+  report.href = TICKETS_URL;
+  report.dataset.tip = 'Your tickets';
+  report.setAttribute('aria-label', 'Your tickets');
+}, () => {});
 const perf = {
   verdict: $('#verdict'), load: $('#k-load'), ms: $('#k-ms'), fps: $('#k-fps'), avg: $('#k-avg'), limit: $('#k-limit'), late: $('#k-late'),
   bars: $('#bars'),

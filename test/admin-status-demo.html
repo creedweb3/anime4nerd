@@ -142,6 +142,30 @@ button { cursor: pointer; }
 .saved { color: var(--s-ok); font-size: 10px; letter-spacing: .16em; text-transform: uppercase; opacity: 0; transition: opacity .3s; }
 .saved.on { opacity: 1; }
 .a-actions .ghost.arch::before { content: "↓ "; }
+/* DEMO: replies */
+.reply-box { display: grid; gap: 8px; }
+.chat-frame { border: 1px solid var(--line2); background: #0d0d0d; display: grid; }
+.chat-head { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 14px; background: var(--panel); }
+.chats { display: grid; gap: 10px; align-content: start; padding: 14px; max-height: 380px; overflow: auto; }
+.chats.empty { padding-block: 22px; justify-items: center; }
+.chat-compose { display: grid; gap: 8px; padding: 10px 14px 12px; background: var(--panel); }
+.chat-input { width: 100%; min-height: 44px; resize: vertical; background: #0d0d0d; border: 1px solid var(--line); color: var(--fg); padding: 8px 10px; font: 12px/1.6 var(--mono); }
+.chat-input::placeholder { color: var(--faint); }
+.chat-input:focus { outline: none; border-color: var(--line2); }
+.chat-compose .reply-row { justify-content: space-between; }
+.chat-compose .ghost.send { background: var(--on); color: #000; border-color: var(--on); }
+.chat { max-width: 88%; border: 1px solid var(--line2); background: var(--panel); padding: 9px 12px; display: grid; gap: 4px; justify-self: start; }
+.chat.us { justify-self: end; border-color: rgba(var(--g), .5); background: linear-gradient(135deg, rgba(var(--g), .12), transparent 60%) var(--bg); }
+.chat p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat small { color: var(--faint); font-size: 11px; }
+.chat small b { font-weight: 400; color: var(--dim); }
+.chat.us small b, .chat small i { font-style: normal; color: var(--s-ok); }
+.a-item .replied.wait { color: var(--s-warn); }
+.reply-row { display: flex; gap: 8px; align-items: center; }
+.reply-row .ghost.send { background: var(--on); color: #000; border-color: var(--on); }
+.reply-row .ghost.send::before { content: "↩ "; }
+.reply-row small { color: var(--faint); font-size: 11px; }
+.a-item .replied { color: var(--s-ok); flex: none; }
 .a-actions .ghost.arch:not(:hover) { background: none; color: var(--dim); border-color: var(--line2); }
 .a-actions .ghost.arch:hover { background: none; }
 .demo-flag { position: fixed; right: 12px; bottom: 12px; z-index: 50; border: 1px solid var(--line2); background: var(--bg); color: var(--faint); font-size: 10px; letter-spacing: .16em; text-transform: uppercase; padding: 4px 8px; }
@@ -309,14 +333,18 @@ button { cursor: pointer; }
   const now = Date.now();
   const at = (hoursAgo) => new Date(now - hoursAgo * 36e5).toISOString().slice(0, 16) + 'Z';
   const A = [
-    { t: 'bug', r: ['look'], v: '1.2.5', b: 'chrome', s: 1, p: 'activated the Anime4k on mkissa.to (YT) stream and the video went black. Im also unable to make the video apear on all YT streams since the plugin activates itself.', status: 'progress', star: true, memo: 'Repro on mkissa.to YT iframe. Shader canvas stays on top after toggle off. Fix in 1.2.6.', since: at(5) },
-    { t: 'idea', r: ['feature'], v: '1.2.5', b: 'firefox', s: 0, p: 'Would love a per-site default mode, so crunchyroll always starts on Mode B.', status: 'open', star: true },
-    { t: 'bug', r: ['perf'], v: '1.2.4', b: 'chrome', s: 0, p: 'Frame drops at 1440p on an older laptop, even with Mode C.', status: 'open', star: false },
-    { t: 'uninstall', r: ['slow'], v: '1.2.4', b: '', s: 0, p: 'laggy on my laptop', status: 'open', star: false },
+    { t: 'bug', r: ['look'], v: '1.2.5', b: 'chrome', s: 1, p: 'activated the Anime4k on mkissa.to (YT) stream and the video went black. Im also unable to make the video apear on all YT streams since the plugin activates itself.', status: 'progress', star: true, memo: 'Repro on mkissa.to YT iframe. Shader canvas stays on top after toggle off. Fix in 1.2.6.', since: at(5), link: true, msgs: [
+      { from: 'us', text: 'Thanks, found it. That player sizes the video to its box, and turning upscaling on shrank the box to nothing.', at: at(1.5), seen: true },
+      { from: 'you', text: 'oh nice, thanks! will it come as an update?', at: at(0.5) },
+    ] },
+    { t: 'idea', r: ['feature'], v: '1.2.5', b: 'firefox', s: 0, p: 'Would love a per-site default mode, so crunchyroll always starts on Mode B.', status: 'open', star: true, link: true },
+    { t: 'bug', r: ['perf'], v: '1.2.4', b: 'chrome', s: 0, p: 'Frame drops at 1440p on an older laptop, even with Mode C.', status: 'open', star: false, link: true },
+    { t: 'uninstall', r: ['slow'], v: '1.2.4', b: '', s: 0, p: 'laggy on my laptop', status: 'open', star: false, link: true },
+    { t: 'uninstall', r: ['trying'], v: '1.2.5', b: '', s: 0, p: '', status: 'open', star: false },
     { t: 'bug', r: ['popup'], v: '1.2.3', b: 'chrome', s: 0, p: 'Popup cut off at the bottom on 125% zoom.', status: 'done', star: false, memo: 'Fixed in 1.2.4.', since: at(80) },
-    { t: 'idea', r: ['feature'], v: '1.2.3', b: 'chrome', s: 0, p: 'Add a TikTok mode.', status: 'wontfix', star: false, memo: 'Out of scope, anime only.', since: at(120) },
+    { t: 'idea', r: ['feature'], v: '1.2.3', b: 'chrome', s: 0, p: 'Add a TikTok mode.', status: 'wontfix', star: false, memo: 'Out of scope, anime only.', since: at(120), link: true, reply: { text: 'Thanks for the idea. Anime4Nerd stays focused on anime and manga, so this one is out of scope.', at: at(100), seen: true } },
   ];
-  const hours = [2, 9, 26, 40, 90, 130];
+  const hours = [2, 9, 26, 40, 60, 90, 130];
   const answers = A.map((a, i) => ({ ...a, key: `report:${at(hours[i])}:${i}`, at: at(hours[i]), d: 0, p: a.p.slice(0, 100) }));
   const full = Object.fromEntries(A.map((a, i) => [answers[i].key, { note: a.p }]));
   const shot = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="440" height="248"><rect width="100%" height="100%" fill="#0d0d0d"/><text x="50%" y="50%" fill="#585858" font-family="monospace" font-size="14" text-anchor="middle">screenshot</text></svg>');
@@ -474,6 +502,37 @@ function statusRow(r) {
     }, label))));
 }
 
+// DEMO: the conversation on the reporter's reply link. Their report is the first message (shown
+// above as the note); after that both sides can write. Answers sent before reply links, and
+// uninstall answers, have no link, so they cannot be answered.
+const thread = (r) => (r.msgs ??= r.reply ? [{ from: 'us', ...r.reply }] : []);
+const waiting = (r) => r.link && thread(r).at(-1)?.from === 'you';
+
+function replyBox(r) {
+  const head = el('div', { class: 'memo-head' }, el('span', { class: 'label' }, 'Conversation · the reporter sees this'),
+    waiting(r) ? el('span', { class: 'saved on' }, 'waiting on you') : null);
+  // Uninstall answers get a link only when the person wrote a note: a bare reason has nothing to answer.
+  if (!r.link) return el('div', { class: 'reply-box' }, head, el('span', { class: 'muted' },
+    r.t === 'uninstall' && !r.p ? 'Reason only, no note: uninstall answers get a reply link only when they write something.' : 'Sent before reply links existed: no way to answer this one.'));
+  const msgs = thread(r).map((m) => el('div', { class: `chat ${m.from}` },
+    el('small', {}, el('b', {}, m.from === 'us' ? 'you · anime4nerd' : 'reporter'), ` · ${when(m.at)} UTC`,
+      m.from === 'us' ? (m.seen ? el('i', {}, ' · seen') : ' · not seen yet') : ''),
+    el('p', {}, m.text)));
+  const box = el('textarea', { class: 'chat-input', maxlength: '2000', rows: '2', placeholder: msgs.length ? 'Write a reply…' : 'Write the first reply. It shows on their reply link, and in the extension popup if they use it.', 'aria-label': 'Reply' });
+  const send = el('button', { class: 'ghost send' }, 'Send');
+  send.onclick = async () => {
+    if (!box.value.trim()) return box.focus();
+    if (await saveMark(r, {})) { thread(r).push({ from: 'us', text: box.value.trim(), at: new Date().toISOString().slice(0, 16) + 'Z', seen: false }); renderA(); }
+  };
+  box.onkeydown = (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send.click(); } };
+  const chats = msgs.length ? el('div', { class: 'chats' }, ...msgs) : el('div', { class: 'chats empty' }, el('span', { class: 'muted' }, 'No replies yet. Their report above is the first message.'));
+  // One chat window: header, messages (scrolls when long, opens at the newest), and the reply box docked at the bottom.
+  const frame = el('div', { class: 'chat-frame' }, el('div', { class: 'chat-head' }, ...head.childNodes), chats,
+    el('div', { class: 'chat-compose' }, box, el('div', { class: 'reply-row' }, el('small', {}, 'Plain text · shows as from anime4nerd · Ctrl+Enter sends'), send)));
+  requestAnimationFrame(() => (chats.scrollTop = chats.scrollHeight));
+  return el('div', { class: 'reply-box' }, frame);
+}
+
 function memoBox(r) {
   const saved = el('span', { class: 'saved' }, 'Saved');
   const box = el('textarea', { class: 'memo', placeholder: 'Only you see this. Repro steps, fix plan, version it shipped in…', 'aria-label': 'Private note' });
@@ -527,6 +586,7 @@ function reader(r) {
       el('div', { class: 'note' }, note || el('span', { class: 'muted' }, 'No note'), !full && note ? el('span', { class: 'muted' }, ' …') : null)),
     r.s ? el('div', { style: 'display:grid;gap:8px' }, el('span', { class: 'label' }, `Screenshots · ${r.s}`), shotsRow(r)) : null,
     r.d ? el('span', { class: 'muted' }, `${r.d} more ${r.d === 1 ? 'screenshot was' : 'screenshots were'} dropped by the daily cap.`) : null,
+    replyBox(r),
     memoBox(r),
     actions(r),
   ].filter(Boolean);
@@ -554,6 +614,8 @@ function renderA() {
   },
   el('div', { class: 'row' }, r.star ? el('span', { class: 'star', 'aria-label': 'Starred' }, '★') : null, el('span', { class: 'kind' }, el('i', { style: `background:${COLOR[r.t]}` }), r.t),
     r.status !== 'open' ? el('span', { class: `stat-tag ${r.status}` }, statusLabel(r.status)) : null,
+    waiting(r) && thread(r).length ? el('span', { class: 'replied wait', title: 'The reporter wrote back' }, '↩ new')
+      : thread(r).length ? el('span', { class: 'replied', title: thread(r).at(-1).seen ? 'Reply seen' : 'Reply not seen yet' }, thread(r).at(-1).seen ? '↩ seen' : '↩ sent') : null,
     el('span', { class: 'why' }, r.r.join(' · ')), el('span', { class: 'when' }, when(r.at))),
   el('div', { class: 'snip' }, r.p || el('span', { class: 'muted' }, 'No note')))));
   const r = list.find((x) => x.key === currentKey);

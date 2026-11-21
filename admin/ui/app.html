@@ -141,6 +141,29 @@ button { cursor: pointer; }
 .saved { color: var(--s-ok); font-size: 10px; letter-spacing: .16em; text-transform: uppercase; opacity: 0; transition: opacity .3s; }
 .saved.on { opacity: 1; }
 
+/* ticket conversation: one chat window, the reply box docked at its bottom */
+.chat-frame { border: 1px solid var(--line2); background: #0d0d0d; display: grid; }
+.chat-head { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 14px; background: var(--panel); }
+.chats { display: grid; gap: 10px; align-content: start; padding: 14px; max-height: 380px; overflow: auto; }
+.chats.empty { padding-block: 22px; justify-items: center; }
+.chat { max-width: 88%; border: 1px solid var(--line2); background: var(--panel); padding: 9px 12px; display: grid; gap: 6px; justify-self: start; }
+.chat.us { justify-self: end; border-color: rgba(var(--g), .5); background: linear-gradient(135deg, rgba(var(--g), .12), transparent 60%) var(--bg); }
+.chat p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat small { color: var(--faint); font-size: 11px; }
+.chat small b { font-weight: 400; color: var(--dim); }
+.chat.us small b, .chat small i { font-style: normal; color: var(--s-ok); }
+.chat .shots img { width: 160px; height: 90px; }
+.chat-compose { display: grid; gap: 8px; padding: 10px 14px 12px; background: var(--panel); }
+.chat-input { width: 100%; min-height: 44px; resize: vertical; background: #0d0d0d; border: 1px solid var(--line); color: var(--fg); padding: 8px 10px; font: 12px/1.6 var(--mono); }
+.chat-input::placeholder { color: var(--faint); }
+.chat-input:focus { outline: none; border-color: var(--line2); }
+.reply-row { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+.reply-row small { color: var(--faint); font-size: 11px; }
+.ghost.send { background: var(--on); color: #000; border-color: var(--on); }
+.ghost.send::before { content: "↩ "; }
+.a-item .replied { color: var(--s-ok); flex: none; }
+.a-item .replied.wait { color: var(--s-warn); }
+
 /* custom dropdown over each hidden <select> */
 .dd { position: relative; min-width: 0; }
 .dd > button { width: 100%; display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; gap: 1px 6px; align-items: center; background: none; border: 0; color: var(--dim); font-size: 11px; padding: 5px 9px 6px; text-align: left; }
@@ -482,6 +505,60 @@ function memoBox(r) {
   return el('div', { style: 'display:grid;gap:8px' }, el('div', { class: 'memo-head' }, el('span', { class: 'label' }, 'Private note'), saved), box);
 }
 
+// The ticket conversation the reporter sees on their ticket page: their report is the first
+// message (shown above as the note), then both sides. Only answers with a ticket can be answered:
+// every report, and uninstall answers with a note, sent after tickets existed.
+const rshotUrl = (r, n, i) => `/admin/api/shot?key=${encodeURIComponent(`rshot:${r.key.slice(r.key.indexOf(':') + 1)}:${n}:${i}`)}`;
+const waiting = (r) => r.thread?.last === 'u';
+
+function chatBox(r) {
+  const full = NOTES.get(r.key);
+  const head = el('div', { class: 'chat-head' }, el('span', { class: 'label' }, 'Conversation · the reporter sees this'),
+    waiting(r) ? el('span', { class: 'saved on' }, 'waiting on you') : null);
+  if (!r.ticket) {
+    return el('div', { class: 'chat-frame' }, head, el('div', { class: 'chats empty' }, el('span', { class: 'muted' },
+      r.t === 'uninstall' && !r.p ? 'Reason only, no note: no ticket to answer.' : 'Sent before tickets existed: no way to answer this one.')));
+  }
+  const msgs = full?.msgs ?? [];
+  const bubbles = msgs.map((m) => el('div', { class: `chat ${m.f === 'a' ? 'us' : 'you'}` },
+    el('small', {}, el('b', {}, m.f === 'a' ? 'you · anime4nerd' : 'reporter'), ` · ${when(m.at)} UTC`),
+    m.t ? el('p', {}, m.t) : null,
+    m.s ? el('div', { class: 'shots' }, ...Array.from({ length: m.s }, (_, k) => {
+      const src = rshotUrl(r, m.k, k + 1); // m.k: the reporter's message number
+      return el('img', { src, alt: `Screenshot ${k + 1}`, loading: 'lazy', onclick: () => openLb(src) });
+    })) : null));
+  if (bubbles.length && r.thread?.last === 'a') {
+    bubbles.at(-1).querySelector('small').append(r.thread.seen ? el('i', {}, ' · seen') : ' · not seen yet');
+  }
+  const chats = !full ? el('div', { class: 'chats empty' }, el('span', { class: 'muted' }, 'Loading…'))
+    : bubbles.length ? el('div', { class: 'chats' }, ...bubbles)
+      : el('div', { class: 'chats empty' }, el('span', { class: 'muted' }, 'No replies yet. Their report above is the first message.'));
+  const box = el('textarea', { class: 'chat-input', maxlength: '2000', rows: '2', 'aria-label': 'Reply',
+    placeholder: bubbles.length ? 'Write a reply…' : 'Write the first reply. It shows on their ticket page, and in the extension popup.' });
+  box.readOnly = !full;
+  const send = el('button', { class: 'ghost send' }, 'Send');
+  send.onclick = async () => {
+    const text = box.value.trim();
+    if (!text || !full) return box.focus();
+    send.disabled = true;
+    try {
+      await post('/admin/api/reply', { key: r.key, text });
+      const at = nowMinute();
+      NOTES.set(r.key, { ...full, msgs: [...msgs, { f: 'a', t: text, at }] });
+      r.thread = { n: msgs.length + 1, last: 'a', seen: false };
+      showError('');
+      renderA();
+    } catch (e) {
+      send.disabled = false;
+      if (e.message !== 'signed out') showError(`Could not send the reply (${e.message}).`);
+    }
+  };
+  box.onkeydown = (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send.click(); } };
+  requestAnimationFrame(() => (chats.scrollTop = chats.scrollHeight));
+  return el('div', { class: 'chat-frame' }, head, chats,
+    el('div', { class: 'chat-compose' }, box, el('div', { class: 'reply-row' }, el('small', {}, 'Plain text · shows as from anime4nerd · Ctrl+Enter sends'), send)));
+}
+
 function actions(r) {
   const archBtn = el('button', { class: 'ghost arch' }, r.archived ? 'Unarchive' : 'Archive');
   archBtn.onclick = async () => {
@@ -525,6 +602,7 @@ function reader(r) {
       el('div', { class: 'note' }, note || el('span', { class: 'muted' }, 'No note'), !full && note ? el('span', { class: 'muted' }, ' …') : null)),
     r.s ? el('div', { style: 'display:grid;gap:8px' }, el('span', { class: 'label' }, `Screenshots · ${r.s}`), shotsRow(r)) : null,
     r.d ? el('span', { class: 'muted' }, `${r.d} more ${r.d === 1 ? 'screenshot was' : 'screenshots were'} dropped by the daily cap.`) : null,
+    chatBox(r),
     memoBox(r),
     actions(r),
   ].filter(Boolean);
@@ -553,6 +631,8 @@ function renderA() {
   el('div', { class: 'row' }, r.star ? el('span', { class: 'star', 'aria-label': 'Starred' }, '★') : null,
     el('span', { class: 'kind' }, el('i', { style: `background:${COLOR[r.t]}` }), r.t),
     r.status !== 'open' ? el('span', { class: `stat-tag ${r.status}` }, statusLabel(r.status)) : null,
+    waiting(r) ? el('span', { class: 'replied wait', title: 'The reporter wrote back' }, '↩ new')
+      : r.thread ? el('span', { class: 'replied', title: r.thread.seen ? 'Reply seen' : 'Reply not seen yet' }, r.thread.seen ? '↩ seen' : '↩ sent') : null,
     el('span', { class: 'why' }, r.r.join(' · ')), el('span', { class: 'when' }, when(r.at))),
   el('div', { class: 'snip' }, r.p || el('span', { class: 'muted' }, 'No note')))));
   const r = list.find((x) => x.key === currentKey);

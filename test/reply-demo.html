@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Anime4Nerd: report replies demo</title>
+<!--
+  Design demo for anonymous replies to reports: a secret reply link per report, remembered in the
+  browser (site) and the extension (popup). Each tab is a real page in a frame: site/public/report.html
+  (run `node site/build.mjs` first), test/popup-live.html (needs dist/popup.js) and
+  test/admin-status-demo.html. Only the new reply parts are added on top, with fake data.
+  Serve the repo root (launch config a4k-root) and open /test/reply-demo.html.
+-->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap">
+<style>
+  :root { color-scheme: dark; --bg: #050505; --line: #262626; --fg: #e4e4e4; --dim: #8d8d8d; --faint: #585858; --on: #fff; --ok: #9fd3a8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--dim); font: 12px/1.6 "JetBrains Mono", ui-monospace, Consolas, monospace; }
+  .bar { display: flex; align-items: center; gap: 16px; padding: 12px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .bar b { color: var(--fg); }
+  .tabs { display: flex; }
+  .tabs button { background: none; border: 1px solid var(--line); color: var(--dim); padding: 6px 14px; font: inherit; font-size: 11px; cursor: pointer; }
+  .tabs button + button { border-left: 0; }
+  .tabs button[aria-pressed="true"] { background: var(--on); color: #000; border-color: var(--on); }
+  .note { color: var(--faint); font-size: 11px; flex: 1 1 280px; }
+  .view { display: none; }
+  .view.on { display: block; }
+  iframe { display: block; width: 100%; height: calc(100vh - 52px); border: 0; background: #0b0b0b; }
+  .pair { display: flex; gap: 32px; padding: 24px; flex-wrap: wrap; }
+  .pair figure { margin: 0; }
+  .pair figcaption { color: var(--fg); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; margin-bottom: 8px; }
+  .pair figcaption small { display: block; color: var(--faint); letter-spacing: 0; text-transform: none; font-size: 11px; margin-top: 2px; }
+  .pair iframe { width: 380px; height: 600px; border: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<div class="bar">
+  <b>report replies</b>
+  <div class="tabs" id="tabs">
+    <button data-v="sent" aria-pressed="true">1 · after sending</button>
+    <button data-v="bye" aria-pressed="false">1b · after uninstall</button>
+    <button data-v="reply" aria-pressed="false">2 · tickets</button>
+    <button data-v="admin" aria-pressed="false">3 · admin reply</button>
+    <button data-v="popup" aria-pressed="false">4 · popup</button>
+  </div>
+  <span class="note" id="note"></span>
+</div>
+<div class="view on" data-v="sent"><iframe data-src="../site/public/report.html" data-inject="sent"></iframe></div>
+<div class="view" data-v="bye"><iframe data-src="../site/public/uninstalled.html" data-inject="bye"></iframe></div>
+<div class="view" data-v="reply"><iframe data-src="../site/public/report.html" data-inject="reply"></iframe></div>
+<div class="view" data-v="admin"><iframe data-src="admin-status-demo.html"></iframe></div>
+<div class="view" data-v="popup">
+  <div class="pair">
+    <figure><figcaption>dot on the report icon<small>a square badge with the count of unseen replies; opens the replies page</small></figcaption><iframe data-src="popup-live.html" data-inject="popA"></iframe></figure>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+const NOTES = {
+  sent: 'After "send": the reply link, copy button, and a line saying it is also saved in this browser. /report itself stays a plain form.',
+  bye: 'After an uninstall answer WITH a written note: the same reply link and ticket code. Reason-only answers get the plain thank-you, no link.',
+  reply: 'The reply link (/r/<token>): no form, just the conversation. Every report this browser sent is a thread; the user can write back. Click the threads.',
+  admin: 'Admin: the same conversation, with a reply box. The list shows "↩ new" when the reporter wrote back, "↩ sent" / "↩ seen" after you answer. Old reports and uninstall answers have no link.',
+  popup: 'Extension popup: a square badge on the report icon when a saved report has an unseen reply.',
+};
+// One secret, two forms: the ticket code is the end of the reply link.
+const CODE = 'A4N-7K2Q-9MPX-4TRD';
+const LINK = `anime4nerd.pages.dev/r/${CODE}`;
+// Threads this browser has links for. Each message: from 'you' | 'us', or a status event.
+const MINE = [
+  { at: '21 Nov', type: 'bug', env: 'v1.2.5 · chrome', status: 'done', unseen: true, msgs: [
+    { from: 'you', at: '21 Nov, 19:08', text: 'activated the Anime4k on mkissa.to (YT) stream and the video went black. Im also unable to make the video apear on all YT streams since the plugin activates itself.', shots: 1 },
+    { event: 'progress', at: '21 Nov, 22:40' },
+    { from: 'us', at: '22 Nov, 09:12', text: "Thanks, found it. That player sizes the video to its box, and turning upscaling on shrank the box to nothing, so the video went black and the popup lost track of it." },
+    { from: 'you', at: '22 Nov, 10:30', text: 'oh nice, thanks! will it come as an update?' },
+    { event: 'done', at: '24 Nov, 08:00' },
+    { from: 'us', at: '24 Nov, 08:02', text: 'Yes: fixed in 1.2.6. Chrome updates extensions on its own within a day or two, and the switch turns it off again too.' },
+  ] },
+  { at: '14 Nov', type: 'idea', env: 'v1.2.5 · firefox', status: 'progress', msgs: [
+    { from: 'you', at: '14 Nov, 16:20', text: 'Would love a per-site default mode, so crunchyroll always starts on Mode B.' },
+    { event: 'progress', at: '19 Nov, 11:00' },
+  ] },
+  { at: '2 Nov', type: 'bug', env: 'v1.2.3 · chrome', status: 'open', msgs: [
+    { from: 'you', at: '2 Nov, 21:45', text: 'Popup cut off at the bottom on 125% zoom.' },
+  ] },
+  { at: '30 Oct', type: 'idea', env: 'v1.2.3 · chrome', status: 'wontfix', msgs: [
+    { from: 'you', at: '30 Oct, 12:10', text: 'Add a TikTok mode.' },
+    { event: 'wontfix', at: '1 Nov, 09:00' },
+    { from: 'us', at: '1 Nov, 09:01', text: 'Thanks for the idea. Anime4Nerd stays focused on anime and manga, so this one is out of scope.' },
+  ] },
+  { at: '25 Oct', type: 'bug', env: 'v1.2.2 · chrome', status: 'open', archived: '3 Nov', msgs: [
+    { from: 'you', at: '25 Oct, 18:30', text: 'it doesnt work' },
+    { from: 'us', at: '26 Oct, 10:00', text: 'Sorry about that. Which site was it, and what did you see?' },
+    { event: 'archived', at: '3 Nov, 10:00' },
+  ] },
+  { at: '20 Oct', type: 'bug', env: '', status: 'open', deleted: true, msgs: [] },
+];
+const STATUS = { open: ['open', 'var(--faint)'], progress: ['in progress', '#e3c58a'], done: ['fixed', 'var(--ok)'], wontfix: ["won't fix", 'var(--dim)'] };
+
+const css = (doc, text) => doc.head.append(Object.assign(doc.createElement('style'), { textContent: text }));
+const h = (doc, html) => { const t = doc.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
+
+// Styles for the new parts, built from the site's own tokens (--ok, --line, --line2, --panel, --g ...).
+const SITE_CSS = `
+  .rl { margin-top: 18px; border: 1px solid rgba(var(--g), .5); background: linear-gradient(135deg, rgba(var(--g), .12), transparent 60%) var(--bg); padding: 14px; display: grid; gap: 10px; }
+  .rl .phead { margin: 0; }
+  /* Two rows, link and code, lined up: label · value · copy · open (the code row keeps the slot empty). */
+  .rl-row { display: grid; grid-template-columns: 4ch minmax(0, 1fr) 12ch 12ch; gap: 8px; align-items: stretch; }
+  .rl-row .k { align-self: center; color: var(--faint); font-size: 10px; text-transform: uppercase; letter-spacing: .14em; }
+  .rl-row code.code { color: var(--on); font-weight: 600; letter-spacing: .08em; }
+  .rl-row code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid var(--line2); background: var(--bg); color: var(--fg); padding: 9px 11px; font: 12px var(--mono); }
+  /* Fixed width: "copy" and "copied" take the same space, so nothing moves on click. */
+  .rl-row .btn { padding: 9px 0; width: 12ch; justify-content: center; flex: none; }
+  .rl-row .btn.open::before { content: "↗"; }
+  .rl p { margin: 0; color: var(--dim); font-size: 12px; }
+  .thanks .rl p b { display: inline; margin: 0; font-size: inherit; color: var(--fg); font-weight: 600; }
+  /* Replies page: thread list in the left rail, the open conversation on the right. */
+  /* Two separate buttons, like the report page's bug / idea toggles. */
+  .th-tabs { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; margin-top: 18px; }
+  .th-tabs button { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--dim); padding: 10px 12px; font: 600 12px var(--mono); cursor: pointer; transition: border-color .12s, background-color .12s; }
+  .th-tabs button i { font-style: normal; font-weight: 400; font-size: 11px; color: var(--faint); }
+  .th-tabs button[aria-selected="false"]:hover { border-color: var(--line2); color: var(--fg); }
+  .th-tabs button[aria-selected="true"] { border-color: rgba(var(--g), .7); background: linear-gradient(135deg, rgba(var(--g), .16), transparent 60%) var(--bg); color: var(--fg); }
+  .th-tabs button[aria-selected="true"] i { color: var(--ok); }
+  .no-tickets { margin-top: 18px; color: var(--dim); font-size: 12px; }
+  .threads { display: grid; gap: 8px; margin-top: 10px; }
+  .th { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; text-align: left; border: 1px solid var(--line); background: var(--bg); padding: 11px 12px; cursor: pointer; font: 12px/1.4 var(--mono); color: var(--dim); transition: border-color .12s; }
+  .th:hover { border-color: var(--line2); }
+  .th[aria-current="true"] { border-color: rgba(var(--g), .7); background: linear-gradient(135deg, rgba(var(--g), .14), transparent 60%) var(--bg); }
+  .th .t { color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .th .d { color: var(--faint); font-size: 11px; }
+  .th .s { grid-column: 2; grid-row: 1 / 3; align-self: center; font-size: 11px; display: inline-flex; align-items: center; gap: 6px; }
+  .th .s::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .th .n { color: var(--ok); }
+  .forget { margin: 12px 0 0; color: var(--faint); font-size: 11px; }
+  .forget button { background: none; border: 0; color: var(--dim); font: inherit; text-decoration: underline; cursor: pointer; padding: 0; }
+  .track { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 4px 0 22px; }
+  .track span { border-top: 2px solid var(--line2); padding-top: 6px; color: var(--faint); font-size: 11px; }
+  .track span.on { border-color: var(--ok); color: var(--fg); }
+  /* The messages take the free height, so the closed banner and the reply box sit at the bottom of the panel. */
+  .msgs { display: grid; gap: 14px; align-content: start; flex: 1 0 auto; }
+  .msg { max-width: 86%; border: 1px solid var(--line2); background: var(--bg); padding: 10px 12px; display: grid; gap: 6px; }
+  .msg.you { justify-self: end; }
+  .msg.us { justify-self: start; border-color: rgba(var(--g), .5); background: linear-gradient(135deg, rgba(var(--g), .12), transparent 60%) var(--bg); }
+  .msg .who { display: flex; justify-content: space-between; gap: 18px; color: var(--faint); font-size: 11px; }
+  .msg .who b { color: var(--dim); font-weight: 600; }
+  .msg.us .who b { color: var(--ok); }
+  .msg p { margin: 0; color: var(--fg); font-size: 13px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .msg .att { color: var(--faint); font-size: 11px; }
+  .ev { justify-self: center; display: inline-flex; align-items: center; gap: 8px; color: var(--faint); font-size: 11px; }
+  .ev::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--c, var(--faint)); }
+  .code-line { color: var(--faint); font-size: 11px; }
+  .code-line u { text-decoration: none; color: var(--dim); }
+  /* "replies" in the top bar, on every page, with a square count when a reply is waiting. */
+  .nav .chip.replies { position: relative; }
+  .nav .chip.replies i { position: absolute; top: -6px; right: -6px; width: 14px; height: 14px; display: grid; place-items: center; background: var(--ok); color: #000; font: 700 9px/1 var(--mono); font-style: normal; outline: 2px solid var(--bg); }
+  .nav .chip.replies[aria-current="page"] { color: var(--on); border-color: var(--line2); }
+  .have-code { margin-top: 18px; display: grid; gap: 8px; }
+  .have-code .phead { margin: 0; }
+  .have-code form { display: flex; gap: 8px; }
+  .have-code input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line2); color: var(--fg); padding: 9px 11px; font: 12px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+  .have-code input::placeholder { color: var(--faint); letter-spacing: 0; text-transform: none; }
+  .have-code input:focus { outline: none; border-color: var(--on); }
+  .have-code .btn { padding: 9px 0; width: 10ch; justify-content: center; flex: none; }
+  .have-code small { color: var(--faint); font-size: 11px; }
+  .have-code small.bad { color: var(--bad); }
+  .th.off .t { color: var(--dim); }
+  .closed { margin-top: 22px; border: 1px solid var(--line2); border-left: 2px solid var(--c); background: var(--bg); padding: 12px 14px; display: grid; gap: 4px; }
+  .closed b { color: var(--c); font-weight: 600; font-size: 13px; }
+  .closed p { margin: 0; color: var(--dim); font-size: 12px; }
+  .gone-panel { display: grid; gap: 10px; }
+  .gone-panel > b { color: var(--fg); font-size: clamp(1.2rem, 2.2vw, 1.5rem); margin-top: 6px; }
+  .gone-panel > p { margin: 0; color: var(--dim); font-size: 13px; }
+  .gone-panel .compose-row { justify-content: flex-start; margin-top: 8px; }
+  .compose { display: grid; gap: 10px; margin-top: 22px; }
+  .compose-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .compose-row small { color: var(--faint); font-size: 11px; }
+  /* Both buttons one height; the screenshot button is a square with an icon only. */
+  /* Equal columns: both buttons take the width of the wider one. */
+  .compose-btns { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; flex: none; }
+  .compose-btns .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 16px; white-space: nowrap; line-height: 1; margin: 0; }
+  .add-shot { position: relative; cursor: pointer; }
+  .add-shot::before { content: none; }
+  .add-shot svg { display: block; flex: none; }
+  .add-shot input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; clip-path: inset(50%); }
+  .add-shot:focus-within { border-color: var(--on); color: var(--on); }
+  .add-shot.full { opacity: .45; pointer-events: none; }
+  .shot-thumbs { display: flex; gap: 8px; }
+  .shot-thumbs:empty { display: none; }
+  .shot-thumbs figure { position: relative; margin: 0; width: 96px; height: 60px; border: 1px solid var(--line2); background: center/cover no-repeat; }
+  .shot-thumbs button { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border: 0; background: rgba(0,0,0,.75); color: var(--on); font: 11px/1 var(--mono); cursor: pointer; }
+`;
+
+function linkBox(doc, bye = false) {
+  const box = h(doc, `<div class="rl">
+    <div class="phead"><span>your ticket</span><span>keep it</span></div>
+    <div class="rl-row"><span class="k">link</span><code>${LINK}</code><button class="btn" type="button" data-copy="link">copy</button><a class="btn open" href="/test/reply-demo#reply" target="_top">open</a></div>
+    <div class="rl-row"><span class="k">code</span><code class="code">${CODE}</code><button class="btn" type="button" data-copy="code">copy</button><span class="rl-gap"></span></div>
+    <div class="code-line">Same ticket. On another device, type the code at <u>tickets</u> in the top bar.</div>
+    <p>${bye
+    ? 'If we fix what made you leave, we will say so there, and you can <b>write back</b>. Saved in this browser too. No account: whoever has the link can read the conversation.'
+    : 'Open it any time to see replies and <b>write back</b>. Also saved in this browser, and in the extension if you have it. No account: whoever has the link can read the conversation.'}</p>
+  </div>`);
+  box.querySelectorAll('[data-copy]').forEach((btn) => (btn.onclick = () => { btn.textContent = 'copied'; setTimeout(() => (btn.textContent = 'copy'), 1200); }));
+  return box;
+}
+
+const EVENT = { progress: ['marked working on it', '#e3c58a'], done: ['marked fixed', 'var(--ok)'], wontfix: ["marked won't fix", 'var(--dim)'], archived: ['conversation closed', 'var(--faint)'], reopened: ['opened again', 'var(--fg)'] };
+// What a closed ticket says to the reporter, and whether they can still write.
+//   done: fixed; writing back reopens it. wontfix: closed with a reason; writing back is still read.
+//   archived: closed quietly; no more replies. deleted: nothing is left (see deletedPanel).
+const CLOSED = {
+  done: { color: 'var(--ok)', title: 'Fixed.', text: 'Still happening after the update? Write back and this opens again.', write: 'Still broken? Tell us what you see.' },
+  wontfix: { color: 'var(--dim)', title: "Closed: won't fix.", text: 'The reason is in the last reply. You can still write back; it is read, but it stays closed.', write: 'Write back.' },
+  archived: { color: 'var(--faint)', title: 'This conversation is closed.', text: 'Replies are off here. If something comes up again, send a new report: it gets its own link.', write: null },
+};
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+// The open thread: status track, the messages and status events in order, and a box to write back.
+function threadPanel(doc, t, onSend) {
+  const steps = ['received', 'working on it', t.status === 'wontfix' ? "won't fix" : 'fixed'];
+  const reached = { open: 1, progress: 2, done: 3, wontfix: 3 }[t.status];
+  const panel = h(doc, `<div class="panel">
+    <div class="phead"><span>${t.type} · sent ${t.at}</span><span>${t.env}</span></div>
+    <div class="track">${steps.map((s, i) => `<span class="${i < reached ? 'on' : ''}">${s}</span>`).join('')}</div>
+    <div class="msgs"></div>
+    <div class="compose">
+      <textarea maxlength="1000" placeholder="Write back: more detail, a follow-up, or just thanks."></textarea>
+      <div class="shot-thumbs"></div>
+      <div class="compose-row"><small>Shows as from you. Nothing about you is sent.</small>
+        <span class="compose-btns"><label class="btn add-shot" title="Add screenshots (up to 3)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><rect x="1.5" y="3" width="13" height="10"/><circle cx="5.5" cy="6.5" r="1.2"/><path d="M1.5 11.5l4-3.5 3 2.5 2-1.5 4 3"/></svg>screenshot<input type="file" accept="image/png,image/jpeg,image/webp" multiple aria-label="Add screenshots"></label><button class="btn primary send-btn" type="button">send</button></span></div>
+    </div></div>`);
+  panel.querySelector('.msgs').append(...t.msgs.map((m) => {
+    if (m.event) { const [word, color] = EVENT[m.event]; return h(doc, `<div class="ev" style="--c:${color}">${word} · ${m.at}</div>`); }
+    return h(doc, `<div class="msg ${m.from}"><div class="who"><b>${m.from === 'us' ? 'anime4nerd' : 'you'}</b><span>${m.at}</span></div><p>${esc(m.text)}</p>${m.shots ? `<span class="att">+ ${m.shots} screenshot${m.shots === 1 ? '' : 's'}</span>` : ''}</div>`);
+  }));
+  const closed = CLOSED[t.archived ? 'archived' : t.status];
+  const compose = panel.querySelector('.compose');
+  if (closed) {
+    compose.before(h(doc, `<div class="closed" style="--c:${closed.color}"><b>${closed.title}</b><p>${closed.text}</p></div>`));
+    if (closed.write) compose.querySelector('textarea').placeholder = closed.write;
+    else compose.replaceWith(h(doc, '<div class="compose-row" style="margin-top:16px"><small>Closed conversations stay readable from this link.</small><a class="btn primary" href="#">send a new report</a></div>'));
+  }
+  const box = panel.querySelector('.compose textarea');
+  if (!box) return panel;
+  // Screenshots: up to 3, like the report form; thumbnails until sent, each removable.
+  let shots = [];
+  const thumbs = panel.querySelector('.shot-thumbs');
+  const addBtn = panel.querySelector('.add-shot');
+  const drawThumbs = () => {
+    thumbs.replaceChildren(...shots.map((url, i) => {
+      const fig = h(doc, `<figure style="background-image:url('${url}')"><button type="button" aria-label="Remove screenshot">✕</button></figure>`);
+      fig.querySelector('button').onclick = () => { shots.splice(i, 1); drawThumbs(); };
+      return fig;
+    }));
+    addBtn.classList.toggle('full', shots.length >= 3);
+  };
+  panel.querySelector('.add-shot input').onchange = (e) => {
+    shots = shots.concat([...e.target.files].map((f) => URL.createObjectURL(f))).slice(0, 3);
+    e.target.value = '';
+    drawThumbs();
+  };
+  panel.querySelector('.compose .send-btn').onclick = () => {
+    if (box.value.trim() || shots.length) onSend(box.value.trim(), shots.length);
+    else box.focus();
+  };
+  return panel;
+}
+
+// A deleted report: the server has nothing left, so the link only says so.
+function deletedPanel(doc, onForget) {
+  const panel = h(doc, `<div class="panel gone-panel">
+    <div class="phead"><span>reply link</span><span>removed</span></div>
+    <b>This report was removed.</b>
+    <p>Its messages and screenshots were deleted on our side, and nothing about it is kept. If the problem is still there, send a new report.</p>
+    <div class="compose-row"><button class="btn" type="button">remove from this list</button><a class="btn primary" href="#">send a new report</a></div></div>`);
+  panel.querySelector('button').onclick = onForget;
+  return panel;
+}
+
+// Open: still being worked on. History: fixed, won't fix, closed or removed.
+const isOpen = (t) => !t.deleted && !t.archived && (t.status === 'open' || t.status === 'progress');
+const inView = (t, view) => (view === 'open') === isOpen(t);
+
+// Only lists that have tickets get a button; with one kind only, there is nothing to switch.
+function viewTabs(doc, view, pick) {
+  const views = ['open', 'history'].filter((v) => MINE.some((t) => inView(t, v)));
+  if (views.length < 2) return null;
+  const tabs = h(doc, `<div class="th-tabs" role="tablist">${views.map((v) =>
+    `<button type="button" role="tab" data-w="${v}" aria-selected="${v === view}">${v} <i>${MINE.filter((t) => inView(t, v)).length}</i></button>`).join('')}</div>`);
+  tabs.querySelectorAll('button').forEach((b) => (b.onclick = () => pick(b.dataset.w)));
+  return tabs;
+}
+
+function threadList(doc, current, view) {
+  const shown = MINE.map((t, i) => [t, i]).filter(([t]) => inView(t, view));
+  if (!shown.length) return h(doc, `<div class="threads"><p class="forget">${view === 'open' ? 'No open tickets.' : 'Nothing closed yet.'}</p></div>`);
+  return h(doc, `<div class="threads">${shown.map(([t, i]) => {
+    const [word, color] = t.deleted ? ['removed', 'var(--faint)'] : t.archived ? ['closed', 'var(--faint)'] : STATUS[t.status];
+    const texts = t.msgs.filter((m) => m.text);
+    const title = t.deleted ? 'report removed' : texts[0].text;
+    const sub = t.deleted ? `sent ${t.at}` : t.unseen ? '↩ new reply' : `${texts.length} message${texts.length === 1 ? '' : 's'} · last ${texts.at(-1).at.split(',')[0]}`;
+    return `<button class="th${t.deleted || t.archived ? ' off' : ''}" type="button" data-i="${i}" aria-current="${i === current}"><span class="t">${t.type} · ${esc(title)}</span>
+      <span class="s" style="color:${color}">${word}</span><span class="d${t.unseen ? ' n' : ''}">${sub}</span></button>`;
+  }).join('')}</div>`);
+}
+
+// The top bar's "replies" link: on every site page, shown once this browser has a reply link.
+function navReplies(doc, here) {
+  doc.querySelector('.nav .chip.replies')?.remove();
+  if (!MINE.length) return; // nothing sent from this browser: no tickets link at all
+  const unseen = MINE.filter((t) => t.unseen).length;
+  const chip = h(doc, `<a class="chip replies" href="/test/reply-demo#reply" target="_top"${here ? ' aria-current="page"' : ''}>tickets${unseen ? `<i>${unseen}</i>` : ''}</a>`);
+  const report = doc.querySelector('.nav a[href="report"]');
+  if (here) report.removeAttribute('aria-current');
+  report.after(chip);
+}
+
+// On the replies page: a typed ticket code adds that thread to this browser's list.
+function haveCode(doc, onAdd) {
+  const box = h(doc, `<div class="have-code"><div class="phead"><span>have a ticket code?</span></div>
+    <form><input placeholder="A4N-XXXX-XXXX-XXXX, or paste the link" maxlength="80" aria-label="Ticket code" spellcheck="false" autocomplete="off"><button class="btn" type="submit">add</button></form>
+    <small>The code or the whole reply link, from the thank-you screen. Adds that report here, in this browser.</small></div>`);
+  const input = box.querySelector('input');
+  const note = box.querySelector('small');
+  box.querySelector('form').onsubmit = (e) => {
+    e.preventDefault();
+    // The code alone, or the whole link: both end in the same code.
+    const m = /(?:\/r\/)?(A4N-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4})\s*$/i.exec(input.value.trim());
+    if (!m) { note.textContent = 'That does not look like a ticket code (A4N-XXXX-XXXX-XXXX) or reply link.'; note.className = 'bad'; return; }
+    onAdd();
+  };
+  return box;
+}
+
+const INJECT = {
+  sent(doc) {
+    css(doc, SITE_CSS);
+    navReplies(doc, false);
+    doc.getElementById('page').classList.add('sent');
+    doc.querySelector('.thanks').append(linkBox(doc));
+  },
+  bye(doc) {
+    css(doc, SITE_CSS);
+    navReplies(doc, false);
+    doc.getElementById('page').classList.add('sent');
+    doc.querySelector('.thanks').append(linkBox(doc, true));
+  },
+  // The reply link's page: no report form. The thread the link is for opens first; the other
+  // threads are the links this browser has kept.
+  reply(doc) {
+    css(doc, SITE_CSS);
+    const rail = doc.querySelector('.rail');
+    rail.querySelector('.phead span').textContent = 'support · tickets';
+    rail.querySelector('h2').textContent = 'Your tickets.';
+    rail.querySelectorAll('.intro, .first').forEach((n) => n.remove());
+    rail.querySelector('.facts').replaceChildren(...['Only your reply links open these.', 'No account, nothing about you is stored.', 'Bookmark this page to check back.'].map((t) => h(doc, `<li>${t}</li>`)));
+    const forget = h(doc, '<p class="forget">Links kept only in this browser. <button type="button">Forget them</button></p>');
+    navReplies(doc, true);
+    let current = 0;
+    const code = haveCode(doc, () => {
+      MINE.unshift({ at: '18 Nov', type: 'bug', env: 'v1.2.5 · chrome', status: 'progress', unseen: true, msgs: [
+        { from: 'you', at: '18 Nov, 20:02', text: 'Subtitles drawn twice on crunchyroll in fullscreen.' },
+        { event: 'progress', at: '19 Nov, 09:00' },
+        { from: 'us', at: '19 Nov, 09:05', text: 'Thanks, we can see it too. Working on it.' },
+      ] });
+      current = 0;
+      code.querySelector('input').value = '';
+      draw();
+    });
+    // The page opens on whichever list holds the ticket the link is for.
+    let view = isOpen(MINE[current]) ? 'open' : 'history';
+    forget.querySelector('button').onclick = () => { MINE.length = 0; draw(); };
+    const draw = () => {
+      rail.querySelectorAll('.th-tabs, .threads, .no-tickets').forEach((n) => n.remove());
+      navReplies(doc, true);
+      // Nothing kept in this browser: no lists, no buttons; only the ticket-code box.
+      if (!MINE.length) {
+        forget.remove();
+        rail.querySelector('.facts').after(h(doc, '<p class="no-tickets">No tickets in this browser.</p>'));
+        rail.querySelector('.no-tickets').after(code);
+        doc.getElementById('page').replaceChildren(h(doc, `<div class="panel gone-panel"><div class="phead"><span>tickets</span></div>
+          <b>Nothing here yet.</b><p>Reports you send from this browser show up here with their replies. Sent one somewhere else? Add its ticket code on the left.</p>
+          <div class="compose-row"><a class="btn primary" href="#">send a report</a></div></div>`));
+        return;
+      }
+      current = Math.min(current, MINE.length - 1);
+      MINE[current].unseen = false;
+      navReplies(doc, true);
+      const tabs = viewTabs(doc, view, (v) => {
+        view = v;
+        const first = MINE.findIndex((t) => inView(t, v));
+        if (first >= 0) current = first;
+        draw();
+      });
+      if (!tabs) view = isOpen(MINE[current]) ? 'open' : 'history'; // one kind only: show it all
+      const list = threadList(doc, current, view);
+      list.querySelectorAll('.th').forEach((b) => (b.onclick = () => { current = Number(b.dataset.i); draw(); }));
+      rail.querySelector('.facts').after(...[tabs, list].filter(Boolean));
+      list.after(forget);
+      forget.after(code);
+      const t = MINE[current];
+      doc.getElementById('page').replaceChildren(t.deleted
+        ? deletedPanel(doc, () => { MINE.splice(current, 1); current = 0; draw(); })
+        : threadPanel(doc, t, (text, shots) => {
+          t.msgs.push({ from: 'you', at: 'now', text: text || '(screenshot)', shots });
+          // Writing back on a fixed report opens it again.
+          if (t.status === 'done') { t.status = 'open'; t.msgs.push({ event: 'reopened', at: 'now' }); }
+          draw();
+        }));
+    };
+    draw();
+  },
+  popA(doc) {
+    css(doc, `#report { position: relative; color: var(--ok); border-color: rgba(var(--g), .5); }
+      #report::after { content: "1"; position: absolute; top: -6px; right: -6px; box-sizing: border-box; width: 13px; height: 13px; display: grid; place-items: center;
+        background: var(--ok); color: #000; outline: 2px solid var(--bg, #0b0b0b); font: 700 9px/1 "JetBrains Mono", Consolas, ui-monospace, monospace; font-variant-numeric: tabular-nums; }`);
+    const r = doc.getElementById('report');
+    r.dataset.tip = 'A reply to your report';
+    r.setAttribute('aria-label', 'A reply to your report');
+  },
+  popB(doc) {
+    const chip = doc.getElementById('whatsnew');
+    const clock = doc.getElementById('clock');
+    chip.textContent = '↩ 1 reply';
+    chip.dataset.tip = 'A reply to your report';
+    chip.hidden = false;
+    if (clock) clock.replaceWith(chip);
+  },
+};
+
+// Injected pages render after their own scripts; popup-live builds its DOM asynchronously.
+function whenReady(doc, test) {
+  return new Promise((done) => {
+    const check = () => (test(doc) ? done() : setTimeout(check, 50));
+    check();
+  });
+}
+
+function load(frame) {
+  if (frame.src) return;
+  frame.addEventListener('load', async () => {
+    const which = frame.dataset.inject;
+    if (!which) return;
+    const doc = frame.contentDocument;
+    await whenReady(doc, (d) => (which.startsWith('pop') ? d.getElementById('report') && d.getElementById('clock') : d.getElementById('page')));
+    INJECT[which](doc);
+  });
+  frame.src = frame.dataset.src;
+}
+
+const show = (v) => {
+  document.querySelectorAll('#tabs button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === v)));
+  document.querySelectorAll('.view').forEach((x) => x.classList.toggle('on', x.dataset.v === v));
+  document.querySelectorAll(`.view[data-v="${v}"] iframe`).forEach(load);
+  document.getElementById('note').textContent = NOTES[v];
+  try { history.replaceState(null, '', `#${v}`); } catch { /* file: pages may refuse */ }
+};
+document.querySelectorAll('#tabs button').forEach((b) => (b.onclick = () => show(b.dataset.v)));
+show(NOTES[location.hash.slice(1)] ? location.hash.slice(1) : 'sent');
+// The "open" button on the reply link box switches here by hash.
+addEventListener('hashchange', () => { if (NOTES[location.hash.slice(1)]) show(location.hash.slice(1)); });
+})();
+</script>
+</body>
+</html>

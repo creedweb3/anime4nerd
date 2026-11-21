@@ -111,6 +111,20 @@ the Free plan, screenshots accepted only as canvas-style JPEGs without metadata,
 per-page hash-pinned CSP. No critical or high issues; all medium and low findings
 were fixed.
 
+A seventh pass (2026-11-21) covered report tickets: a secret code per report, the
+/tickets page, write-backs (`functions/api/reply.js`), reading (`functions/api/tickets.js`)
+and the admin conversation. Reviewed by security and code reviewers, with tests for
+injection, races and platform limits (`test/tickets-api.mjs`). Codes are 60 random bits,
+stored only as SHA-256 hashes; a malformed code makes no storage access; reporter and
+admin text is only ever rendered as text; write-backs need Turnstile, the site's origin
+and per-visitor and daily caps; each side of a conversation writes only its own key, so
+concurrent messages cannot overwrite each other; the admin's private note is never
+returned. The extension gained no network code: its content script, on the site's own
+origin only, stores whether the site holds any ticket (a yes/no flag), and the popup's bug
+icon then opens the tickets page. Known limit: reading tickets is open to anyone with the
+site (codes cannot be guessed, but a flood of requests can use up the Free plan's daily
+storage reads); a rate-limiting rule needs a custom domain.
+
 ## For people who install it
 
 - Install only from the Chrome Web Store or Firefox Add-ons listing, or from a

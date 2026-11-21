@@ -15,6 +15,7 @@ import { uploadSize } from './video-size';
 import { FullscreenMenu } from './fullscreen-menu';
 import { EPISODE_SECONDS } from './rate-prompt';
 import { MangaMode, startManga } from './manga';
+import { syncTicketsFromSite } from './tickets';
 import {
   CostOf, Measured, OVERLOAD_AFTER_MS, RESUME_GRACE_MS, START_GRACE_MS, VERIFY_MS, allowedScale, capHelped, lowerHelps, median,
   overloadFor, overloaded, pixelCost, smoothMs, stepDownTo,
@@ -1413,6 +1414,7 @@ document.dispatchEvent(new CustomEvent(TAKEOVER_EVENT));
 if (!window.__a4kLoaded) {
   window.__a4kLoaded = true;
   document.addEventListener(TAKEOVER_EVENT, onTakeover);
+  syncTicketsFromSite(); // on the Anime4Nerd site only: its ticket codes, for the popup badge
   (async () => {
   [settings, sources, colorState] = await Promise.all([loadSettings(), loadSources(), loadColor()]);
   if (stopped) return;

@@ -10,8 +10,8 @@ import { join } from 'node:path';
 
 const build = join(import.meta.dirname, '..', 'site', 'build.mjs');
 const out = join(import.meta.dirname, '..', 'site', 'public');
-const PAGES = { '/': 'index.html', '/privacy': 'privacy.html', '/uninstalled': 'uninstalled.html', '/report': 'report.html' };
-const FORMS = ['/uninstalled', '/report'];
+const PAGES = { '/': 'index.html', '/privacy': 'privacy.html', '/uninstalled': 'uninstalled.html', '/report': 'report.html', '/tickets': 'tickets.html' };
+const FORMS = ['/uninstalled', '/report', '/tickets'];
 
 function policies() {
   const text = readFileSync(join(out, '_headers'), 'utf8');
@@ -43,12 +43,18 @@ test('every page CSP allows exactly its own inline scripts', () => {
     assert.equal(scriptSrc.split(' ').filter((t) => t.startsWith("'sha256-")).length, inline.length);
     const turnstile = csp.includes('challenges.cloudflare.com');
     assert.equal(turnstile, FORMS.includes(path), `${path}: Turnstile allowed = ${turnstile}`);
-    assert.equal(csp.includes("connect-src 'self'"), FORMS.includes(path));
+    // Every page loads assets/tickets.js and may ask /api/tickets for the top-bar count.
+    assert.ok(scriptSrc.split(' ').includes("'self'"), `${path} cannot load its own scripts`);
+    assert.ok(csp.includes("connect-src 'self'"), `${path} cannot call /api`);
+    assert.ok(html.includes('assets/tickets.js'), `${path} misses assets/tickets.js`);
     if (FORMS.includes(path)) {
       assert.ok(html.includes('data-sitekey="0x4AAAAAAATestKey"'));
       assert.ok(!html.includes('__TURNSTILE_SITEKEY__'));
     }
   }
+  // A ticket link shows the tickets page, under the tickets page's own policy.
+  assert.equal(readFileSync(join(out, '_redirects'), 'utf8'), '/r/*  /tickets  200\n');
+  assert.equal(map['/r/*'], map['/tickets']);
   assert.match(text, /Permissions-Policy: camera=\(\)/);
   assert.match(text, /X-Content-Type-Options: nosniff/);
 });

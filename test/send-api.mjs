@@ -71,7 +71,8 @@ async function send(body, opts, e = env(), verify = passTurnstile) {
 test('stores a valid report with screenshots, never the IP', async () => {
   const { status, body, env: e } = await send(report({ shots: [jpeg(), jpeg()] }));
   assert.equal(status, 200);
-  assert.deepEqual(body, { ok: true });
+  assert.equal(body.ok, true);
+  assert.match(body.code, /^A4N-/, 'a report hands out its ticket code');
   const keys = [...e.FEEDBACK.store.keys()];
   const rec = JSON.parse(e.FEEDBACK.store.get(keys.find((k) => k.startsWith('report:'))).value);
   assert.deepEqual({ ...rec, at: 0 }, { kind: 'report', reasons: ['slow'], note: 'stutters on site x', v: '1.2.4', b: 'chrome', type: 'bug', shots: 2, at: 0 });
@@ -99,7 +100,7 @@ test('each answer key carries a short summary as metadata for the admin dashboar
   const long = '日本語'.repeat(50) + '😀'.repeat(400);
   const { env: e } = await send(report({ note: long.slice(0, 1000), shots: [jpeg()] }));
   const meta = [...e.FEEDBACK.store].find(([k]) => k.startsWith('report:'))[1].opts.metadata;
-  assert.deepEqual({ ...meta, p: '' }, { t: 'bug', r: ['slow'], v: '1.2.4', b: 'chrome', s: 1, d: 0, p: '' });
+  assert.deepEqual({ ...meta, p: '' }, { t: 'bug', r: ['slow'], v: '1.2.4', b: 'chrome', s: 1, d: 0, p: '', k: 1 });
   assert.equal([...meta.p].length, 100);
   assert.ok(new TextEncoder().encode(JSON.stringify(meta)).length <= 1024, 'metadata over the 1024-byte KV limit');
   const { env: e2 } = await send(uninstall(), {}, env(), passFor('uninstall'));

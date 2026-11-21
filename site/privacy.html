@@ -22,7 +22,7 @@
 
 <main class="wrap">
   <section id="privacy" class="doc" style="border-top:0">
-    <div class="phead"><span>privacy policy · last updated 2026-11-12</span></div>
+    <div class="phead"><span>privacy policy · last updated 2026-11-21</span></div>
     <h1 style="font-size:clamp(1.8rem, 3.6vw, 2.7rem);letter-spacing:-.03em;margin:14px 0 12px">Privacy policy.</h1>
     <div class="prose">
       <p><strong>Anime4Nerd collects no personal data automatically. Everything runs inside your browser.</strong> The only way anything reaches us is an optional feedback or problem-report form on this website, and only when you fill it in and press send. What you type and the screenshots you attach can contain personal information if you include it, so please leave out anything private.</p>
@@ -37,6 +37,7 @@
         <li><strong>Settings</strong> (preset, line effects, upscale factor, and which sites you switched on) are stored with your browser's extension storage. The preset, line effects and upscale factor may sync between your own browsers if you have Chrome sync or Firefox Sync turned on; the per-site switches stay on this device.</li>
         <li><strong>Usage counts</strong>: total upscaling time, how many videos were upscaled for 10 minutes or more, which "rate it" card you last answered and how, and whether you had the extension before these counts existed. Numbers only, no titles or sites. They stay on this device, are never synced or sent, and only decide when the popup shows that card.</li>
         <li><strong>Performance numbers</strong> are measured locally, shown in the popup, and not recorded.</li>
+        <li><strong>Tickets</strong>: whether you have sent a report from this browser (yes or no, nothing else), so the popup's bug icon can open your tickets. The extension never sees or sends your ticket codes.</li>
       </ul>
       <h3>Data leaving your device</h3>
       <p>The extension makes no network requests of its own. It has no analytics, telemetry, crash reporting, remote configuration, or accounts.</p>
@@ -47,6 +48,13 @@
         <li><strong>What is sent</strong>: the reasons you ticked, the text you wrote, the version (and on the report page the browser, and whether it is a bug or an idea), and on the report page up to 3 screenshots you chose. Screenshots are re-encoded as JPEG in your browser first, which removes photo metadata such as location; the server also refuses any image that still carries such metadata. A screenshot shows whatever was on your screen, so crop out anything private. Answers are stored with the date and time of sending, to the minute. No name, email, account or IP address is stored.</li>
         <li><strong>Abuse limits</strong>: a daily counter per visitor is kept under a one-way hash of the IP address (for IPv6, its /64 network) mixed with a secret and the date. The hash changes every day, the counter expires after two days, and the IP address itself is never stored. Cloudflare Turnstile, an invisible check that loads when you start using the form, verifies the sender is not a bot.</li>
         <li><strong>Where it goes</strong>: answers are stored with Cloudflare (Workers KV) and read only by the developer, to fix problems. Screenshots are deleted automatically after 60 days; text answers are kept until deleted. Nothing is shared or sold.</li>
+      </ul>
+      <h3>Tickets and replies</h3>
+      <ul>
+        <li><strong>A ticket code</strong>: each report, and each uninstall answer where you wrote something, gets a random code shown once on the thank-you screen (also as a link, /r/&lt;code&gt;). The server keeps only a one-way hash of it, so the code itself is stored nowhere but with you. Whoever has the code can read the conversation and write in it, so keep it to yourself.</li>
+        <li><strong>In your browser</strong>: this site saves your codes in its own local storage, so the tickets page can list them. They stay on this device and are never synced; "Forget them" on the tickets page removes them.</li>
+        <li><strong>The conversation</strong>: replies from the developer and anything you write back (text and up to 3 screenshots, handled like the report's) are stored with your answer, with the time to the minute. When you open a ticket, the time you read it is stored too, so the developer can see whether a reply was read. No name, email, account or IP address is stored.</li>
+        <li><strong>Deleting</strong>: when the developer deletes a report, its conversation and screenshots are deleted with it, and the code then only says the report was removed.</li>
       </ul>
       <h3>Permissions</h3>
       <ul>
@@ -67,3 +75,4 @@
   <span>anime4nerd · v1.2.5 · mit</span>
   <span><a href="report">report a bug</a> · <a href="privacy">privacy</a> · <a href="./#credits">credits</a> · <a href="https://github.com/creedweb3/anime4nerd" rel="noopener">github</a></span>
 </footer>
+<script src="assets/tickets.js"></script>

@@ -22,13 +22,15 @@ if (!/^[\w-]+$/.test(sitekey)) throw new Error('TURNSTILE_SITEKEY has unexpected
 if (sitekey === TEST_SITEKEY) console.warn('TURNSTILE_SITEKEY not set: using the Turnstile test key');
 
 // Pages and the URL path Cloudflare Pages serves each one at.
-const PAGES = { 'index.html': '/', 'privacy.html': '/privacy', 'uninstalled.html': '/uninstalled', 'report.html': '/report' };
-// What the two form pages need beyond the others: assets/send.js, Turnstile, POST /api/send,
-// and (report) blob: thumbnails of picked screenshots.
+const PAGES = { 'index.html': '/', 'privacy.html': '/privacy', 'uninstalled.html': '/uninstalled', 'report.html': '/report', 'tickets.html': '/tickets' };
+// What the form pages need beyond the others: Turnstile, and (report, tickets) blob: thumbnails of
+// picked screenshots. Every page loads assets/tickets.js ('self') and may call /api/tickets for
+// the top-bar count (connect-src 'self').
 const TURNSTILE = 'https://challenges.cloudflare.com';
 const FORMS = {
   '/uninstalled': { img: '' },
   '/report': { img: ' blob:' },
+  '/tickets': { img: ' blob:' },
 };
 
 const sha256 = (text) => `'sha256-${createHash('sha256').update(text, 'utf8').digest('base64')}'`;
@@ -38,8 +40,8 @@ function cspFor(html, path) {
   const hashes = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => sha256(m[1]));
   const form = Object.hasOwn(FORMS, path);
   const img = form ? FORMS[path].img : '';
-  const script = [...hashes, ...(form ? ["'self'", TURNSTILE] : [])].join(' ') || "'none'";
-  const extra = form ? `frame-src ${TURNSTILE}; connect-src 'self'; ` : '';
+  const script = [...hashes, "'self'", ...(form ? [TURNSTILE] : [])].join(' ');
+  const extra = `${form ? `frame-src ${TURNSTILE}; ` : ''}connect-src 'self'; `;
   return `default-src 'none'; img-src 'self'${img}; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src ${script}; ${extra}base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
 }
 
@@ -71,6 +73,10 @@ ${src.slice(split)}</body>
 const rules = Object.entries(policies)
   .filter(([path]) => path !== '/')
   .map(([path, policy]) => `${path}\n  ! Content-Security-Policy\n  Content-Security-Policy: ${policy}\n`);
+// A ticket link /r/<code> shows the tickets page (its script reads the code from the address),
+// with the tickets page's own policy.
+writeFileSync(join(out, '_redirects'), '/r/*  /tickets  200\n');
+rules.push(`/r/*\n  ! Content-Security-Policy\n  Content-Security-Policy: ${policies['/tickets']}\n`);
 writeFileSync(
   join(out, '_headers'),
   `/*

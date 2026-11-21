@@ -287,8 +287,8 @@ test('answers list comes from key metadata, with old answers read from their val
   assert.equal(res.headers.get('cache-control'), 'no-store');
   const body = await res.json();
   assert.deepEqual(body.answers.map((a) => a.key), [`report:${ID}`, `uninstall:${OLD}`]);
-  assert.deepEqual(body.answers[0], { key: `report:${ID}`, at: '2026-11-20T18:42Z', t: 'bug', r: ['slow'], v: '1.2.4', b: 'chrome', s: 1, d: 0, p: 'Full note <b>here</b>', status: 'open', star: false, archived: false, since: '' });
-  assert.deepEqual(body.answers[1], { key: `uninstall:${OLD}`, at: '2026-11-01T08:00Z', t: 'uninstall', r: ['trying'], v: '1.2.3', b: '', s: 0, d: 0, p: '', status: 'open', star: false, archived: false, since: '' });
+  assert.deepEqual(body.answers[0], { key: `report:${ID}`, at: '2026-11-20T18:42Z', t: 'bug', r: ['slow'], v: '1.2.4', b: 'chrome', s: 1, d: 0, p: 'Full note <b>here</b>', status: 'open', star: false, archived: false, since: '', ticket: false, thread: null });
+  assert.deepEqual(body.answers[1], { key: `uninstall:${OLD}`, at: '2026-11-01T08:00Z', t: 'uninstall', r: ['trying'], v: '1.2.3', b: '', s: 0, d: 0, p: '', status: 'open', star: false, archived: false, since: '', ticket: false, thread: null });
   assert.deepEqual(Object.keys(body.caps).sort(), ['report', 'shots', 'uninstall']);
 });
 

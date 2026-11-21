@@ -1,0 +1,460 @@
+<title>Your tickets · Anime4Nerd</title>
+<meta name="description" content="Replies to your Anime4Nerd reports. No account needed.">
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="/assets/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="/assets/site.css">
+
+<style>
+  .bye .sec { padding-block: clamp(32px, 6vw, 64px); }
+  .bye .rail h2 { font-size: clamp(1.8rem, 3.4vw, 2.6rem); }
+  .facts { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 6px; }
+  .facts li { display: flex; gap: 10px; color: var(--dim); font-size: 12px; }
+  .facts li::before { content: "✓"; color: var(--ok); }
+  [hidden] { display: none !important; }
+
+  /* Thread list in the rail: open and history as two buttons, then the threads. */
+  .th-tabs { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; margin-top: 18px; }
+  .th-tabs button { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--dim); padding: 10px 12px; font: 600 12px var(--mono); cursor: pointer; transition: border-color .12s, background-color .12s; }
+  .th-tabs button i { font-style: normal; font-weight: 400; font-size: 11px; color: var(--faint); }
+  .th-tabs button[aria-selected="false"]:hover { border-color: var(--line2); color: var(--fg); }
+  .th-tabs button[aria-selected="true"] { border-color: rgba(var(--g), .7); background: linear-gradient(135deg, rgba(var(--g), .16), transparent 60%) var(--bg); color: var(--fg); }
+  .th-tabs button[aria-selected="true"] i { color: var(--ok); }
+  .threads { display: grid; gap: 8px; margin-top: 10px; }
+  .th { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; text-align: left; border: 1px solid var(--line); background: var(--bg); padding: 11px 12px; cursor: pointer; font: 12px/1.4 var(--mono); color: var(--dim); transition: border-color .12s; }
+  .th:hover { border-color: var(--line2); }
+  .th[aria-current="true"] { border-color: rgba(var(--g), .7); background: linear-gradient(135deg, rgba(var(--g), .14), transparent 60%) var(--bg); }
+  .th .t { color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .th.off .t { color: var(--dim); }
+  .th .d { color: var(--faint); font-size: 11px; }
+  .th .d.n { color: var(--ok); }
+  .th .s { grid-column: 2; grid-row: 1 / 3; align-self: center; font-size: 11px; display: inline-flex; align-items: center; gap: 6px; }
+  .th .s::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .forget { margin: 12px 0 0; color: var(--faint); font-size: 11px; }
+  .no-tickets { margin: 18px 0 0; color: var(--dim); font-size: 12px; }
+  .forget button { background: none; border: 0; color: var(--dim); font: inherit; text-decoration: underline; cursor: pointer; padding: 0; }
+  .have-code { margin-top: 18px; display: grid; gap: 8px; }
+  .have-code .phead { margin: 0; }
+  .have-code form { display: flex; gap: 8px; }
+  .have-code input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line2); color: var(--fg); padding: 9px 11px; font: 12px var(--mono); letter-spacing: .06em; }
+  .have-code input::placeholder { color: var(--faint); letter-spacing: 0; }
+  .have-code input:focus { outline: none; border-color: var(--on); }
+  .have-code .btn { padding: 9px 0; width: 10ch; justify-content: center; flex: none; }
+  .have-code small { color: var(--faint); font-size: 11px; }
+  .have-code small.bad { color: var(--bad); }
+
+  /* The open ticket: status track, messages, then the closed banner and the reply box at the bottom. */
+  .track { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 4px 0 22px; }
+  .track span { border-top: 2px solid var(--line2); padding-top: 6px; color: var(--faint); font-size: 11px; }
+  .track span.on { border-color: var(--ok); color: var(--fg); }
+  #thread { display: flex; flex-direction: column; flex: 1 0 auto; }
+  .msgs { display: grid; gap: 14px; align-content: start; flex: 1 0 auto; }
+  .msg { max-width: 86%; border: 1px solid var(--line2); background: var(--bg); padding: 10px 12px; display: grid; gap: 6px; }
+  .msg.you { justify-self: end; }
+  .msg.us { justify-self: start; border-color: rgba(var(--g), .5); background: linear-gradient(135deg, rgba(var(--g), .12), transparent 60%) var(--bg); }
+  .msg .who { display: flex; justify-content: space-between; gap: 18px; color: var(--faint); font-size: 11px; }
+  .msg .who b { color: var(--dim); font-weight: 600; }
+  .msg.us .who b { color: var(--ok); }
+  .msg p { margin: 0; color: var(--fg); font-size: 13px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .msg .att { color: var(--faint); font-size: 11px; }
+  .ev { justify-self: center; display: inline-flex; align-items: center; gap: 8px; color: var(--faint); font-size: 11px; }
+  .ev::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--c, var(--faint)); }
+  .closed { margin-top: 22px; border: 1px solid var(--line2); border-left: 2px solid var(--c); background: var(--bg); padding: 12px 14px; display: grid; gap: 4px; }
+  .closed b { color: var(--c); font-weight: 600; font-size: 13px; }
+  .closed p { margin: 0; color: var(--dim); font-size: 12px; }
+  .gone-panel b.big { color: var(--fg); font-size: clamp(1.2rem, 2.2vw, 1.5rem); margin-top: 6px; display: block; }
+  .gone-panel p { color: var(--dim); font-size: 13px; }
+  .row-end { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 16px; }
+  .row-end small { color: var(--faint); font-size: 11px; }
+  #compose { display: grid; gap: 10px; margin-top: 22px; }
+  #compose textarea { display: block; width: 100%; height: 76px; padding: 9px 11px; background: var(--bg); border: 1px solid var(--line2); color: var(--fg); font: 13px/1.5 var(--mono); resize: vertical; }
+  #compose textarea:focus { outline: none; border-color: var(--on); }
+  .compose-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .compose-row small { color: var(--faint); font-size: 11px; }
+  .compose-btns { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; flex: none; }
+  .compose-btns .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 16px; white-space: nowrap; line-height: 1; margin: 0; }
+  .add-shot { position: relative; cursor: pointer; }
+  .add-shot::before { content: none; }
+  .add-shot svg { display: block; flex: none; }
+  .add-shot input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; clip-path: inset(50%); }
+  .add-shot:focus-within { border-color: var(--on); color: var(--on); }
+  .add-shot.full { opacity: .45; pointer-events: none; }
+  .shot-thumbs { display: flex; gap: 8px; }
+  .shot-thumbs:empty { display: none; }
+  .shot-thumbs figure { position: relative; margin: 0; width: 96px; height: 60px; border: 1px solid var(--line2); background: center/cover no-repeat; }
+  .shot-thumbs button { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border: 0; background: rgba(0,0,0,.75); color: var(--on); font: 11px/1 var(--mono); cursor: pointer; }
+  .err { color: var(--bad); font-size: 12px; margin: 0; }
+  .ts { display: flex; justify-content: center; }
+  .ts:empty { display: none; }
+  @media (max-width: 520px) { .compose-row { flex-direction: column; align-items: stretch; } }
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="/"><img src="/assets/icon.png" alt="" width="24" height="24">anime4nerd</a>
+    <nav class="nav" aria-label="Site">
+      <a class="chip" href="/#compare">before / after</a>
+      <a class="chip" href="/#install">install</a>
+      <a class="chip" href="/#changes">what's new</a>
+      <a class="chip" href="/report">report</a>
+    </nav>
+    <a class="btn primary" data-store href="https://chromewebstore.google.com/detail/anime4nerd/kblnmcdmlgeidaclnhjmcffefmkehkpm" rel="noopener">add to chrome</a>
+  </div>
+</header>
+
+<main class="wrap bye" id="top">
+  <section class="sec long" style="border-top:0">
+    <div class="rail" id="rail">
+      <div class="phead"><span>support · tickets</span></div>
+      <h2>Your tickets.</h2>
+      <ul class="facts">
+        <li>Only your ticket codes open these.</li>
+        <li>No account, nothing about you is stored.</li>
+        <li>Bookmark this page to check back.</li>
+      </ul>
+      <div id="lists"></div>
+      <div class="have-code">
+        <div class="phead"><span>have a ticket code?</span></div>
+        <form id="add-code"><input id="code-in" placeholder="A4N-XXXX-XXXX-XXXX, or paste the link" maxlength="120" aria-label="Ticket code" spellcheck="false" autocomplete="off"><button class="btn" type="submit">add</button></form>
+        <small id="code-note">The code or the whole link, from the thank-you screen. Adds that ticket here, in this browser.</small>
+      </div>
+    </div>
+
+    <div class="body" id="page">
+      <div class="panel" id="panel">
+        <div class="phead"><span id="p-head">tickets</span><span id="p-env"></span></div>
+        <div id="thread"><p class="no-tickets">Loading…</p></div>
+        <form id="compose" hidden>
+          <textarea id="text" maxlength="1000" placeholder="Write back: more detail, a follow-up, or just thanks." aria-label="Write back"></textarea>
+          <div class="shot-thumbs" id="thumbs"></div>
+          <div id="ts" class="ts" data-sitekey="__TURNSTILE_SITEKEY__" data-action="reply"></div>
+          <p class="err" id="err" hidden></p>
+          <div class="compose-row"><small>Shows as from you. Nothing about you is sent.</small>
+            <span class="compose-btns"><label class="btn add-shot" id="add-shot" title="Add screenshots (up to 3)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><rect x="1.5" y="3" width="13" height="10"/><circle cx="5.5" cy="6.5" r="1.2"/><path d="M1.5 11.5l4-3.5 3 2.5 2-1.5 4 3"/></svg>screenshot<input type="file" id="shots" accept="image/png,image/jpeg,image/webp" multiple aria-label="Add screenshots"></label><button class="btn primary" type="submit" id="go">send</button></span></div>
+        </form>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">
+  <span>anime4nerd · mit</span>
+  <span><a href="/#changes">changes</a> · <a href="/report">report a bug</a> · <a href="/privacy">privacy</a> · <a href="https://github.com/creedweb3/anime4nerd" rel="noopener">github</a></span>
+</footer>
+
+<script src="/assets/send.js"></script>
+<script src="/assets/tickets.js"></script>
+<script>
+  (function () {
+    // Everything the server returns is untrusted text: it goes on screen through textContent only.
+    var T = window.a4nTickets;
+    var $ = function (id) { return document.getElementById(id); };
+    var el = function (tag, cls, text) {
+      var n = document.createElement(tag);
+      if (cls) n.className = cls;
+      if (text != null) n.textContent = text;
+      return n;
+    };
+    var STATUS = { open: ['open', 'var(--faint)'], progress: ['in progress', '#e3c58a'], done: ['fixed', 'var(--ok)'], wontfix: ["won't fix", 'var(--dim)'] };
+    var EVENT = { progress: ['marked working on it', '#e3c58a'], done: ['marked fixed', 'var(--ok)'], wontfix: ["marked won't fix", 'var(--dim)'] };
+    var CLOSED = {
+      done: ['var(--ok)', 'Fixed.', 'Still happening after the update? Write back and this opens again.', 'Still broken? Tell us what you see.'],
+      wontfix: ['var(--dim)', "Closed: won't fix.", 'The reason is in the last reply. You can still write back; it is read, but it stays closed.', 'Write back.'],
+      archived: ['var(--faint)', 'This conversation is closed.', 'Replies are off here. If something comes up again, send a new report: it gets its own code.', null],
+    };
+    var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    var when = function (at, withTime) {
+      var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})Z$/.exec(at || '');
+      if (!m) return '';
+      return Number(m[3]) + ' ' + MONTHS[Number(m[2]) - 1] + (withTime ? ', ' + m[4] + ':' + m[5] : '');
+    };
+
+    var tickets = [];
+    var current = null; // code of the open ticket
+    var view = 'open';
+    var isOpen = function (t) { return !t.gone && !t.unknown && !t.closed && (t.status === 'open' || t.status === 'progress'); };
+    var inView = function (t, v) { return (v === 'open') === isOpen(t); };
+    var find = function (code) { return tickets.filter(function (t) { return t.code === code; })[0]; };
+
+    // /r/<code>: that ticket is saved here and opens first.
+    var tail = '';
+    try { tail = decodeURIComponent(location.pathname.split('/r/')[1] || '').toUpperCase(); } catch (e) { tail = ''; }
+    var linked = T.CODE.test(tail) ? tail : null;
+    if (linked) T.add(linked);
+    // The code is saved now: keep it out of the address bar and history.
+    if (/^\/r\//.test(location.pathname)) {
+      try { history.replaceState(null, '', '/tickets'); } catch (e) { /* the page still works */ }
+    }
+
+    var load = function (seen) {
+      var codes = T.list();
+      if (!codes.length) { tickets = []; return Promise.resolve(); }
+      return T.fetchAll(codes, seen).then(function (list) { tickets = list; });
+    };
+
+    // ---------- rail: open / history buttons, the list, forget ----------
+    var drawRail = function () {
+      var lists = $('lists');
+      lists.replaceChildren();
+      if (!tickets.length) {
+        lists.append(el('p', 'no-tickets', 'No tickets in this browser.'));
+        return;
+      }
+      var views = ['open', 'history'].filter(function (v) { return tickets.some(function (t) { return inView(t, v); }); });
+      if (views.length < 2) view = views[0];
+      if (views.length > 1) {
+        var tabs = el('div', 'th-tabs');
+        tabs.setAttribute('role', 'tablist');
+        views.forEach(function (v) {
+          var b = el('button', null, v + ' ');
+          b.type = 'button';
+          b.setAttribute('role', 'tab');
+          b.setAttribute('aria-selected', String(v === view));
+          b.append(el('i', null, String(tickets.filter(function (t) { return inView(t, v); }).length)));
+          b.addEventListener('click', function () {
+            view = v;
+            var first = tickets.filter(function (t) { return inView(t, v); })[0];
+            if (first) open(first.code); else draw();
+          });
+          tabs.append(b);
+        });
+        lists.append(tabs);
+      }
+      var list = el('div', 'threads');
+      tickets.filter(function (t) { return inView(t, view); }).forEach(function (t) {
+        var b = el('button', 'th' + (isOpen(t) ? '' : ' off'));
+        b.type = 'button';
+        b.setAttribute('aria-current', String(t.code === current));
+        var word = t.unknown ? ['not found', 'var(--faint)'] : t.gone ? ['removed', 'var(--faint)'] : t.closed ? ['closed', 'var(--faint)'] : STATUS[t.status] || STATUS.open;
+        var title = t.unknown ? String(t.code) : t.gone ? 'report removed' : (t.type || 'bug') + ' · ' + (t.note || '');
+        var mine = (t.msgs || []).length;
+        var sub = t.unknown || t.gone ? 'ticket ' + String(t.code).slice(-4) : t.unseen ? '↩ new reply' : (mine + 1) + ' message' + (mine ? 's' : '') + ' · last ' + when(mine ? t.msgs[mine - 1].at : t.at);
+        var s = el('span', 's', word[0]);
+        s.style.color = word[1];
+        b.append(el('span', 't', title), s, el('span', 'd' + (t.unseen ? ' n' : ''), sub));
+        b.addEventListener('click', function () { open(t.code); });
+        list.append(b);
+      });
+      var forget = el('p', 'forget', 'Codes kept only in this browser. ');
+      var fb = el('button', null, 'Forget them');
+      fb.type = 'button';
+      fb.addEventListener('click', function () { T.clear(); tickets = []; current = null; draw(); });
+      forget.append(fb);
+      lists.append(list, forget);
+    };
+
+    // ---------- the open ticket ----------
+    var head = function (t) {
+      $('p-head').textContent = t ? (t.unknown ? 'ticket' : (t.type || 'bug') + (t.at ? ' · sent ' + when(t.at) : '')) : 'tickets';
+      $('p-env').textContent = t && !t.unknown && !t.gone ? [t.v ? 'v' + t.v : '', t.b].filter(Boolean).join(' · ') : '';
+    };
+
+    var message = function (from, text, at, shots) {
+      var m = el('div', 'msg ' + (from === 'a' ? 'us' : 'you'));
+      var who = el('div', 'who');
+      who.append(el('b', null, from === 'a' ? 'anime4nerd' : 'you'), el('span', null, when(at, true)));
+      m.append(who);
+      if (text) m.append(el('p', null, text));
+      if (shots) m.append(el('span', 'att', '+ ' + shots + ' screenshot' + (shots === 1 ? '' : 's')));
+      return m;
+    };
+
+    var drawThread = function () {
+      var box = $('thread');
+      var t = find(current);
+      head(t);
+      $('compose').hidden = true;
+      box.replaceChildren();
+      if (!t) {
+        var empty = el('div', 'gone-panel');
+        empty.append(el('b', 'big', 'Nothing here yet.'), el('p', null, 'Reports you send from this browser show up here with their replies. Sent one somewhere else? Add its ticket code on the left.'));
+        var row = el('div', 'row-end');
+        var a = el('a', 'btn primary', 'send a report');
+        a.href = '/report';
+        row.append(el('small', null, ''), a);
+        empty.append(row);
+        return box.append(empty);
+      }
+      if (t.unknown || t.gone) {
+        var g = el('div', 'gone-panel');
+        g.append(el('b', 'big', t.gone ? 'This report was removed.' : 'No ticket with this code.'),
+          el('p', null, t.gone ? 'Its messages and screenshots were deleted on our side, and nothing about it is kept. If the problem is still there, send a new report.' : 'Check the code, or send a new report.'));
+        var r2 = el('div', 'row-end');
+        var rm = el('button', 'btn', 'remove from this list');
+        rm.type = 'button';
+        rm.addEventListener('click', function () { T.remove(t.code); tickets = tickets.filter(function (x) { return x !== t; }); current = null; draw(); });
+        var nr = el('a', 'btn primary', 'send a new report');
+        nr.href = '/report';
+        r2.append(rm, nr);
+        g.append(r2);
+        return box.append(g);
+      }
+      var reached = { open: 1, progress: 2, done: 3, wontfix: 3 }[t.status] || 1;
+      var track = el('div', 'track');
+      ['received', 'working on it', t.status === 'wontfix' ? "won't fix" : 'fixed'].forEach(function (s, i) { track.append(el('span', i < reached ? 'on' : '', s)); });
+      var msgs = el('div', 'msgs');
+      // Their report first, then the conversation; the current status sits where it last changed.
+      var items = [{ at: t.at, node: message('u', t.note, t.at, t.shots) }];
+      (t.msgs || []).forEach(function (m) { items.push({ at: m.at, node: message(m.f, m.t, m.at, m.s) }); });
+      if (EVENT[t.status] && t.since) {
+        var ev = el('div', 'ev', EVENT[t.status][0] + ' · ' + when(t.since, true));
+        ev.style.setProperty('--c', EVENT[t.status][1]);
+        items.push({ at: t.since, node: ev });
+      }
+      items.sort(function (a, b) { return a.at < b.at ? -1 : a.at > b.at ? 1 : 0; });
+      items.forEach(function (x) { msgs.append(x.node); });
+      box.append(track, msgs);
+      var closed = CLOSED[t.closed ? 'archived' : t.status];
+      if (closed) {
+        var c = el('div', 'closed');
+        c.style.setProperty('--c', closed[0]);
+        c.append(el('b', null, closed[1]), el('p', null, closed[2]));
+        box.append(c);
+      }
+      if (closed && !closed[3]) {
+        var r3 = el('div', 'row-end');
+        var n3 = el('a', 'btn primary', 'send a new report');
+        n3.href = '/report';
+        r3.append(el('small', null, 'Closed conversations stay readable here.'), n3);
+        return box.append(r3);
+      }
+      $('text').placeholder = closed ? closed[3] : 'Write back: more detail, a follow-up, or just thanks.';
+      $('compose').hidden = false;
+    };
+
+    var draw = function () { drawRail(); drawThread(); };
+
+    var open = function (code) {
+      current = code;
+      var t = find(code);
+      if (t && !t.unknown && !t.gone) view = isOpen(t) ? 'open' : 'history';
+      draw();
+      // Reading our replies marks them read: on the server (the admin sees "seen") and in the chip.
+      if (t && t.unseen) {
+        load(code).then(function () { draw(); T.refresh(); }, function () {});
+      }
+    };
+
+    // ---------- writing back ----------
+    var files = [];
+    var urls = new Map();
+    var sending = false;
+    var err = $('err');
+    var drawThumbs = function () {
+      urls.forEach(function (url, file) { if (files.indexOf(file) < 0) { URL.revokeObjectURL(url); urls.delete(file); } });
+      $('thumbs').replaceChildren.apply($('thumbs'), files.map(function (file, i) {
+        if (!urls.has(file)) urls.set(file, URL.createObjectURL(file));
+        var fig = document.createElement('figure');
+        fig.style.backgroundImage = 'url("' + urls.get(file) + '")';
+        var x = el('button', null, '✕');
+        x.type = 'button';
+        x.setAttribute('aria-label', 'Remove screenshot ' + (i + 1));
+        x.addEventListener('click', function () { if (sending) return; files.splice(i, 1); drawThumbs(); });
+        fig.append(x);
+        return fig;
+      }));
+      $('add-shot').classList.toggle('full', files.length >= 3);
+    };
+    var isImage = function (file) {
+      return ['image/png', 'image/jpeg', 'image/webp'].indexOf(file.type) >= 0 || (!file.type && /\.(png|jpe?g|webp)$/i.test(file.name));
+    };
+    $('shots').addEventListener('change', function (e) {
+      [].forEach.call(e.target.files, function (f) { if (files.length < 3 && isImage(f)) files.push(f); });
+      e.target.value = '';
+      drawThumbs();
+    });
+    // Re-encoded to JPEG of at most ~250 KB, as on the report form: the canvas also drops metadata.
+    var LIMIT = 250000;
+    var MAX_SIDE = 1600;
+    var jpeg = function (bmp, scale, quality) {
+      var c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(bmp.width * scale));
+      c.height = Math.max(1, Math.round(bmp.height * scale));
+      var g = c.getContext('2d');
+      g.fillStyle = '#fff';
+      g.fillRect(0, 0, c.width, c.height);
+      g.drawImage(bmp, 0, 0, c.width, c.height);
+      return new Promise(function (ok) { c.toBlob(ok, 'image/jpeg', quality); });
+    };
+    var shrink = function (file) {
+      return createImageBitmap(file).then(function (bmp) {
+        var attempt = function (scale, quality) {
+          return jpeg(bmp, scale, quality).then(function (blob) {
+            if (blob && blob.size <= LIMIT) return blob;
+            if (scale < 0.1) throw new Error('image_too_big');
+            return quality > 0.5 ? attempt(scale, quality - 0.15) : attempt(scale * 0.75, 0.8);
+          });
+        };
+        return attempt(Math.min(1, MAX_SIDE / bmp.width, MAX_SIDE / bmp.height), 0.8).finally(function () { bmp.close(); });
+      });
+    };
+    var base64 = function (blob) {
+      return new Promise(function (ok, no) {
+        var r = new FileReader();
+        r.onload = function () { ok(String(r.result).split(',')[1]); };
+        r.onerror = function () { no(r.error); };
+        r.readAsDataURL(blob);
+      });
+    };
+    var REPLY_ERRORS = {
+      closed: 'This conversation is closed.',
+      thread_full: 'This conversation is full. Please send a new report.',
+      rate_limited: 'Too many messages today. Please try again tomorrow.',
+      daily_limit: 'Too many messages today. Please try again tomorrow.',
+      gone: 'This report was removed.',
+    };
+    $('compose').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var text = $('text').value.trim();
+      if (sending || (!text && !files.length)) return $('text').focus();
+      sending = true;
+      err.hidden = true;
+      $('go').disabled = true;
+      $('go').textContent = 'sending…';
+      var code = current;
+      Promise.all(files.map(function (f) { return shrink(f).then(base64); })).then(function (shots) {
+        return window.a4nSend({ code: code, text: text, shots: shots }, '/api/reply');
+      }).then(function () {
+        $('text').value = '';
+        files = [];
+        drawThumbs();
+        return load(code);
+      }).then(function () { draw(); }, function (x) {
+        if (REPLY_ERRORS[x.message]) { err.textContent = REPLY_ERRORS[x.message]; err.hidden = false; } else window.a4nError(x, err);
+      }).then(function () {
+        sending = false;
+        $('go').disabled = false;
+        $('go').textContent = 'send';
+      });
+    });
+
+    // ---------- adding a code ----------
+    $('add-code').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var raw = $('code-in').value.trim().split('/').pop().toUpperCase().replace(/\s+/g, '');
+      var parts = raw.split('-');
+      var code = parts[0] === 'A4N' ? 'A4N-' + parts.slice(1).map(function (g) { return g.replace(/O/g, '0').replace(/[IL]/g, '1'); }).join('-') : '';
+      var note = $('code-note');
+      if (!T.CODE.test(code)) {
+        note.textContent = 'That does not look like a ticket code (A4N-XXXX-XXXX-XXXX) or link.';
+        note.className = 'bad';
+        return;
+      }
+      note.textContent = 'The code or the whole link, from the thank-you screen. Adds that ticket here, in this browser.';
+      note.className = '';
+      $('code-in').value = '';
+      T.add(code);
+      load().then(function () { open(code); }, function () { draw(); });
+    });
+
+    // ---------- start ----------
+    load().then(function () {
+      var pick = (linked && find(linked)) || tickets.filter(function (t) { return t.unseen; })[0] || tickets.filter(isOpen)[0] || tickets[0];
+      if (pick) open(pick.code); else draw();
+    }, function () {
+      $('thread').replaceChildren(el('p', 'err', "Couldn't load your tickets right now. Please try again in a moment."));
+    });
+  })();
+</script>
