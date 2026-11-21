@@ -4,16 +4,17 @@
 // "pbkdf2-sha256$…". Save that line as the ADMIN_PASSWORD_HASH secret in Cloudflare Pages
 // (see docs/FEEDBACK_SETUP.md). The password itself is never printed or saved.
 //   node scripts/admin-password.mjs --check   tests a password against a hash line you saved.
+//   Add --show to either to see what you type.
 
 import { createInterface } from 'node:readline';
 import { hashPassword, isPasswordHash, verifyPassword } from '../admin/password.js';
 
 const MIN_LENGTH = 16;
 
-// One readline for both questions. It echoes nothing, so typing stays hidden; the prompts are
-// written straight to the terminal.
+// One readline for both questions. It echoes nothing, so typing stays hidden, unless --show is
+// given (then what you type is visible on screen). The prompts are written straight to the terminal.
 const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: !!process.stdin.isTTY });
-rl._writeToOutput = () => {};
+if (!process.argv.includes('--show')) rl._writeToOutput = () => {};
 const lines = rl[Symbol.asyncIterator]();
 async function ask(question) {
   process.stdout.write(question);

@@ -6,41 +6,90 @@
 <meta name="robots" content="noindex, nofollow">
 <title>Anime4Nerd admin</title>
 <style nonce="__NONCE__">
-:root { color-scheme: dark; --bg: #0b0b0b; --panel: #111; --line: #262626; --line2: #3a3a3a; --fg: #e4e4e4; --dim: #8d8d8d; --faint: #585858; --on: #fff; --ok: #9fd3a8; --bad: #e39a9a;
+:root { color-scheme: dark; --bg: #0b0b0b; --panel: #111; --line: #262626; --line2: #3a3a3a; --fg: #e4e4e4; --dim: #8d8d8d; --faint: #585858; --on: #fff; --bar: #d0d0d0;
+  --ok: #9fd3a8; --bad: #e39a9a; --g: 159, 211, 168; --r: 227, 154, 154; --ease: cubic-bezier(.2, .7, .2, 1);
   --mono: "JetBrains Mono", "Cascadia Mono", Consolas, ui-monospace, monospace; }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 13px/1.6 var(--mono); -webkit-font-smoothing: antialiased; }
+html, body { height: 100%; }
+/* the site's grid paper, fading out towards the edges */
+body { margin: 0; color: var(--fg); font: 13px/1.6 var(--mono); -webkit-font-smoothing: antialiased;
+  background: radial-gradient(ellipse at 50% 42%, transparent 0 28%, var(--bg) 72%),
+    repeating-linear-gradient(0deg, rgba(255,255,255,.028) 0 1px, transparent 1px 24px),
+    repeating-linear-gradient(90deg, rgba(255,255,255,.028) 0 1px, transparent 1px 24px), var(--bg); }
 button, input { font: inherit; color: inherit; }
 :focus-visible { outline: 1px solid var(--on); outline-offset: 2px; }
-.login { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
-form { width: min(340px, 100%); display: grid; gap: 14px; }
-.brand { display: flex; align-items: center; justify-content: center; gap: 10px; font-weight: 700; margin-bottom: 10px; }
-.brand img { width: 20px; height: 20px; }
-.brand small { color: var(--faint); font-weight: 400; letter-spacing: .16em; font-size: 10px; text-transform: uppercase; }
-.label { color: var(--faint); font-size: 10px; text-transform: uppercase; letter-spacing: .16em; }
-input { width: 100%; background: var(--panel); border: 1px solid var(--line2); padding: 11px 12px; letter-spacing: .1em; }
-input:focus { border-color: var(--on); outline: none; }
-.go { background: var(--on); color: #000; border: 1px solid var(--on); padding: 11px; font-weight: 700; cursor: pointer; }
-.go:hover { background: #d0d0d0; }
-.go:disabled { background: var(--line2); border-color: var(--line2); color: var(--dim); cursor: default; }
-.ts { min-height: 22px; display: flex; align-items: center; gap: 8px; color: var(--faint); font-size: 11px; }
-.ts::before { content: ""; width: 10px; height: 10px; border: 1px solid var(--line2); flex: none; }
-.ts.ok::before { border-color: var(--ok); background: var(--ok); }
-.err { color: var(--bad); font-size: 12px; min-height: 19px; margin: 0; }
+main { min-height: 100%; display: grid; place-items: center; padding: 24px 16px; }
+.wrap { width: min(380px, 100%); display: grid; gap: 18px; }
+
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 14px; }
+.brand img { width: 22px; height: 22px; }
+.brand small { margin-left: auto; color: var(--faint); font-weight: 400; letter-spacing: .16em; font-size: 10px; text-transform: uppercase; display: flex; align-items: center; gap: 6px; }
+.brand small::before { content: ""; width: 6px; height: 6px; background: var(--faint); }
+
+/* the panel: square, 1px rule, a head over a rule, like the site's popup panels */
+.panel { position: relative; border: 1px solid var(--line); background: var(--panel); transition: border-color .3s var(--ease); }
+.panel.ready { border-color: rgba(var(--g), .45); }
+.head { display: flex; justify-content: space-between; padding: 9px 14px; border-bottom: 1px solid var(--line); color: var(--faint); font-size: 10px; text-transform: uppercase; letter-spacing: .16em; }
+form { padding: 18px 14px 16px; display: grid; gap: 14px; }
+.label { color: var(--faint); font-size: 10px; text-transform: uppercase; letter-spacing: .16em; display: flex; justify-content: space-between; }
+.field { display: flex; border: 1px solid var(--line2); background: #0d0d0d; transition: border-color .15s; }
+.field:focus-within { border-color: var(--on); }
+.field input { flex: 1; min-width: 0; background: none; border: 0; padding: 11px 12px; letter-spacing: .08em; outline: none; }
+.field button { background: none; border: 0; border-left: 1px solid var(--line); color: var(--faint); padding: 0 12px; font-size: 10px; text-transform: uppercase; letter-spacing: .16em; cursor: pointer; }
+.field button:hover { color: var(--on); }
+
+.ts { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--line); background: #0d0d0d; color: var(--faint); font-size: 11px; transition: border-color .3s var(--ease), background-color .3s var(--ease), color .3s; }
+.ts::before { content: ""; width: 7px; height: 7px; flex: none; background: var(--line2); animation: blink 1.1s steps(2) infinite; }
+.ts.ok { color: var(--ok); border-color: rgba(var(--g), .5); background: linear-gradient(135deg, rgba(var(--g), .14), rgba(var(--g), .02) 60%, transparent) #0d0d0d; }
+.ts.ok::before { background: var(--ok); animation: none; }
+.ts.bad { color: var(--bad); border-color: rgba(var(--r), .45); }
+.ts.bad::before { background: var(--bad); animation: none; }
+@keyframes blink { 50% { opacity: .25; } }
 #cf:empty { display: none; }
+
+/* the site's primary button, with its corner-mark hover */
+.go { position: relative; display: flex; justify-content: center; align-items: center; gap: 8px; background: var(--on); color: #000; border: 1px solid var(--on); padding: 11px; font-weight: 700; cursor: pointer; transition: background-color .12s, border-color .12s; }
+.go::before { content: "✓"; }
+.go:hover { background: var(--bar); border-color: var(--bar); }
+.go:active { transform: translateY(1px); }
+.go:disabled { background: transparent; border-color: var(--line2); color: var(--faint); cursor: default; transform: none; }
+.go::after { content: ""; position: absolute; inset: -5px; pointer-events: none; opacity: 0; transform: scale(.8, .7);
+  background:
+    linear-gradient(var(--ok), var(--ok)) 0 0 / 10px 1px, linear-gradient(var(--ok), var(--ok)) 0 0 / 1px 10px,
+    linear-gradient(var(--ok), var(--ok)) 100% 0 / 10px 1px, linear-gradient(var(--ok), var(--ok)) 100% 0 / 1px 10px,
+    linear-gradient(var(--ok), var(--ok)) 0 100% / 10px 1px, linear-gradient(var(--ok), var(--ok)) 0 100% / 1px 10px,
+    linear-gradient(var(--ok), var(--ok)) 100% 100% / 10px 1px, linear-gradient(var(--ok), var(--ok)) 100% 100% / 1px 10px;
+  background-repeat: no-repeat; transition: opacity .25s var(--ease), transform .45s var(--ease); }
+@media (hover: hover) { .go:not(:disabled):hover::after { opacity: 1; transform: none; } }
+
+.err { margin: 0; min-height: 0; color: var(--bad); font-size: 12px; }
+.err:not(:empty) { padding: 9px 12px; border: 1px solid rgba(var(--r), .4); background: rgba(var(--r), .06); }
+.foot { display: flex; justify-content: space-between; gap: 12px; color: var(--faint); font-size: 11px; }
+.foot a { color: var(--dim); text-decoration: none; }
+.foot a:hover { color: var(--on); }
+@media (prefers-reduced-motion: reduce) { .ts::before { animation: none; } .go::after, .panel, .ts { transition: none; } }
 </style>
 </head>
 <body>
-<main class="login">
-  <form id="form" data-key="__SITEKEY__" novalidate>
-    <div class="brand"><img src="/assets/icon.png" alt="">Anime4Nerd <small>admin</small></div>
-    <label class="label" for="pw">Password</label>
-    <input id="pw" type="password" autocomplete="current-password" maxlength="256" required autofocus>
-    <div id="cf"></div>
-    <div class="ts" id="ts">Checking this browser with Cloudflare…</div>
-    <button class="go" id="go" type="submit" disabled>Sign in</button>
-    <p class="err" id="err" role="alert"></p>
-  </form>
+<main>
+  <div class="wrap">
+    <div class="brand"><img src="/assets/icon.png" alt="">anime4nerd <small>admin</small></div>
+    <section class="panel" id="panel">
+      <div class="head"><span>sign in</span><span>feedback dashboard</span></div>
+      <form id="form" data-key="__SITEKEY__" novalidate>
+        <label class="label" for="pw"><span>password</span></label>
+        <div class="field">
+          <input id="pw" type="password" autocomplete="current-password" maxlength="256" required autofocus spellcheck="false">
+          <button type="button" id="peek" aria-pressed="false" aria-label="Show password">show</button>
+        </div>
+        <div id="cf"></div>
+        <div class="ts" id="ts" role="status">Checking this browser with Cloudflare…</div>
+        <button class="go" id="go" type="submit" disabled>sign in</button>
+        <p class="err" id="err" role="alert"></p>
+      </form>
+    </section>
+    <div class="foot"><a href="/">← anime4nerd.pages.dev</a><span>session lasts 12 hours</span></div>
+  </div>
 </main>
 <script nonce="__NONCE__">
 (() => {
@@ -49,13 +98,29 @@ input:focus { border-color: var(--on); outline: none; }
   const ts = document.getElementById('ts');
   const err = document.getElementById('err');
   const pw = document.getElementById('pw');
+  const peek = document.getElementById('peek');
+  const panel = document.getElementById('panel');
   let token = '';
   let widget = null;
 
+  peek.onclick = () => {
+    const show = pw.type === 'password';
+    pw.type = show ? 'text' : 'password';
+    peek.textContent = show ? 'hide' : 'show';
+    peek.setAttribute('aria-pressed', String(show));
+    peek.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+    pw.focus();
+  };
+
+  const status = (text, kind) => {
+    ts.textContent = text;
+    ts.classList.toggle('ok', kind === 'ok');
+    ts.classList.toggle('bad', kind === 'bad');
+  };
   const ready = (t) => {
     token = t;
-    ts.textContent = t ? 'Cloudflare check passed' : 'Checking this browser with Cloudflare…';
-    ts.classList.toggle('ok', !!t);
+    status(t ? 'Cloudflare check passed' : 'Checking this browser with Cloudflare…', t ? 'ok' : '');
+    panel.classList.toggle('ready', !!t);
     go.disabled = !t;
   };
   // Each token works once: after any attempt, get a fresh one.
@@ -68,13 +133,13 @@ input:focus { border-color: var(--on); outline: none; }
       appearance: 'interaction-only',
       callback: ready,
       'expired-callback': fresh,
-      'error-callback': () => { ready(''); ts.textContent = 'Cloudflare check failed. Reload the page to try again.'; },
+      'error-callback': () => { ready(''); status('Cloudflare check failed. Reload the page to try again.', 'bad'); },
     });
   };
   const s = document.createElement('script');
   s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=onTurnstileLoad';
   s.async = true;
-  s.onerror = () => { ts.textContent = 'Could not load the Cloudflare check. Reload the page to try again.'; };
+  s.onerror = () => status('Could not load the Cloudflare check. Reload the page to try again.', 'bad');
   document.head.append(s);
 
   const MESSAGES = {
