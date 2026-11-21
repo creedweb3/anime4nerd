@@ -41,6 +41,8 @@ a.chip:hover { color: var(--on); border-color: var(--line2); }
 .btn:hover { color: var(--on); border-color: var(--on); }
 .btn.primary { background: var(--on); color: #000; border-color: var(--on); }
 .btn.primary::before { content: "✓"; }
+/* the top bar's store link: a download arrow instead of the tick */
+.top a.btn.primary::before { content: ""; width: 1.25em; height: 1.25em; flex: none; background: currentColor; -webkit-mask: url(download.svg) center / contain no-repeat; mask: url(download.svg) center / contain no-repeat; }
 .btn.primary:hover { background: var(--bar); border-color: var(--bar); }
 .btn:active { transform: translateY(1px); }
 
@@ -349,8 +351,8 @@ details p { margin: 8px 0 0; color: var(--dim); }
 @media (hover: hover) { .rel:hover::before { background: var(--ok); } }
 
 /* hover: four small crop marks settle onto the corners of a panel */
-.readout div, .scene, .body > .panel { position: relative; }
-.readout div::after, .scene::after, .body > .panel::after, .sheet::after {
+.readout div, .scene, .body > .panel, .btn { position: relative; }
+.readout div::after, .scene::after, .body > .panel::after, .sheet::after, .btn::after {
   --m: var(--ok);
   content: ""; position: absolute; inset: -6px; pointer-events: none; z-index: 2;
   background:
@@ -361,8 +363,12 @@ details p { margin: 8px 0 0; color: var(--dim); }
   background-repeat: no-repeat; opacity: 0; transform: scale(.94);
   transition: opacity .2s var(--ease), transform .35s var(--ease);
 }
+/* Buttons are small, so the same .94 scale barely moves the marks and reads as a blink. Start them
+   further in and give the glide a little longer, so they travel about as visibly as on a panel. */
+.btn::after { inset: -5px; transform: scale(.8, .7); transition: opacity .25s var(--ease), transform .45s var(--ease); }
 @media (hover: hover) {
-  .readout div:hover::after, .scene:hover::after, .body > .panel:hover::after, .sheet:hover::after { opacity: 1; transform: none; }
+  .readout div:hover::after, .scene:hover::after, .body > .panel:hover::after, .sheet:hover::after,
+  .btn:hover::after { opacity: 1; transform: none; }
 }
 
 footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 11px; color: var(--faint); display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
@@ -392,7 +398,7 @@ footer a { color: var(--dim); }
   .get .tick .chip { padding-inline: 6px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .pipe::after, .readout div::after, .scene::after, .body > .panel::after, .sheet::after { transition: none; }
+  .pipe::after, .readout div::after, .scene::after, .body > .panel::after, .sheet::after, .btn::after { transition: none; }
 }
 /* Very narrow phones: shrink the browser boxes' contents so "firefox" still fits inside its box. */
 @media (max-width: 380px) {
