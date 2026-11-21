@@ -17,6 +17,8 @@
     "test:api": "node --test test/send-api.mjs",
     "test:site": "node --test test/site-build.mjs",
     "test:feedback": "node --test test/feedback-cli.mjs",
+    "test:admin": "node --test test/admin-api.mjs",
+    "admin:password": "node scripts/admin-password.mjs",
     "feedback": "node scripts/feedback.mjs"
   },
   "keywords": [],

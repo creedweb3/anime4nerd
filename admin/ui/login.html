@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Anime4Nerd admin</title>
+<style nonce="__NONCE__">
+:root { color-scheme: dark; --bg: #0b0b0b; --panel: #111; --line: #262626; --line2: #3a3a3a; --fg: #e4e4e4; --dim: #8d8d8d; --faint: #585858; --on: #fff; --ok: #9fd3a8; --bad: #e39a9a;
+  --mono: "JetBrains Mono", "Cascadia Mono", Consolas, ui-monospace, monospace; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 13px/1.6 var(--mono); -webkit-font-smoothing: antialiased; }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 1px solid var(--on); outline-offset: 2px; }
+.login { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
+form { width: min(340px, 100%); display: grid; gap: 14px; }
+.brand { display: flex; align-items: center; justify-content: center; gap: 10px; font-weight: 700; margin-bottom: 10px; }
+.brand img { width: 20px; height: 20px; }
+.brand small { color: var(--faint); font-weight: 400; letter-spacing: .16em; font-size: 10px; text-transform: uppercase; }
+.label { color: var(--faint); font-size: 10px; text-transform: uppercase; letter-spacing: .16em; }
+input { width: 100%; background: var(--panel); border: 1px solid var(--line2); padding: 11px 12px; letter-spacing: .1em; }
+input:focus { border-color: var(--on); outline: none; }
+.go { background: var(--on); color: #000; border: 1px solid var(--on); padding: 11px; font-weight: 700; cursor: pointer; }
+.go:hover { background: #d0d0d0; }
+.go:disabled { background: var(--line2); border-color: var(--line2); color: var(--dim); cursor: default; }
+.ts { min-height: 22px; display: flex; align-items: center; gap: 8px; color: var(--faint); font-size: 11px; }
+.ts::before { content: ""; width: 10px; height: 10px; border: 1px solid var(--line2); flex: none; }
+.ts.ok::before { border-color: var(--ok); background: var(--ok); }
+.err { color: var(--bad); font-size: 12px; min-height: 19px; margin: 0; }
+#cf:empty { display: none; }
+</style>
+</head>
+<body>
+<main class="login">
+  <form id="form" data-key="__SITEKEY__" novalidate>
+    <div class="brand"><img src="/assets/icon.png" alt="">Anime4Nerd <small>admin</small></div>
+    <label class="label" for="pw">Password</label>
+    <input id="pw" type="password" autocomplete="current-password" maxlength="256" required autofocus>
+    <div id="cf"></div>
+    <div class="ts" id="ts">Checking this browser with Cloudflare…</div>
+    <button class="go" id="go" type="submit" disabled>Sign in</button>
+    <p class="err" id="err" role="alert"></p>
+  </form>
+</main>
+<script nonce="__NONCE__">
+(() => {
+  const form = document.getElementById('form');
+  const go = document.getElementById('go');
+  const ts = document.getElementById('ts');
+  const err = document.getElementById('err');
+  const pw = document.getElementById('pw');
+  let token = '';
+  let widget = null;
+
+  const ready = (t) => {
+    token = t;
+    ts.textContent = t ? 'Cloudflare check passed' : 'Checking this browser with Cloudflare…';
+    ts.classList.toggle('ok', !!t);
+    go.disabled = !t;
+  };
+  // Each token works once: after any attempt, get a fresh one.
+  const fresh = () => { ready(''); if (widget !== null) window.turnstile.reset(widget); };
+
+  window.onTurnstileLoad = () => {
+    widget = window.turnstile.render('#cf', {
+      sitekey: form.dataset.key,
+      action: 'admin-login',
+      appearance: 'interaction-only',
+      callback: ready,
+      'expired-callback': fresh,
+      'error-callback': () => { ready(''); ts.textContent = 'Cloudflare check failed. Reload the page to try again.'; },
+    });
+  };
+  const s = document.createElement('script');
+  s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=onTurnstileLoad';
+  s.async = true;
+  s.onerror = () => { ts.textContent = 'Could not load the Cloudflare check. Reload the page to try again.'; };
+  document.head.append(s);
+
+  const MESSAGES = {
+    locked: 'Too many tries. Sign-in is locked for 15 minutes.',
+    not_verified: 'Cloudflare check failed. Try again.',
+    verify_unavailable: 'Cloudflare could not be reached. Try again in a minute.',
+    unavailable: 'The server is busy. Try again in a minute.',
+  };
+
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    if (!token || !pw.value) return;
+    go.disabled = true;
+    err.textContent = '';
+    let res;
+    try {
+      res = await fetch('/admin/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ password: pw.value, token }),
+        credentials: 'same-origin',
+      });
+    } catch {
+      err.textContent = 'Network error. Try again.';
+      fresh();
+      return;
+    }
+    if (res.status === 204) { pw.value = ''; location.reload(); return; }
+    const body = await res.json().catch(() => ({}));
+    if (body.error === 'wrong') {
+      err.textContent = body.left > 0 ? `Wrong password. ${body.left} ${body.left === 1 ? 'try' : 'tries'} left before a 15 min lock.` : 'Wrong password. Sign-in is now locked for 15 minutes.';
+    } else {
+      err.textContent = MESSAGES[body.error] ?? `Could not sign in (${res.status}).`;
+    }
+    pw.select();
+    fresh();
+  };
+})();
+</script>
+</body>
+</html>

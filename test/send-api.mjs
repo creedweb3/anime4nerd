@@ -95,6 +95,18 @@ test('stores a valid uninstall answer', async () => {
   assert.ok([...e.FEEDBACK.store.keys()].some((k) => k.startsWith('uninstall:')));
 });
 
+test('each answer key carries a short summary as metadata for the admin dashboard', async () => {
+  const long = '日本語'.repeat(50) + '😀'.repeat(400);
+  const { env: e } = await send(report({ note: long.slice(0, 1000), shots: [jpeg()] }));
+  const meta = [...e.FEEDBACK.store].find(([k]) => k.startsWith('report:'))[1].opts.metadata;
+  assert.deepEqual({ ...meta, p: '' }, { t: 'bug', r: ['slow'], v: '1.2.4', b: 'chrome', s: 1, d: 0, p: '' });
+  assert.equal([...meta.p].length, 100);
+  assert.ok(new TextEncoder().encode(JSON.stringify(meta)).length <= 1024, 'metadata over the 1024-byte KV limit');
+  const { env: e2 } = await send(uninstall(), {}, env(), passFor('uninstall'));
+  const meta2 = [...e2.FEEDBACK.store].find(([k]) => k.startsWith('uninstall:'))[1].opts.metadata;
+  assert.deepEqual(meta2, { t: 'uninstall', r: ['trying'], v: '1.2.4', b: '', s: 0, d: 0, p: '' });
+});
+
 test('strips control, bidi and invisible characters from the note', async () => {
   const { env: e } = await send(report({ note: 'a\u0000b\u202Ec\r\nd\u0007\u200Be\u2028f\uFEFFg\uD800h\u00ADi\u180Ej\uFFF9k\u{E0041}l' }));
   const rec = [...e.FEEDBACK.store].find(([k]) => k.startsWith('report:'))[1].value;

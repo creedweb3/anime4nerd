@@ -1,0 +1,661 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Anime4Nerd feedback</title>
+<style nonce="__NONCE__">
+:root {
+  color-scheme: dark;
+  --bg: #0b0b0b; --panel: #111; --line: #262626; --line2: #3a3a3a;
+  --fg: #e4e4e4; --dim: #8d8d8d; --faint: #585858; --on: #fff; --bad: #e39a9a;
+  --mono: "JetBrains Mono", "Cascadia Mono", Consolas, ui-monospace, monospace;
+  /* the site's own colours: red for bugs, light grey for ideas, dim amber for uninstalls;
+     status uses the site's green / amber / red, always with its word */
+  --c-bug: #e8908f; --c-idea: #d6d6d6; --c-uninstall: #8f7a4e;
+  --s-ok: #9fd3a8; --s-warn: #e3c58a; --s-crit: #e39a9a;
+  --g: 159, 211, 168; --r: 227, 154, 154; --bar-dim: #3c3c3c;
+}
+@supports not selector(::-webkit-scrollbar) { :root { scrollbar-width: thin; scrollbar-color: var(--line2) transparent; } }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line2); }
+::-webkit-scrollbar-thumb:hover { background: var(--faint); }
+::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 13px/1.6 var(--mono); -webkit-font-smoothing: antialiased; }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 1px solid var(--on); outline-offset: 2px; }
+
+/* shared pieces */
+.label { color: var(--faint); font-size: 10px; text-transform: uppercase; letter-spacing: .16em; }
+.chip { display: inline-block; border: 1px solid var(--line); color: var(--dim); padding: 1px 8px; font-size: 11px; white-space: nowrap; }
+.chip.bug { color: rgba(var(--r), .95); border-color: rgba(var(--r), .45); }
+.chip.idea { color: var(--fg); border-color: var(--line2); }
+.chip.uninstall { color: #c2a66c; border-color: rgba(143, 122, 78, .7); }
+.filters { display: flex; gap: 6px; flex-wrap: wrap; }
+.filters button { background: var(--panel); border: 1px solid var(--line); color: var(--dim); padding: 4px 10px; font-size: 11px; }
+.filters button[aria-pressed="true"] { background: var(--on); border-color: var(--on); color: #000; }
+/* Trim the font's built-in space above caps and below the baseline, so the gap above and below the text is equal. */
+.h .filters, #st-range { gap: 6px; flex-wrap: nowrap; }
+.h .filters button, #st-range button { padding: 8px 12px; line-height: 1; text-box: trim-both cap alphabetic; }
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border: 1px solid var(--line); }
+.seg button { display: flex; justify-content: center; align-items: baseline; gap: 6px; background: none; border: 0; border-left: 1px solid var(--line); color: var(--dim); font-size: 11px; padding: 6px 8px; }
+.seg button:first-child { border-left: 0; }
+.seg button span { color: var(--faint); font-size: 10px; }
+.seg button:hover { color: var(--fg); background: #161616; }
+.seg button[aria-pressed="true"] { background: var(--on); color: #000; }
+.seg button[aria-pressed="true"] span { color: #666; }
+.note { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fg); }
+.muted { color: var(--faint); }
+.shots { display: flex; gap: 8px; flex-wrap: wrap; }
+.shots img { width: 220px; height: 124px; object-fit: cover; border: 1px solid var(--line); background: #000; cursor: zoom-in; }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; }
+.brand img { width: 20px; height: 20px; }
+.brand small { color: var(--faint); font-weight: 400; letter-spacing: .16em; font-size: 10px; text-transform: uppercase; }
+.ghost { background: none; border: 1px solid var(--line2); color: var(--dim); padding: 5px 12px; font-size: 11px; }
+.ghost::before { content: "+ "; }
+.ghost:hover { color: var(--on); border-color: var(--on); }
+.ghost:disabled { opacity: .5; cursor: default; }
+.ghost.danger { color: var(--bad); border-color: rgba(var(--r), .6); }
+.search { background: var(--panel); border: 1px solid var(--line); padding: 5px 10px; width: 220px; font-size: 12px; }
+.search::placeholder { color: var(--faint); }
+.tabs { display: flex; }
+.tabs button { background: none; border: 1px solid var(--line); color: var(--dim); padding: 4px 14px; font-size: 11px; }
+.tabs button + button { border-left: 0; }
+.tabs button[aria-pressed="true"] { background: var(--on); color: #000; border-color: var(--on); }
+.head-left { display: flex; gap: 22px; align-items: center; }
+.head-right { display: flex; gap: 8px; }
+.small { font-size: 11px; }
+#st-range { margin-left: auto; }
+.banner { padding: 8px 20px; color: var(--bad); border-bottom: 1px solid var(--line); font-size: 12px; }
+
+/* inbox: 7-day tiles, then list + reader */
+.a { display: grid; grid-template-columns: 380px 1fr; grid-template-rows: auto minmax(0, 1fr); height: calc(100vh - 52px); }
+.a-week { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.a-week .tile { border: 1px solid var(--line); background: var(--panel); padding: 10px 12px; display: grid; gap: 2px; }
+.a-week .tile .label .sw { width: 8px; height: 8px; margin-right: 8px; }
+.a-week strong { font-size: 22px; font-weight: 400; letter-spacing: -.02em; }
+.a-week .bars { height: 18px; margin-top: 4px; }
+.a-list { overflow: auto; background: var(--panel); border-right: 1px solid var(--line); }
+.a-tools { padding: 12px 14px; display: grid; gap: 8px; position: sticky; top: 0; z-index: 2; background: var(--panel); border-bottom: 1px solid var(--line); }
+.a-sub { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); }
+.a-sub select { display: none; }
+.a-sub .dd + select + .dd { border-left: 1px solid var(--line); }
+.a-count { padding: 8px 14px; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--faint); border-bottom: 1px solid var(--line); }
+.a-item { display: grid; gap: 6px; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid #1a1a1a; box-shadow: inset 2px 0 0 transparent; padding: 12px 16px; font-weight: 400; }
+.a-item:hover { background: #151515; }
+.a-item[aria-current="true"] { background: #1a1a1a; box-shadow: inset 2px 0 0 var(--on); }
+.a-item .row { display: flex; gap: 8px; align-items: center; min-width: 0; font-size: 11px; }
+.a-item .kind { display: inline-flex; align-items: center; gap: 6px; color: var(--fg); flex: none; }
+.a-item .kind i { width: 6px; height: 6px; }
+.a-item .why { color: var(--faint); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }
+.a-item .when { margin-left: auto; color: var(--faint); flex: none; display: inline-flex; align-items: center; gap: 6px; }
+.a-item .snip { color: var(--dim); font-size: 12px; line-height: 1.5; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.a-item.unread .snip { color: var(--fg); }
+.a-item.unread .when::before { content: ""; width: 5px; height: 5px; background: var(--on); }
+.a-read { overflow: auto; padding: 28px 36px; display: grid; align-content: start; gap: 22px; max-width: 820px; }
+.a-read h1 { font-size: 20px; margin: 0; letter-spacing: -.01em; }
+.a-meta { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 0; }
+.a-meta dt { color: var(--faint); }
+.a-meta dd { margin: 0; }
+.a-actions { display: flex; gap: 8px; }
+.a-actions .ghost:first-child { background: var(--on); color: #000; border-color: var(--on); }
+.a-actions .ghost:first-child::before { content: "✓ "; }
+.a-ctx { border: 1px solid var(--line); background: #141414; padding: 10px 12px; color: var(--dim); display: grid; gap: 4px; font-size: 12px; }
+.a-ctx b { color: var(--fg); font-weight: 400; }
+
+/* custom dropdown over each hidden <select> */
+.dd { position: relative; min-width: 0; }
+.dd > button { width: 100%; display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; gap: 1px 6px; align-items: center; background: none; border: 0; color: var(--dim); font-size: 11px; padding: 5px 9px 6px; text-align: left; }
+.dd > button .k { grid-column: 1; font-size: 9px; letter-spacing: .16em; text-transform: uppercase; color: var(--faint); }
+.dd > button .v { grid-column: 1; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dd.set > button .v { color: var(--fg); }
+.dd > button::after { content: ""; grid-column: 2; grid-row: 1 / 3; width: 5px; height: 5px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: translateY(-2px) rotate(45deg); }
+.dd > button:hover, .dd.open > button { background: #161616; color: var(--fg); }
+.dd.open > button::after { transform: translateY(1px) rotate(-135deg); }
+.dd ul { position: absolute; z-index: 20; top: calc(100% + 2px); left: -1px; right: -1px; margin: 0; padding: 2px; list-style: none; background: #0d0d0d; border: 1px solid var(--line2); display: none; max-height: 260px; overflow: auto; }
+.dd.open ul { display: block; }
+.dd li { padding: 5px 8px; font-size: 11px; color: var(--dim); cursor: pointer; white-space: nowrap; display: flex; gap: 8px; }
+.dd li::before { content: ""; width: 8px; flex: none; }
+.dd li[aria-selected="true"] { color: var(--fg); }
+.dd li[aria-selected="true"]::before { content: "\2713"; }
+.dd li:hover, .dd li.hover { background: rgba(255,255,255,.06); color: var(--fg); }
+
+/* stats */
+.st { overflow: auto; height: calc(100vh - 52px); padding: 14px 20px 40px; display: grid; gap: 14px; align-content: start; }
+.st-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.st-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px; }
+.card { border: 1px solid var(--line); background: var(--panel); padding: 0 14px 14px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+.card > .label:first-child, .card > .h:first-child { margin: 0 -14px; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+.card .h { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.s4 { grid-column: span 4; } .s8 { grid-column: span 8; }
+.summary { display: block; font-size: 12px; line-height: 1.5; color: var(--dim); border: 1px solid rgba(var(--g), .6); background: linear-gradient(135deg, rgba(var(--g), .16), rgba(var(--g), .02) 60%, transparent) var(--bg); padding: 14px 16px; }
+.summary b { color: var(--fg); font-weight: 400; }
+.sum-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.sum-list li { display: flex; align-items: center; gap: 10px; }
+.sum-list li .sw { flex: none; margin: 0; width: 8px; height: 8px; }
+.sum-list li > .sw.dash { height: 1px; background: var(--dim); }
+.more > summary { list-style: none; cursor: pointer; color: var(--dim); padding: 10px 2px; display: flex; gap: 10px; align-items: center; }
+.more > summary::-webkit-details-marker { display: none; }
+.more > summary::before { content: "+"; color: var(--faint); width: 10px; }
+.more[open] > summary::before { content: "−"; }
+.more > summary:hover { color: var(--on); }
+.more[open] > summary { margin-bottom: 8px; }
+.kpi > .label:first-child { margin-bottom: 4px; }
+.kpi strong { font-size: 26px; font-weight: 600; letter-spacing: -.02em; line-height: 1.1; }
+.kpi .delta { font-size: 11px; color: var(--dim); }
+.kpi .sw { margin-right: 8px; }
+.legend { display: flex; gap: 14px; font-size: 11px; color: var(--dim); flex-wrap: wrap; }
+.sw { display: inline-block; width: 10px; height: 10px; margin-right: 6px; vertical-align: -1px; }
+.vol { position: relative; height: 170px; border: 1px solid var(--line); border-top: 0; cursor: crosshair; background: repeating-linear-gradient(0deg, rgba(255,255,255,.022) 0 1px, transparent 1px 24px), repeating-linear-gradient(90deg, rgba(255,255,255,.022) 0 1px, transparent 1px 24px), #0d0d0d; }
+.vol svg { position: absolute; inset: 10px 8px; width: calc(100% - 16px); height: calc(100% - 20px); overflow: visible; }
+.vol polyline { fill: none; stroke-width: 1.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.vol .rule { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line2); display: none; pointer-events: none; }
+.vol .dot { position: absolute; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; border: 1px solid #0d0d0d; display: none; pointer-events: none; }
+.bars { display: flex; align-items: flex-end; gap: 1px; height: 20px; border-bottom: 1px solid var(--line); margin-top: 6px; }
+.bars i { flex: 1; min-height: 1px; background: var(--bar-dim); }
+.bars i.hi { background: var(--k); }
+.axis { display: flex; justify-content: space-between; color: var(--faint); font-size: 10px; }
+.hbars { display: grid; gap: 9px; }
+.hbar { display: grid; grid-template-columns: 96px 1fr 30px; gap: 10px; align-items: center; font-size: 11px; color: var(--dim); }
+.hbar > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hbar .track { height: 8px; display: flex; gap: 2px; }
+.hbar .track i { display: block; height: 100%; }
+.hbar b { color: var(--fg); font-weight: 400; text-align: right; }
+.meters { display: grid; gap: 12px; padding-top: 12px; }
+.meter { display: grid; grid-template-columns: 170px 1fr 120px 76px; gap: 12px; align-items: center; font-size: 11px; color: var(--dim); }
+.meter .track { height: 6px; background: var(--line); }
+.meter .track i { display: block; height: 100%; }
+.meter .num { color: var(--fg); text-align: right; }
+.meter .stat { display: flex; align-items: center; gap: 6px; }
+.meter .stat::before { content: ""; width: 7px; height: 7px; background: currentColor; }
+.tbl-wrap { max-height: 200px; overflow: auto; border: 1px solid var(--line); border-top: 0; }
+.mini-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 11px; font-variant-numeric: tabular-nums; }
+.mini-table th, .mini-table td { width: 25%; padding: 6px 14px; text-align: left; }
+.mini-table th { position: sticky; top: 0; background: var(--panel); color: var(--faint); font-weight: 400; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; border-bottom: 1px solid var(--line); }
+.mini-table th .sw { width: 8px; height: 8px; margin-right: 8px; vertical-align: 0; }
+.mini-table tbody tr:hover td { background: rgba(255,255,255,.03); }
+.mini-table td.zero { color: var(--faint); }
+.split { display: grid; gap: 8px; padding: 12px 0 4px; }
+.split-row { display: grid; grid-template-columns: 84px 1fr 36px; gap: 12px; align-items: end; font-size: 11px; }
+.split-row b { text-align: right; font-weight: 400; color: var(--fg); }
+.split-bars { display: flex; align-items: flex-end; gap: 2px; height: 36px; border-bottom: 1px solid var(--line); }
+.split-bars i { flex: 1; min-height: 1px; }
+.split-bars i:hover { filter: brightness(1.25); }
+.heat { display: grid; grid-template-columns: 84px repeat(var(--n), 1fr); gap: 2px; padding: 12px 0 4px; align-items: center; font-size: 11px; }
+.heat i { aspect-ratio: 1; min-height: 6px; }
+.heat i:hover { outline: 1px solid var(--fg); }
+.tip { position: fixed; pointer-events: none; background: var(--bg); border: 1px solid var(--line2); padding: 8px 10px; font-size: 11px; display: none; z-index: 30; white-space: nowrap; line-height: 1.7; }
+.tip .sw { width: 8px; height: 8px; }
+
+/* lightbox */
+.lb { position: fixed; inset: 0; background: rgba(0,0,0,.88); display: none; place-items: center; z-index: 40; cursor: zoom-out; }
+.lb.on { display: grid; }
+.lb img { max-width: 92vw; max-height: 88vh; border: 1px solid var(--line2); }
+
+@media (max-width: 900px) { .st-grid > * { grid-column: span 12; } .meter { grid-template-columns: 1fr 70px; } .meter .track { grid-column: 1 / -1; grid-row: 2; } }
+@media (max-width: 760px) {
+  .a { grid-template-columns: 1fr; height: auto; }
+  .a-week { grid-template-columns: 1fr 1fr; }
+  .a-read { padding: 20px 16px; }
+  .search { width: 140px; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="head-left">
+    <div class="brand"><img src="/assets/icon.png" alt="">Anime4Nerd <small>feedback</small></div>
+    <div class="tabs" id="tabs"><button data-t="inbox" aria-pressed="true">Inbox</button><button data-t="stats" aria-pressed="false">Stats</button></div>
+  </div>
+  <div class="head-right"><input class="search" id="search" placeholder="Search notes" aria-label="Search notes"><button class="ghost" id="signout">Sign out</button></div>
+</header>
+<div class="banner" id="banner" role="alert" hidden></div>
+<div class="a" id="inbox">
+  <div class="a-week" id="a-week"></div>
+  <div class="a-list">
+    <div class="a-tools">
+      <div class="seg" id="kinds"></div>
+      <div class="a-sub">
+        <select id="f-ver" aria-label="Version"><option value="">All</option></select>
+        <select id="f-br" aria-label="Browser"><option value="">All</option><option>chrome</option><option>firefox</option></select>
+        <select id="f-st" aria-label="Status"><option value="open">Open</option><option value="done">Done</option><option value="">Any</option></select>
+      </div>
+    </div>
+    <div class="a-count" id="a-count">Loading…</div>
+    <div id="a-items"></div>
+  </div>
+  <article class="a-read" id="a-read"></article>
+</div>
+<div class="st" id="stats" hidden>
+  <div class="st-bar">
+    <span class="muted small">Only what people chose to send through the forms, plus server counters. No extension telemetry.</span>
+    <div class="filters" id="st-range"></div>
+  </div>
+  <div class="summary" id="st-summary"></div>
+  <div class="st-grid" id="st-kpis"></div>
+  <div class="st-grid">
+    <div class="card s8">
+      <div class="h"><span class="label">Answers per day</span><div class="filters" id="vol-pick"></div></div>
+      <div class="legend" id="vol-legend"></div>
+      <div id="vol-body"></div>
+    </div>
+    <div class="card s4">
+      <div class="h"><span class="label">Top reasons</span><div class="filters" id="rs-pick"></div></div>
+      <div class="hbars" id="st-reasons"></div>
+    </div>
+  </div>
+  <details class="more">
+    <summary id="st-health-line"></summary>
+    <div class="card"><div class="meters" id="st-health"></div><span class="muted small">Daily caps in /api/send · reset 00:00 UTC · Cloudflare's own KV usage is in the Cloudflare dashboard</span></div>
+  </details>
+  <details class="more">
+    <summary>More details <span class="muted">versions, browsers, screenshots</span></summary>
+    <div class="st-grid">
+      <div class="card s4"><span class="label">Per version</span><div class="legend" id="ver-legend"></div><div class="hbars" id="st-ver"></div></div>
+      <div class="card s4"><span class="label">Browser, reports only</span><div class="hbars" id="st-br"></div></div>
+      <div class="card s4"><span class="label">Notes &amp; screenshots, reports</span><div class="hbars" id="st-att"></div></div>
+    </div>
+  </details>
+</div>
+<div class="tip" id="tip"></div>
+<div class="lb" id="lb"><img alt=""></div>
+
+<script nonce="__NONCE__">
+(() => {
+'use strict';
+// Answers are untrusted text typed by strangers. Every value goes on screen through el(), as text
+// nodes or attributes, never as HTML. Styles are set through the CSSOM (allowed by the page's CSP).
+function el(name, props = {}, ...kids) {
+  const n = document.createElement(name);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === 'class') n.className = v;
+    else if (k === 'style') n.style.cssText = v;
+    else if (k.startsWith('on')) n[k] = v;
+    else n.setAttribute(k, v);
+  }
+  for (const k of kids) if (k != null && k !== false) n.append(k instanceof Node ? k : String(k));
+  return n;
+}
+const $ = (id) => document.getElementById(id);
+
+const KINDS = [['bug', 'Bugs'], ['idea', 'Ideas'], ['uninstall', 'Uninstalls']];
+const FILTERS = [['all', 'All'], ...KINDS];
+const COLOR = { bug: 'var(--c-bug)', idea: 'var(--c-idea)', uninstall: 'var(--c-uninstall)' };
+const VIEWS = [['lines', 'Lines'], ['trend', 'Trend'], ['split', 'Split'], ['grid', 'Grid'], ['table', 'Table']];
+const DAY = 864e5;
+const SEEN_KEY = 'a4n-admin-seen';
+
+let DATA = [];
+let TODAY = { report: 0, uninstall: 0, shots: 0 };
+let CAPS = { report: 60, uninstall: 60, shots: 30 };
+const NOTES = new Map(); // key -> full answer, fetched when opened
+let filter = 'all', currentKey = null, range = 30, volView = 'lines', reasonKind = 'bug', query = '';
+
+const ms = (at) => Date.parse(at.replace('Z', ':00Z'));
+const when = (at) => new Date(ms(at)).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+const fmtDay = (d) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const sum = (list, k) => list.reduce((a, x) => a + x[k], 0);
+const sw = (k) => el('span', { class: 'sw', style: `background:${COLOR[k]}` });
+const titleOf = (r) => (r.t === 'uninstall' ? 'Uninstall answer' : r.t === 'idea' ? 'Idea' : 'Bug report');
+const shotUrl = (r, n) => `/admin/api/shot?key=${encodeURIComponent(`shot:${r.key.slice(r.key.indexOf(':') + 1)}:${n}`)}`;
+const semverDesc = (a, b) => b.split('.').map(Number).reduce((c, x, i) => c || x - (Number(a.split('.')[i]) || 0), 0);
+
+function showError(text) { $('banner').textContent = text; $('banner').hidden = !text; }
+
+// ---------- server ----------
+async function api(path, opts = {}) {
+  const res = await fetch(path, { credentials: 'same-origin', ...opts });
+  // 404 means the session ended (or the password changed): show the sign-in page again.
+  if (res.status === 404 && !path.startsWith('/admin/api/answer?')) { location.reload(); throw new Error('signed out'); }
+  if (!res.ok && res.status !== 204) throw new Error(`HTTP ${res.status}`);
+  return res;
+}
+const post = (path, body) => api(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+
+async function load() {
+  try {
+    const body = await (await api('/admin/api/answers')).json();
+    let seen = '';
+    try { seen = localStorage.getItem(SEEN_KEY) ?? ''; } catch {}
+    DATA = body.answers.map((a) => ({ ...a, unread: !!seen && a.at > seen }));
+    TODAY = body.today;
+    CAPS = body.caps;
+    try { if (DATA[0]) localStorage.setItem(SEEN_KEY, DATA[0].at); } catch {}
+    const vers = [...new Set(DATA.map((r) => r.v).filter(Boolean))].sort(semverDesc);
+    $('f-ver').replaceChildren(el('option', { value: '' }, 'All'), ...vers.map((v) => el('option', {}, v)));
+    $('f-ver').dispatchEvent(new Event('rebuild'));
+    showError('');
+    renderAll();
+  } catch (e) {
+    if (e.message !== 'signed out') showError(`Could not load answers (${e.message}). Reload to try again.`);
+  }
+}
+
+// ---------- inbox ----------
+const fv = (id) => $(id).value;
+const matches = (r) => {
+  if (!query) return true;
+  const full = NOTES.get(r.key)?.note ?? r.p;
+  return `${full} ${r.r.join(' ')}`.toLowerCase().includes(query);
+};
+const rows = () => DATA.filter((r) => (filter === 'all' || r.t === filter)
+  && (!fv('f-ver') || r.v === fv('f-ver')) && (!fv('f-br') || r.b === fv('f-br'))
+  && (!fv('f-st') || (fv('f-st') === 'done') === r.done) && matches(r));
+
+function renderKinds() {
+  $('kinds').replaceChildren(...FILTERS.map(([k, label]) => el('button', { 'aria-pressed': String(filter === k), onclick: () => { filter = k; currentKey = null; renderA(); renderKinds(); } },
+    label, el('span', {}, k === 'all' ? DATA.length : DATA.filter((r) => r.t === k).length))));
+}
+
+// Shown only when earlier answers of the same kind share a reason.
+function context(r) {
+  const week = DATA.filter((x) => x !== r && x.t === r.t && ms(r.at) - ms(x.at) > 0 && ms(r.at) - ms(x.at) < 7 * DAY);
+  const same = week.filter((x) => x.r.some((y) => r.r.includes(y))).length;
+  if (!same) return null;
+  const vers = [...new Set(DATA.filter((x) => x.t === r.t && x.v && x.r.some((y) => r.r.includes(y))).map((x) => x.v))].sort(semverDesc).reverse();
+  return el('div', { class: 'a-ctx' },
+    el('span', {}, el('b', {}, same), ` other ${r.t} ${same === 1 ? 'answer' : 'answers'} with the same reason in the 7 days before`),
+    vers.length ? el('span', {}, 'Seen on ', el('b', {}, vers.map((v) => 'v' + v).join(', '))) : null);
+}
+
+function shotsRow(r) {
+  return el('div', { class: 'shots' }, ...Array.from({ length: r.s }, (_, i) => {
+    const src = shotUrl(r, i + 1);
+    return el('img', { src, alt: `Screenshot ${i + 1}`, loading: 'lazy', onclick: () => openLb(src) });
+  }));
+}
+
+function actions(r) {
+  const doneBtn = el('button', { class: 'ghost' }, r.done ? 'Reopen' : 'Mark done');
+  doneBtn.onclick = async () => {
+    doneBtn.disabled = true;
+    try {
+      await post('/admin/api/done', { key: r.key, done: !r.done });
+      r.done = !r.done;
+      renderA();
+    } catch (e) { doneBtn.disabled = false; showError(`Could not save (${e.message}).`); }
+  };
+  // Delete asks once more on the button itself, and forgets after 4 seconds.
+  const delBtn = el('button', { class: 'ghost' }, 'Delete');
+  let armed = null;
+  delBtn.onclick = async () => {
+    if (!armed) {
+      delBtn.textContent = 'Delete for good?';
+      delBtn.classList.add('danger');
+      armed = setTimeout(() => { armed = null; delBtn.textContent = 'Delete'; delBtn.classList.remove('danger'); }, 4000);
+      return;
+    }
+    clearTimeout(armed);
+    delBtn.disabled = true;
+    try {
+      await post('/admin/api/delete', { key: r.key });
+      DATA = DATA.filter((x) => x !== r);
+      currentKey = null;
+      renderAll();
+    } catch (e) { delBtn.disabled = false; showError(`Could not delete (${e.message}).`); }
+  };
+  return el('div', { class: 'a-actions' }, doneBtn, delBtn);
+}
+
+function reader(r) {
+  const full = NOTES.get(r.key);
+  const note = full ? full.note : r.p;
+  return [
+    el('div', { style: 'display:flex;gap:6px;align-items:center' }, el('span', { class: `chip ${r.t}` }, r.t), el('span', { class: 'muted' }, when(r.at) + ' UTC')),
+    el('h1', {}, titleOf(r)),
+    el('dl', { class: 'a-meta' }, el('dt', {}, 'Reasons'), el('dd', {}, r.r.join(', ') || '—'), el('dt', {}, 'Version'), el('dd', {}, r.v ? 'v' + r.v : '—'),
+      r.t === 'uninstall' ? null : el('dt', {}, 'Browser'), r.t === 'uninstall' ? null : el('dd', {}, r.b || '—')),
+    context(r),
+    el('div', { style: 'display:grid;gap:8px' }, el('span', { class: 'label' }, 'Note'),
+      el('div', { class: 'note' }, note || el('span', { class: 'muted' }, 'No note'), !full && note ? el('span', { class: 'muted' }, ' …') : null)),
+    r.s ? el('div', { style: 'display:grid;gap:8px' }, el('span', { class: 'label' }, `Screenshots · ${r.s}`), shotsRow(r)) : null,
+    r.d ? el('span', { class: 'muted' }, `${r.d} more ${r.d === 1 ? 'screenshot was' : 'screenshots were'} dropped by the daily cap.`) : null,
+    actions(r),
+  ].filter(Boolean);
+}
+
+async function fetchNote(r) {
+  if (NOTES.has(r.key) || !r.p) return;
+  try {
+    const res = await api(`/admin/api/answer?key=${encodeURIComponent(r.key)}`);
+    NOTES.set(r.key, await res.json());
+    if (currentKey === r.key) $('a-read').replaceChildren(...reader(r));
+  } catch (e) {
+    if (e.message !== 'signed out') showError(`Could not load the full note (${e.message}).`);
+  }
+}
+
+function renderA() {
+  const list = rows();
+  const unread = list.filter((x) => x.unread).length;
+  $('a-count').textContent = `${list.length} shown${unread ? ` · ${unread} new` : ''} · newest first`;
+  if (!list.some((r) => r.key === currentKey)) currentKey = list[0]?.key ?? null;
+  $('a-items').replaceChildren(...list.map((r) => el('button', {
+    class: `a-item${r.unread ? ' unread' : ''}`, 'aria-current': String(r.key === currentKey),
+    onclick: () => { currentKey = r.key; r.unread = false; renderA(); },
+  },
+  el('div', { class: 'row' }, el('span', { class: 'kind' }, el('i', { style: `background:${COLOR[r.t]}` }), r.t), el('span', { class: 'why' }, r.r.join(' · ')), el('span', { class: 'when' }, when(r.at))),
+  el('div', { class: 'snip' }, r.p || el('span', { class: 'muted' }, 'No note')))));
+  const r = list.find((x) => x.key === currentKey);
+  if (!r) return $('a-read').replaceChildren(el('p', { class: 'muted' }, DATA.length ? 'Nothing matches these filters.' : 'No answers yet.'));
+  $('a-read').replaceChildren(...reader(r));
+  fetchNote(r);
+}
+
+// Custom dropdown over each hidden <select>: click or Enter/Space opens, arrows move, Enter picks, Escape closes.
+function dropdown(sel) {
+  const label = el('span', { class: 'v' });
+  const btn = el('button', { type: 'button', 'aria-haspopup': 'listbox', 'aria-label': sel.getAttribute('aria-label') }, el('span', { class: 'k' }, sel.getAttribute('aria-label')), label);
+  const list = el('ul', { role: 'listbox' });
+  const box = el('div', { class: 'dd' }, btn, list);
+  let hover = -1;
+  const sync = () => {
+    label.textContent = sel.selectedOptions[0]?.textContent ?? '';
+    box.classList.toggle('set', sel.selectedIndex !== 0);
+    list.replaceChildren(...[...sel.options].map((o, i) => el('li', { role: 'option', 'aria-selected': String(o.selected), class: i === hover ? 'hover' : '', onclick: () => pick(i) }, o.textContent)));
+  };
+  const close = () => { box.classList.remove('open'); hover = -1; };
+  const pick = (i) => { sel.selectedIndex = i; sel.dispatchEvent(new Event('change')); close(); sync(); btn.focus(); };
+  btn.onclick = () => { const open = !box.classList.contains('open'); document.querySelectorAll('.dd.open').forEach((d) => d.classList.remove('open')); box.classList.toggle('open', open); hover = sel.selectedIndex; sync(); };
+  btn.onkeydown = (e) => {
+    if (!box.classList.contains('open')) return;
+    const n = sel.options.length;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); hover = (hover + (e.key === 'ArrowDown' ? 1 : n - 1)) % n; sync(); }
+    else if (e.key === 'Enter') { e.preventDefault(); pick(hover); }
+    else if (e.key === 'Escape') { close(); sync(); }
+  };
+  document.addEventListener('click', (e) => { if (!box.contains(e.target)) close(); });
+  sel.addEventListener('rebuild', sync);
+  sel.after(box);
+  sync();
+}
+
+// ---------- stats ----------
+// One entry per UTC day for the last 180 days, counted from the answers.
+function series() {
+  const today = Date.parse(new Date().toISOString().slice(0, 10));
+  const days = Array.from({ length: 180 }, (_, i) => ({ d: new Date(today - (179 - i) * DAY), bug: 0, idea: 0, uninstall: 0, shots: 0 }));
+  for (const r of DATA) {
+    const i = 179 - Math.floor((today - Date.parse(r.at.slice(0, 10))) / DAY);
+    if (i < 0 || i > 179) continue;
+    days[i][r.t]++;
+    days[i].shots += r.s;
+  }
+  return days;
+}
+const inRange = (n) => { const from = Date.now() - n * DAY; return DATA.filter((r) => ms(r.at) >= from); };
+
+const tip = $('tip');
+function showTip(e, lines) { tip.replaceChildren(...lines); tip.style.display = 'block'; tip.style.left = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8) + 'px'; tip.style.top = e.clientY + 14 + 'px'; }
+const hideTip = () => (tip.style.display = 'none');
+
+function hbars(id, items, colorOf, total) {
+  if (!items.length) return $(id).replaceChildren(el('span', { class: 'muted', style: 'font-size:11px' }, 'Nothing in this range.'));
+  const max = Math.max(1, ...items.map((x) => x.n ?? Object.values(x.parts).reduce((a, b) => a + b, 0)));
+  $(id).replaceChildren(...items.map((x) => {
+    const parts = x.parts ?? { [x.k]: x.n };
+    const n = Object.values(parts).reduce((a, b) => a + b, 0);
+    return el('div', { class: 'hbar', onmousemove: (e) => showTip(e, [el('div', {}, el('b', {}, x.label)), ...Object.entries(parts).map(([k, v]) => el('div', {}, colorOf(k) ? sw(k) : '', `${k}: ${v}${total ? ` (${Math.round((v / total) * 100)}%)` : ''}`))]), onmouseleave: hideTip },
+      el('span', {}, x.label), el('div', { class: 'track' }, ...Object.entries(parts).filter(([, v]) => v).map(([k, v]) => el('i', { style: `width:${(v / max) * 100}%;background:${colorOf(k) || 'var(--fg)'}` }))), el('b', {}, n));
+  }));
+}
+
+function bars(list, k, color) {
+  const n = Math.min(30, list.length), size = list.length / n;
+  const vals = Array.from({ length: n }, (_, i) => sum(list.slice(Math.floor(i * size), Math.floor((i + 1) * size)), k));
+  const max = Math.max(1, ...vals);
+  return el('div', { class: 'bars', style: `--k:${color}`, 'aria-hidden': 'true' }, ...vals.map((v, i) => el('i', { class: i === n - 1 ? 'hi' : '', style: `height:${(v / max) * 100}%` })));
+}
+
+function renderWeek(S) {
+  const week = S.slice(-7);
+  const tile = (k, label, color) => el('div', { class: 'tile' },
+    el('span', { class: 'label' }, color ? el('span', { class: 'sw', style: `background:${color}` }) : '', label, ' · 7d'),
+    el('strong', {}, sum(week, k)), bars(week, k, color || 'var(--fg)'));
+  $('a-week').replaceChildren(...KINDS.map(([k, l]) => tile(k, l, COLOR[k])), tile('shots', 'Screenshots', null));
+}
+
+function topReason(list, t) {
+  const counts = {};
+  list.filter((r) => r.t === t).forEach((r) => r.r.forEach((x) => (counts[x] = (counts[x] || 0) + 1)));
+  return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+}
+
+function renderVolume(S, cur) {
+  $('vol-legend').replaceChildren(...KINDS.map(([k, l]) => el('span', {}, sw(k), l)));
+  $('vol-pick').replaceChildren(...VIEWS.map(([v, l]) => el('button', { 'aria-pressed': String(volView === v), onclick: () => { volView = v; renderStats(); } }, l)));
+  const body = $('vol-body');
+  const dayTip = (e, i) => showTip(e, [el('div', {}, el('b', {}, fmtDay(cur[i].d))), ...KINDS.map(([k, l]) => el('div', {}, sw(k), `${l}: ${cur[i][k]}`))]);
+  const axis = (mid) => el('div', { class: 'axis' }, el('span', {}, fmtDay(cur[0].d)), el('span', {}, mid), el('span', {}, fmtDay(cur.at(-1).d)));
+  const peak = Math.max(1, ...cur.flatMap((x) => KINDS.map(([k]) => x[k])));
+  if (volView === 'table') {
+    body.replaceChildren(el('div', { class: 'tbl-wrap' }, el('table', { class: 'mini-table' },
+      el('thead', {}, el('tr', {}, el('th', {}, 'Day'), ...KINDS.map(([k, l]) => el('th', {}, sw(k), l)))),
+      el('tbody', {}, ...cur.slice().reverse().map((x) => el('tr', {}, el('td', { class: 'muted' }, fmtDay(x.d)), ...KINDS.map(([k]) => el('td', { class: x[k] ? '' : 'zero' }, x[k]))))))));
+  } else if (volView === 'split') {
+    body.replaceChildren(el('div', { class: 'split' }, ...KINDS.map(([k, l]) => el('div', { class: 'split-row' },
+      el('span', { class: 'muted' }, l), el('div', { class: 'split-bars' }, ...cur.map((x, i) => el('i', { style: `height:${(x[k] / peak) * 100}%;background:${COLOR[k]}`, onmousemove: (e) => dayTip(e, i), onmouseleave: hideTip }))),
+      el('b', {}, sum(cur, k))))), axis(`peak ${peak} a day`));
+  } else if (volView === 'grid') {
+    body.replaceChildren(el('div', { class: 'heat', style: `--n:${cur.length}` }, ...KINDS.flatMap(([k, l]) => [el('span', { class: 'muted' }, l),
+      ...cur.map((x, i) => el('i', { style: `background:${x[k] ? `color-mix(in srgb, ${COLOR[k]} ${20 + (x[k] / peak) * 80}%, #0d0d0d)` : '#161616'}`, onmousemove: (e) => dayTip(e, i), onmouseleave: hideTip }))])), axis('brighter = more'));
+  } else {
+    // lines: daily counts, or a 7-day average that shows the trend without day-to-day noise
+    const avg = volView === 'trend';
+    const off = S.length - cur.length;
+    const val = (k, i) => (avg ? sum(S.slice(Math.max(0, off + i - 6), off + i + 1), k) / 7 : cur[i][k]);
+    const vals = Object.fromEntries(KINDS.map(([k]) => [k, cur.map((_, i) => val(k, i))]));
+    const max = Math.max(avg ? 0.5 : 1, ...Object.values(vals).flat());
+    const NS = 'http://www.w3.org/2000/svg', last = Math.max(1, cur.length - 1);
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', `0 0 ${last} ${max}`);
+    svg.setAttribute('preserveAspectRatio', 'none');
+    for (const [k] of KINDS.slice().reverse()) {
+      const line = document.createElementNS(NS, 'polyline');
+      line.setAttribute('points', vals[k].map((v, i) => `${i},${max - v}`).join(' '));
+      line.setAttribute('stroke', COLOR[k]);
+      if (avg) line.style.strokeWidth = '2';
+      svg.append(line);
+    }
+    const rule = el('div', { class: 'rule' });
+    const dots = KINDS.map(([k]) => el('div', { class: 'dot', style: `background:${COLOR[k]}` }));
+    const box = el('div', { class: 'vol' }, svg, rule, ...dots);
+    box.onmousemove = (e) => {
+      const r = svg.getBoundingClientRect(), b = box.getBoundingClientRect();
+      const i = Math.max(0, Math.min(last, Math.round(((e.clientX - r.left) / r.width) * last)));
+      const x = r.left - b.left + (i / last) * r.width;
+      rule.style.left = x + 'px'; rule.style.display = 'block';
+      KINDS.forEach(([k], j) => Object.assign(dots[j].style, { left: x + 'px', top: r.top - b.top + (1 - vals[k][i] / max) * r.height + 'px', display: 'block' }));
+      if (!avg) return dayTip(e, i);
+      showTip(e, [el('div', {}, el('b', {}, `Week to ${fmtDay(cur[i].d)}`)), ...KINDS.map(([k, l]) => el('div', {}, sw(k), `${l}: ${vals[k][i].toFixed(1)} a day`))]);
+    };
+    box.onmouseleave = () => { rule.style.display = 'none'; dots.forEach((d) => (d.style.display = 'none')); hideTip(); };
+    body.replaceChildren(box, axis(avg ? '7-day average' : `peak ${max} a day`));
+  }
+}
+
+function renderHealth() {
+  const health = [['Reports today', TODAY.report, CAPS.report, 'answers'], ['Uninstall answers today', TODAY.uninstall, CAPS.uninstall, 'answers'], ['Screenshots today', TODAY.shots, CAPS.shots, 'shots']];
+  const tight = health.filter(([, n, cap]) => n / cap >= 0.7);
+  $('st-health-line').replaceChildren(
+    el('span', { style: 'color:var(--fg)' }, tight.length ? `Server: ${tight.map(([l]) => l.toLowerCase()).join(', ')} near today's limit` : 'Server: everything within limits'),
+    el('span', { class: 'muted' }, 'details'));
+  $('st-health').replaceChildren(...health.map(([label, n, cap, unit]) => {
+    const p = n / cap;
+    const [txt, col] = p >= 0.9 ? ['at cap', 'var(--s-crit)'] : p >= 0.7 ? ['near cap', 'var(--s-warn)'] : ['ok', 'var(--s-ok)'];
+    return el('div', { class: 'meter' }, el('span', {}, label), el('div', { class: 'track' }, el('i', { style: `width:${Math.min(100, p * 100)}%;background:${col}` })),
+      el('span', { class: 'num' }, `${n} / ${cap} ${unit}`), el('span', { class: 'stat', style: `color:${col}` }, txt));
+  }));
+}
+
+function renderStats() {
+  const S = series();
+  renderWeek(S);
+  $('st-range').replaceChildren(...[[7, '7 days'], [30, '30 days'], [90, '90 days'], [180, '180 days']].map(([n, l]) =>
+    el('button', { 'aria-pressed': String(range === n), onclick: () => { range = n; renderStats(); } }, l)));
+  const cur = S.slice(-range), prev = S.slice(-2 * range, -range);
+  const kpi = (k, label) => {
+    const a = sum(cur, k), b = sum(prev, k), d = a - b;
+    return el('div', { class: 'card s4 kpi' }, el('span', { class: 'label' }, sw(k), label), el('strong', {}, a),
+      el('span', { class: 'delta' }, prev.length ? `${d > 0 ? '+' : d < 0 ? '−' : '±'}${Math.abs(d)} vs previous ${range} days` : ''), bars(cur, k, COLOR[k]));
+  };
+  $('st-kpis').replaceChildren(kpi('bug', 'Bugs'), kpi('idea', 'Ideas'), kpi('uninstall', 'Uninstalls'));
+
+  const list = inRange(range);
+  const up = (k) => { if (!prev.length) return ''; const d = sum(cur, k) - sum(prev, k); return d > 0 ? ` +${d}` : d < 0 ? ` −${-d}` : ' ±0'; };
+  const li = (k, ...parts) => el('li', {}, k ? sw(k) : el('span', { class: 'sw dash' }), ...parts);
+  const bugTop = topReason(list, 'bug')[0];
+  const leftTop = topReason(list, 'uninstall')[0];
+  $('st-summary').replaceChildren(el('ul', { class: 'sum-list' },
+    li('bug', el('b', {}, plural(sum(cur, 'bug'), 'bug report')), up('bug')),
+    li('idea', el('b', {}, plural(sum(cur, 'idea'), 'idea')), up('idea')),
+    li('uninstall', el('b', {}, plural(sum(cur, 'uninstall'), 'uninstall answer')), up('uninstall')),
+    bugTop ? li(null, 'Most bugs are about ', el('b', {}, bugTop[0])) : null,
+    leftTop ? li(null, 'Most people who left said ', el('b', {}, leftTop[0])) : null));
+
+  renderVolume(S, cur);
+
+  $('rs-pick').replaceChildren(...KINDS.map(([k, l]) => el('button', { 'aria-pressed': String(reasonKind === k), onclick: () => { reasonKind = k; renderStats(); } }, l)));
+  hbars('st-reasons', topReason(list, reasonKind).slice(0, 5).map(([label, n]) => ({ label, k: reasonKind, n })), (k) => COLOR[k]);
+
+  $('ver-legend').replaceChildren(...KINDS.map(([k, l]) => el('span', {}, sw(k), l)));
+  const byVer = {};
+  list.forEach((r) => { const v = r.v ? 'v' + r.v : 'unknown'; byVer[v] ??= { bug: 0, idea: 0, uninstall: 0 }; byVer[v][r.t]++; });
+  hbars('st-ver', Object.entries(byVer).sort((a, b) => semverDesc(a[0].slice(1), b[0].slice(1))).slice(0, 6).map(([label, parts]) => ({ label, parts })), (k) => COLOR[k]);
+  const reports = list.filter((r) => r.t !== 'uninstall');
+  const br = { chrome: reports.filter((r) => r.b === 'chrome').length, firefox: reports.filter((r) => r.b === 'firefox').length };
+  hbars('st-br', reports.length ? Object.entries(br).map(([label, n]) => ({ label, k: label, n })) : [], () => null, reports.length);
+  hbars('st-att', reports.length ? [['with a note', reports.filter((r) => r.p).length], ['with shots', reports.filter((r) => r.s).length], ['shots cut', reports.filter((r) => r.d).length]].map(([label, n]) => ({ label, k: label, n })) : [], () => null, reports.length);
+  renderHealth();
+}
+
+function renderAll() { renderKinds(); renderA(); renderStats(); }
+
+// ---------- wiring ----------
+['f-ver', 'f-br', 'f-st'].forEach((id) => { $(id).onchange = () => { currentKey = null; renderA(); }; dropdown($(id)); });
+document.querySelectorAll('#tabs button').forEach((b) => (b.onclick = () => {
+  document.querySelectorAll('#tabs button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+  $('inbox').hidden = b.dataset.t !== 'inbox';
+  $('stats').hidden = b.dataset.t !== 'stats';
+  $('search').hidden = b.dataset.t !== 'inbox';
+}));
+$('search').oninput = (e) => { query = e.target.value.trim().toLowerCase(); currentKey = null; renderA(); };
+$('signout').onclick = async () => {
+  try { await post('/admin/logout', {}); } catch {}
+  location.reload();
+};
+function openLb(src) { $('lb').querySelector('img').src = src; $('lb').classList.add('on'); }
+$('lb').onclick = () => $('lb').classList.remove('on');
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('lb').classList.remove('on'); });
+load();
+})();
+</script>
+</body>
+</html>

@@ -67,6 +67,64 @@ screenshots and send. Check that:
 
 Delete the test keys from KV afterwards.
 
+## Admin dashboard (/admin)
+
+https://anime4nerd.pages.dev/admin shows every answer, the screenshots and charts, after a
+password sign-in. `functions/admin/[[path]].js` serves it; the logic is in `admin/server.js`.
+
+How it is protected:
+
+- Without a valid session every `/admin/…` path answers a plain `404`, except `/admin` itself,
+  which shows only the sign-in form. The dashboard page, its script and all data come from the
+  function after sign-in, so nothing of them is a public file or visible in dev tools before then.
+- Sign-in needs Turnstile (the same widget as the forms, action `admin-login`), then the password.
+  Five wrong passwords from one visitor lock that visitor for 15 minutes; thirty from anyone in
+  one UTC day lock every sign-in until the day ends (a session you already have keeps working).
+  Each failure writes two KV keys, so failures use at most 60 of the 1,000 daily writes.
+- Only a slow salted hash of the password (PBKDF2-SHA256, 30,000 rounds: about 4 ms, inside the
+  Free plan's 10 ms CPU per request) is stored, as a secret.
+  The session is a signed cookie: HttpOnly, Secure, SameSite=Strict, 12 hours. Changing the
+  password ends every session.
+- Each page has a strict Content-Security-Policy with a fresh nonce, no framing and `no-store`.
+  Answers are shown as text, never as HTML; screenshots are served as `image/jpeg` with a sandbox
+  policy.
+- Without `ADMIN_PASSWORD_HASH` every admin path is `404`: it fails closed.
+
+Set it up (you do this yourself; the password never leaves your machine):
+
+1. Make the hash: `npm run admin:password`. Type a long password twice (nothing shows while
+   typing; 16 characters minimum). Use a long random one from a password manager: the length is
+   what stops guessing. It prints one line starting
+   `pbkdf2-sha256$`.
+2. Workers & Pages → **anime4nerd** → Settings → Variables and Secrets → **Add**: type *Secret*,
+   name `ADMIN_PASSWORD_HASH`, value: that line. Production only is enough.
+3. Deployments → latest deployment → **Retry deployment**.
+
+To change the password, repeat all three steps. To turn the dashboard off, delete the secret and
+redeploy.
+
+Optional, stronger: Zero Trust → Access → Applications → add a *Self-hosted* application for
+`anime4nerd.pages.dev/admin*` with a policy allowing only your email (one-time code by email). Then
+Cloudflare asks for that code before the sign-in page even loads. It is free for up to 50 users.
+
+Limits, said plainly:
+
+- The lock counters live in KV, which is eventually consistent: many parallel attempts, or attempts
+  from far-apart Cloudflare locations, can get a few more tries than five before the lock shows.
+  Each try still needs its own Turnstile pass, so the long password is the real protection.
+- Someone who passes Turnstile thirty times can lock sign-in for the rest of the UTC day. Your open
+  session keeps working; Cloudflare Access (above) removes this by stopping them before the form.
+- Sign out clears the cookie in that browser. To end every session everywhere (for example after a
+  lost laptop), set a new password; the old cookies stop working at once.
+- Anyone who can read the `ADMIN_PASSWORD_HASH` secret could sign sessions, so treat it like the
+  password itself.
+
+KV use: opening the dashboard lists the answer keys (one list call per 1,000 answers) and reads three
+counters; opening an answer reads its full note; Mark done writes one key; Delete removes up to five.
+New answers carry a short summary as key metadata (kind, reasons, version, browser, screenshot
+count and the first 100 characters of the note), so the list and charts need no per-answer reads.
+Answers stored before that are read one by one, up to 300 per load.
+
 ## Reading answers
 
 `npm run feedback` prints every answer in the terminal, newest first, with the screenshot keys
@@ -126,6 +184,10 @@ node site/build.mjs
 npx wrangler@4.155.0 pages dev site/public --port 8788 --kv FEEDBACK --binding TURNSTILE_SECRET=1x0000000000000000000000000000000AA --binding IP_SALT=local-test-salt --binding ALLOW_TEST_TURNSTILE=1
 ```
 
-- `node --test test/send-api.mjs`: unit tests of the function (no server needed).
+- `node --test test/send-api.mjs` and `npm run test:admin`: unit tests of the functions (no server
+  needed).
+- To try `/admin` locally, add `--binding ADMIN_PASSWORD_HASH=<hash of a test password>` (from
+  `npm run admin:password`) and `--binding TURNSTILE_SITEKEY=1x00000000000000000000AA` to the
+  command above, then open http://localhost:8788/admin.
 - `node test/send-dev.mjs http://localhost:8788`: abuse checks against the running dev server
   (uses up the local daily cap).

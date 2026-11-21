@@ -23,9 +23,9 @@ const PER_VISITOR_PER_DAY = 5;
 const SHOTS_PER_VISITOR_PER_DAY = 3;
 // Daily ceilings for everyone together, kept per form so a flood of one kind can't use up the
 // other's. They keep KV inside the Free plan: at most 120 answers x 3 writes plus 30 screenshots
-// x 3 writes = 450 of the 1,000 daily writes, and 30 x 260 KB x 60 days = 468 MB of 1 GB.
-const PER_KIND_PER_DAY = { uninstall: 60, report: 60 };
-const SHOTS_PER_DAY = 30;
+// x 3 writes = 450 of the 1,000 daily writes (the /admin sign-in can add at most 60 more), and 30 x 260 KB x 60 days = 468 MB of 1 GB.
+export const PER_KIND_PER_DAY = { uninstall: 60, report: 60 };
+export const SHOTS_PER_DAY = 30;
 const SHOT_TTL = 60 * 24 * 60 * 60; // screenshots expire after 60 days; text answers are kept
 const COUNTER_TTL = 2 * 24 * 60 * 60; // counters expire after two days
 const VERIFY_TIMEOUT_MS = 5000;
@@ -77,7 +77,7 @@ const reply = (status, body) =>
     },
   });
 
-class Rejected extends Error {
+export class Rejected extends Error {
   constructor(status, code) {
     super(code);
     this.status = status;
@@ -88,7 +88,7 @@ const reject = (status, code) => {
 };
 
 // Reads at most `limit` bytes, whatever Content-Length claims.
-async function readCapped(request, limit) {
+export async function readCapped(request, limit) {
   if (!request.body) return '';
   const reader = request.body.getReader();
   const chunks = [];
@@ -229,7 +229,7 @@ export function validate(input) {
   return { record, shots, token: input.token };
 }
 
-async function sha256Hex(text) {
+export async function sha256Hex(text) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return [...new Uint8Array(digest)].map((x) => x.toString(16).padStart(2, '0')).join('');
 }
@@ -249,7 +249,7 @@ export function ipBucket(ip) {
 }
 
 // The visitor's IP is not sent along (remoteip is optional), so it goes nowhere from here.
-async function verifyTurnstile(env, token, action, host, fetchFn) {
+export async function verifyTurnstile(env, token, action, host, fetchFn) {
   const form = new FormData();
   form.append('secret', env.TURNSTILE_SECRET);
   form.append('response', token);
@@ -286,6 +286,22 @@ async function setCount(kv, key, value) {
   } catch {
     // Best effort: the next answer writes the counter again.
   }
+}
+
+// A short summary stored as the answer key's KV metadata, so the /admin dashboard can list every
+// answer and draw its charts from list() calls alone, without reading each value. KV metadata is
+// at most 1024 bytes: the note preview is cut to 100 code points (at most 400 bytes as UTF-8).
+export const PREVIEW_CHARS = 100;
+export function summary(record, shots, dropped) {
+  return {
+    t: record.kind === 'uninstall' ? 'uninstall' : record.type,
+    r: record.reasons,
+    v: record.v,
+    b: record.b ?? '',
+    s: shots,
+    d: dropped,
+    p: [...record.note].slice(0, PREVIEW_CHARS).join(''),
+  };
 }
 
 // One log line per refused or failed request: the code only, never the body, IP or headers.
@@ -353,7 +369,7 @@ export async function handle(request, env, fetchFn = fetch) {
       await kvCall(() => kv.put(`shot:${id}:${i + 1}`, bytes, { expirationTtl: SHOT_TTL, metadata: { contentType: 'image/jpeg' } }));
     }
     const dropped = shots.length - kept.length;
-    await kvCall(() => kv.put(`${record.kind}:${id}`, JSON.stringify({ ...record, at: minute, shots: kept.length, ...(dropped ? { shotsDropped: dropped } : {}) })));
+    await kvCall(() => kv.put(`${record.kind}:${id}`, JSON.stringify({ ...record, at: minute, shots: kept.length, ...(dropped ? { shotsDropped: dropped } : {}) }), { metadata: summary(record, kept.length, dropped) }));
 
     await setCount(kv, kindKey, kindCount + 1);
     if (kept.length) {
