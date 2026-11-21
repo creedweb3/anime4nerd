@@ -1,0 +1,115 @@
+<!doctype html>
+<!--
+  Checks the color shader (src/gpu.ts present pass) on the GPU against the same math in plain JS.
+  Run: npx esbuild src/gpu.ts --bundle --format=esm --loader:.glsl=text --define:__FIREFOX__=false --outfile=test/gpu-color.js
+  then open /test/color-render.html (served from the repo root). The result is written to
+  document.title ("PASS ..." or "FAIL ...") and to #out.
+-->
+<html lang="en">
+<head><meta charset="utf-8" /><title>color render: running</title></head>
+<body style="background:#111;color:#ddd;font:12px monospace">
+<pre id="out">running…</pre>
+<script type="module">
+import { createAnime4kRenderer } from './gpu-color.js';
+
+const W = 64, H = 32;
+// A test frame: a hue sweep left to right, dark to light top to bottom, a grey strip on the left.
+const px = new Uint8ClampedArray(W * H * 4);
+for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+  const i = (y * W + x) * 4, h = x / W * 6, l = 0.15 + 0.7 * y / (H - 1);
+  const f = (n) => { const k = (n + h) % 6; return l * (1 - 0.6 * Math.max(0, Math.min(k, 4 - k, 1))); };
+  const grey = x < 4;
+  px[i] = 255 * (grey ? l : f(5)); px[i + 1] = 255 * (grey ? l : f(3)); px[i + 2] = 255 * (grey ? l : f(1)); px[i + 3] = 255;
+}
+const bitmap = await createImageBitmap(new ImageData(px, W, H));
+
+// The shader's math in JS (no grain, no deband: those are random / tested separately).
+function reference(r, g, b, c) {
+  const warm = c.temperature / 1000, mag = c.tint / 1250;
+  r += warm + 0.5 * mag; g -= mag; b += -warm + 0.5 * mag;
+  const y = Math.min(1, Math.max(0, 0.2126 * r + 0.7152 * g + 0.0722 * b));
+  const u = (b - y) / 1.8556, v = (r - y) / 1.5748;
+  const Y = Math.pow(Math.min(1, Math.max(0, c.contrast * (y - 0.5) + 0.5 + (c.brightness - 1))), 1 / c.gamma);
+  const s = c.saturation * (1 + (c.vibrance - 1) * Math.max(0, 1 - Math.hypot(u, v) * 4));
+  const hh = c.hue * Math.PI / 180, cs = Math.cos(hh), sn = Math.sin(hh);
+  const U = s * (u * cs + v * sn), V = s * (v * cs - u * sn);
+  const cl = (x) => Math.min(1, Math.max(0, x));
+  return [cl(Y + 1.5748 * V), cl(Y - 0.1873 * U - 0.4681 * V), cl(Y + 1.8556 * U)];
+}
+
+const CASES = {
+  neutral: null,
+  sunlit: { hue: 0, brightness: 0.97, contrast: 0.92, saturation: 1.03, gamma: 1.04, vibrance: 1.25, temperature: 14, tint: 0, deband: 0, grain: 0 },
+  moody: { hue: 0, brightness: 0.98, contrast: 0.92, saturation: 0.74, gamma: 1.1, vibrance: 1.07, temperature: -12, tint: 11, deband: 0, grain: 0 },
+  extreme: { hue: 120, brightness: 1.3, contrast: 1.6, saturation: 2.5, gamma: 0.5, vibrance: 1.8, temperature: -80, tint: 60, deband: 0, grain: 0 },
+};
+const lines = [];
+let worst = 0;
+for (const [name, c] of Object.entries(CASES)) {
+  const canvas = document.createElement('canvas');
+  const r = await createAnime4kRenderer(bitmap, canvas, { mode: 'auto', preset: 'A', darkenLines: false, thinLines: false, upscale: '2x' }, (m) => { throw new Error(m); }, 1, { colorOnly: true });
+  r.setColor(c);
+  r.render(bitmap);
+  const gl = canvas.getContext('webgl2');
+  const out = new Uint8Array(W * H * 4);
+  gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, out);
+  let maxErr = 0;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const src = (y * W + x) * 4, dst = ((H - 1 - y) * W + x) * 4; // readPixels starts at the bottom row
+    const want = c ? reference(px[src] / 255, px[src + 1] / 255, px[src + 2] / 255, c) : [px[src] / 255, px[src + 1] / 255, px[src + 2] / 255];
+    for (let k = 0; k < 3; k++) maxErr = Math.max(maxErr, Math.abs(out[dst + k] - want[k] * 255));
+  }
+  worst = Math.max(worst, maxErr);
+  lines.push(`${name}: max difference ${maxErr.toFixed(2)} of 255`);
+  r.destroy();
+}
+// Deband: a banded ramp with 1-code steps 16 px wide (8-bit banding, what mpv's deband is made
+// for) with a hard black/white edge further right.
+const BW = 256, BH = 16;
+const bands = new Uint8ClampedArray(BW * BH * 4);
+for (let y = 0; y < BH; y++) for (let x = 0; x < BW; x++) {
+  const i = (y * BW + x) * 4;
+  const v = x < 128 ? 60 + Math.floor(x / 16) : (x < 192 ? 0 : 255);
+  bands[i] = bands[i + 1] = bands[i + 2] = v; bands[i + 3] = 255;
+}
+const bandBitmap = await createImageBitmap(new ImageData(bands, BW, BH));
+async function drawBands(strength) {
+  const canvas = document.createElement('canvas');
+  const r = await createAnime4kRenderer(bandBitmap, canvas, { mode: 'auto', preset: 'A', darkenLines: false, thinLines: false, upscale: '2x' }, (m) => { throw new Error(m); }, 1, { colorOnly: true, deband: true });
+  r.setColor({ hue: 0, brightness: 1, contrast: 1, saturation: 1, gamma: 1, vibrance: 1, temperature: 0, tint: 0, deband: strength, grain: 0 });
+  r.render(bandBitmap);
+  const gl = canvas.getContext('webgl2');
+  const out = new Uint8Array(BW * BH * 4);
+  gl.readPixels(0, 0, BW, BH, gl.RGBA, gl.UNSIGNED_BYTE, out);
+  r.destroy();
+  // What the eye sees of dither: each column averaged over the rows. Banded, the averages step by
+  // one code every 16 px (up to 0.5 off a straight ramp); debanded, they follow the ramp.
+  const mean = Array.from({ length: BW }, (_, x) => { let s = 0; for (let y = 0; y < BH; y++) s += out[(y * BW + x) * 4]; return s / BH; });
+  let err = 0;
+  for (let x = 24; x < 104; x++) err = Math.max(err, Math.abs(mean[x] - (60 + (x - 7.5) / 16)));
+  return { err, edge: [mean[190], mean[194]].map((v) => Math.round(v)) };
+}
+const off = await drawBands(0), on = await drawBands(35);
+const smoothed = on.err < off.err * 0.6;
+const edgeKept = on.edge[0] < 8 && on.edge[1] > 247;
+lines.push(`deband 35: off a smooth ramp by ${off.err.toFixed(2)} -> ${on.err.toFixed(2)} codes (${smoothed ? 'smoothed' : 'NOT smoothed'}), edge ${on.edge.join('/')} (${edgeKept ? 'kept' : 'BLURRED'})`);
+
+// The full Anime4K chain at 2x with the deband pass first still builds and draws.
+let chainOk = false;
+try {
+  const canvas = document.createElement('canvas');
+  const r = await createAnime4kRenderer(bitmap, canvas, { mode: 'auto', preset: 'A', darkenLines: false, thinLines: false, upscale: '2x' }, (m) => { throw new Error(m); }, 2, { deband: true });
+  r.setColor(CASES.sunlit);
+  r.render(bitmap);
+  chainOk = canvas.width === W * 2 && canvas.getContext('webgl2').getError() === 0;
+  r.destroy();
+} catch (e) { lines.push(`chain error: ${e.message}`); }
+lines.push(`anime4k 2x + deband + colors: ${chainOk ? 'ok' : 'FAILED'}`);
+
+const pass = worst <= 1.5 && smoothed && edgeKept && chainOk;
+lines.push(pass ? 'PASS' : 'FAIL');
+document.getElementById('out').textContent = lines.join('\n');
+document.title = `${pass ? 'PASS' : 'FAIL'} worst ${worst.toFixed(2)}`;
+</script>
+</body>
+</html>

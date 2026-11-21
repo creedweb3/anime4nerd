@@ -43,10 +43,11 @@ const results = [];
 const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ` (${detail})` : ''}`); };
 
 const ctx = await chromium.launchPersistentContext(fs.mkdtempSync(path.join(os.tmpdir(), 'a4k-rate-prof-')), {
-  headless: false,
+  headless: !process.env.A4K_SHOW, // headless by default; A4K_SHOW=1 opens a real window
   executablePath: exe,
   viewport: { width: 380, height: 640 },
-  args: [`--disable-extensions-except=${dist}`, `--load-extension=${dist}`, '--autoplay-policy=no-user-gesture-required'],
+  // Headless (new headless mode loads extensions). A4K_SHOW=1 opens a real window for the real GPU.
+  args: [...(process.env.A4K_SHOW ? [] : ['--window-position=-32000,-32000']), `--disable-extensions-except=${dist}`, `--load-extension=${dist}`, '--autoplay-policy=no-user-gesture-required'],
 });
 try {
   const sw = ctx.serviceWorkers()[0] ?? await ctx.waitForEvent('serviceworker', { timeout: 10000 });

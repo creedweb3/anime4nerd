@@ -1,0 +1,210 @@
+<!doctype html>
+<!--
+  Design options: color controls in the fullscreen menu. Each option is a "fullscreen screen"
+  (fullscreen-color-frame.html) running the real FullscreenMenu over a picture from the real
+  renderer, with one variant added on top. Rebuild the frame bundle after editing:
+    npx esbuild test/fullscreen-color-frame.ts --bundle --format=esm --loader:.glsl=text --define:__FIREFOX__=false --outfile=test/fullscreen-color-frame.js
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="icon" href="data:," />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Fullscreen color options</title>
+<style>
+:root { color-scheme: dark; --bg: #0b0b0b; --line: #262626; --line2: #3a3a3a; --fg: #e4e4e4; --dim: #8d8d8d; --faint: #585858; --on: #fff; --ok: #9fd3a8; }
+* { box-sizing: border-box; }
+html { scrollbar-width: thin; scrollbar-color: var(--line2) transparent; }
+::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-thumb { background: var(--line2); }
+::selection { background: var(--on); color: #000; }
+:focus-visible { outline: 1px solid var(--on); outline-offset: 1px; }
+body { margin: 0; padding: 24px 16px 48px; background: #050505; color: var(--fg); font: 12px/1.5 "JetBrains Mono", "Cascadia Mono", "Fira Code", Consolas, ui-monospace, monospace; }
+main { max-width: 1280px; margin: 0 auto; }
+h1 { margin: 0 0 4px; font-size: 13px; font-weight: 600; }
+.intro { margin: 0 0 16px; color: var(--dim); max-width: 900px; }
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; margin-bottom: 12px; }
+.lbl { color: var(--faint); font-size: 10px; text-transform: uppercase; letter-spacing: .16em; margin-right: 8px; }
+.seg { display: inline-flex; flex-wrap: wrap; }
+.seg button { border: 1px solid var(--line2); background: transparent; color: var(--dim); font: inherit; font-size: 11px; padding: 3px 10px; cursor: pointer; }
+.seg button + button { margin-left: -1px; }
+.seg button:hover { color: var(--on); }
+.seg button[aria-pressed="true"] { background: var(--on); border-color: var(--on); color: #000; font-weight: 600; }
+.go { border: 1px solid var(--line2); background: transparent; color: var(--fg); font: inherit; font-size: 11px; padding: 3px 10px; cursor: pointer; margin-left: auto; }
+.go:hover { border-color: var(--on); color: var(--on); }
+.screen { position: relative; width: 100%; aspect-ratio: 16 / 9; border: 1px solid var(--line); background: #000; overflow: hidden; }
+.screen iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; }
+.about { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 24px; margin-top: 12px; }
+.about h2 + p, .about h2 + p + p { margin-bottom: 8px; }
+[hidden] { display: none !important; }
+.about h2 { grid-column: 1 / -1; margin: 0; font-size: 13px; font-weight: 600; }
+.about p { margin: 0; color: var(--dim); }
+.about b { color: var(--fg); font-weight: 600; }
+.hint { margin-top: 12px; color: var(--faint); font-size: 11px; }
+@media (max-width: 700px) { .about { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+<h1>color controls in the fullscreen menu (design options)</h1>
+<p class="intro">Each screen runs the real fullscreen menu (src/fullscreen-menu.ts) over a picture drawn by the real renderer (Anime4K and the color shader). Every control works and changes the picture. Open the menu with ☰ in the top-right corner. The mouse going idle fades the menu, as it does in the extension.</p>
+<div class="bar">
+  <span><span class="lbl">option</span><span class="seg" id="opts"></span></span>
+  <span id="ctab"><span class="lbl">color tab</span><span class="seg" id="cts"></span></span>
+  <span id="tgl"><span class="lbl">toggles</span><span class="seg" id="tgs"></span></span>
+  <span><span class="lbl">screen</span><span class="seg" id="size"><button type="button" data-s="fit" aria-pressed="true">fit</button><button type="button" data-s="1080" aria-pressed="false">1080p</button><button type="button" data-s="1440" aria-pressed="false">1440p</button></span></span>
+  <button type="button" class="go" id="fs">fullscreen</button>
+</div>
+<div class="screen" id="screen"><iframe id="f" title="fullscreen screen" allow="fullscreen"></iframe></div>
+<section class="about" id="about"></section>
+<p class="hint">fit: the screen at this page's size, menu at its real pixel size. 1080p / 1440p: a real screen scaled down, so you can judge how much of the picture each option covers. fullscreen: the real thing. Option A opens on the color tab; switch its design with the pills, ← → or 1-5 on this page. “edit in popup” changes the values as the popup would. In the screen: 1-9 picks a profile.</p>
+</main>
+<script>
+const OPTIONS = {
+  A: ['tabs', 'Folder tabs "upscale | color" under the status box, as in the popup. The color tab: profile menu, colors on/off, all ten sliders, "always". On the color tab the status box keeps only its head, so the menu stays under 480 px.',
+    'Everything in one place, and the same model as the popup. Cost: profiles are two clicks away (tab, then list), and the panel at its tallest covers a 260×430 px block.'],
+  B: ['compact', 'Under the upscale controls: a colors on/off switch and the numbered profile list (two columns). No sliders.',
+    'Fastest: any profile is one click (or one key) away, and the panel grows only ~110 px. Cost: no fine tuning in fullscreen; that stays in the popup.'],
+  C: ['chips + adjust', 'Profile chips in the menu\'s own button style plus colors on/off. "adjust ›" turns the panel into a sliders page (‹ back returns).',
+    'One click for profiles, sliders when wanted, and the menu never gets taller than today\'s plus two rows. Cost: the sliders page hides the upscale controls while it shows.'],
+  D: ['second button', 'A color button left of ☰ opens its own panel on the left edge: profiles, sliders, "always". The upscale menu stays as it is.',
+    'Colors and upscale each get a full panel, and both can be open at once. Cost: two buttons in the corner (the free-spot logic knows one), and an open panel covers both sides of the picture.'],
+  E: ['bottom bar', 'A slim bar above the player controls: colors on/off, ‹ profile ›, the numbered list opening upwards. It fades with the menu button.',
+    'Quickest to flip through profiles while watching (arrows, like a quality bar), and covers least. Cost: it sits where players put their own controls and subtitles, and has no sliders.'],
+};
+// Designs of option A's color tab (fullscreen-color-tab-designs.ts).
+const TABS = {
+  A1: ['list', 'The popup’s numbered profile list in two columns with a line between them: green number and white name for the current one. "✓ colors" and "✓ always" under it, like "+ darken lines".',
+    'Light and quick to scan; reads like the popup.'],
+  A2: ['tiles', 'The preset tiles’ own buttons: number and name, two equal columns, white when selected. The same two toggles.',
+    'Matches the upscale tab’s Mode A / B / C tiles exactly, so both tabs feel like one system.'],
+  A3: ['rows → tile', 'List rows with no border (dim number, name); the selected one is A2’s white tile; hovering shows the tile outline.',
+    'Quiet like the list, the current one as clear as a tile.'],
+  A4: ['faint tiles', 'Barely-there tiles (faint border and fill) with the list’s numbers; the selected one gets a white outline, a green number and a bold white name, no fill.',
+    'Keeps the tile shape without the weight; the current one is a little less loud than a white tile.'],
+  A5: ['list + bar', 'List rows; the selected one has a 2px white bar on its left edge, a soft fill, a green number and a bold white name.',
+    'Cleaner than a full white tile, stronger than bold text alone.'],
+};
+const ctab = document.getElementById('ctab');
+const cts = document.getElementById('cts');
+let design = new URLSearchParams(location.hash.slice(1)).get('c') || 'A1';
+for (const [k, [name]] of Object.entries(TABS)) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.dataset.c = k; b.textContent = `${k} ${name}`;
+  b.addEventListener('click', () => setDesign(k));
+  cts.append(b);
+}
+const edit = document.createElement('button');
+edit.type = 'button'; edit.className = 'go'; edit.id = 'pedit'; edit.style.marginLeft = '8px'; edit.textContent = 'edit in popup';
+edit.setAttribute('aria-label', 'Change the values as the popup would, to see "edited in popup"');
+edit.addEventListener('click', () => frame.contentWindow?.postMessage({ type: 'popup-edit' }, '*'));
+const cust = document.createElement('button');
+cust.type = 'button'; cust.className = 'go'; cust.style.marginLeft = '8px'; cust.textContent = 'custom in popup';
+cust.setAttribute('aria-label', 'Set custom values as the popup would, to see the custom state');
+cust.addEventListener('click', () => frame.contentWindow?.postMessage({ type: 'popup-custom' }, '*'));
+ctab.append(edit, cust);
+// Styles of the colors on/off and "always" controls (fullscreen-color-tab-designs.ts).
+const TOGGLES = {
+  t4a: ['chips', 'Two equal chips on the profile columns: [drop] colors and [screen] always, white when on, crossed-out icon and dim word when off. Under them one caption: where colors go now ("colors on · upscaled only"), or the state in its place ("● not upscaled", "● custom", "● edited in popup").',
+    'Readable without hovering, and says in words where colors go; the menu height never changes.'],
+};
+const tgl = document.getElementById('tgl');
+const tgs = document.getElementById('tgs');
+let style = new URLSearchParams(location.hash.slice(1)).get('tg') || 't4a';
+for (const [k, [name]] of Object.entries(TOGGLES)) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.dataset.t = k; b.textContent = `${k} ${name}`;
+  b.addEventListener('click', () => setStyle(k));
+  tgs.append(b);
+}
+function pressed() {
+  history.replaceState(null, '', `#v=A&c=${design}&tg=${style}`);
+  for (const b of cts.children) b.setAttribute('aria-pressed', String(b.dataset.c === design));
+  for (const b of tgs.children) b.setAttribute('aria-pressed', String(b.dataset.t === style));
+}
+/** Switch the color tab design in place: the menu stays open on the color tab. */
+function setDesign(c) {
+  design = c;
+  pressed();
+  frame.contentWindow?.postMessage({ type: 'design', c, t: style }, '*');
+  about();
+}
+/** Switch the toggle style in place, keeping the design. */
+function setStyle(t) {
+  style = t;
+  setDesign(design);
+}
+// ← → or 1-5 switch the design (while this page, not the screen, has the keyboard).
+addEventListener('keydown', (e) => {
+  if (current !== 'A' || e.altKey || e.ctrlKey || e.metaKey) return;
+  const cycle = (list, cur, by) => list[(list.indexOf(cur) + by + list.length) % list.length];
+  const keys = Object.keys(TABS);
+  if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); setDesign(cycle(keys, design, e.key === 'ArrowRight' ? 1 : -1)); }
+  if (/^[1-5]$/.test(e.key)) { e.preventDefault(); setDesign(keys[Number(e.key) - 1]); }
+});
+const opts = document.getElementById('opts');
+let frame = document.getElementById('f');
+const screen = document.getElementById('screen');
+let size = 'fit';
+let current = new URLSearchParams(location.hash.slice(1)).get('v') || 'A';
+for (const [k, [name]] of Object.entries(OPTIONS)) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.dataset.v = k; b.textContent = `${k} ${name}`;
+  b.addEventListener('click', () => show(k));
+  opts.append(b);
+}
+function show(k) {
+  current = k;
+  if (k === 'A') pressed(); else history.replaceState(null, '', `#v=${k}`);
+  for (const b of opts.children) b.setAttribute('aria-pressed', String(b.dataset.v === k));
+  ctab.hidden = k !== 'A';
+  tgl.hidden = true; // one toggle style is left (t4a): no picker
+  // A fresh frame each time. No ".html": the static server redirects that and drops the query.
+  const next = frame.cloneNode(false);
+  // Option A opens straight on the color tab, so a design shows without clicking ☰ and the tab.
+  next.src = `./fullscreen-color-frame?v=${k}${k === 'A' ? `&c=${design}&tg=${style}&open=color` : ''}&t=${Date.now()}`; // t: never a cached frame page
+  frame.replaceWith(next);
+  frame = next;
+  fit();
+  about();
+}
+function about() {
+  const k = current;
+  const [name, what, trade] = OPTIONS[k];
+  const about = document.getElementById('about');
+  about.replaceChildren();
+  const h = document.createElement('h2'); h.textContent = `${k} · ${name}`;
+  const p1 = document.createElement('p'); p1.textContent = what;
+  const p2 = document.createElement('p'); p2.textContent = trade;
+  about.append(h, p1, p2);
+  if (k === 'A') {
+    const [dn, dw, dt] = TABS[design];
+    const h2 = document.createElement('h2'); h2.textContent = `color tab ${design} · ${dn}`;
+    const q1 = document.createElement('p'); q1.textContent = dw;
+    const q2 = document.createElement('p'); q2.textContent = dt;
+    about.append(h2, q1, q2);
+    const [tn, tw, tt] = TOGGLES[style];
+    const h3 = document.createElement('h2'); h3.textContent = `toggles ${style} · ${tn}`;
+    const r1 = document.createElement('p'); r1.textContent = tw;
+    const r2 = document.createElement('p'); r2.textContent = tt;
+    about.append(h3, r1, r2);
+  }
+}
+function fit() {
+  const w = screen.clientWidth, h = screen.clientHeight;
+  const [fw, fh] = size === 'fit' ? [w, h] : size === '1080' ? [1920, 1080] : [2560, 1440];
+  frame.style.width = `${fw}px`; frame.style.height = `${fh}px`;
+  frame.style.transform = size === 'fit' ? 'none' : `scale(${w / fw})`;
+}
+for (const b of document.querySelectorAll('#size button')) {
+  b.addEventListener('click', () => {
+    size = b.dataset.s;
+    for (const x of document.querySelectorAll('#size button')) x.setAttribute('aria-pressed', String(x === b));
+    fit();
+  });
+}
+document.getElementById('fs').addEventListener('click', () => frame.requestFullscreen());
+new ResizeObserver(fit).observe(screen);
+show(current);
+</script>
+</body>
+</html>

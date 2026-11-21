@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Anime4Nerd: color tab (live popup)</title>
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #0b0b0b; --panel: #111; --line: #262626; --line2: #3a3a3a;
+  --fg: #e4e4e4; --dim: #8d8d8d; --faint: #585858; --on: #fff; --ok: #9fd3a8; --bad: #e39a9a;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 28px 32px 60px;
+  background: #050505;
+  color: var(--fg);
+  font: 12px/1.5 "JetBrains Mono", "Cascadia Mono", "Fira Code", Consolas, ui-monospace, monospace;
+}
+h1 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
+.intro { margin: 0 0 14px; max-width: 900px; color: var(--dim); }
+.toolbar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; margin: 0 -32px 22px; padding: 10px 32px; background: rgba(5,5,5,.92); border-bottom: 1px solid var(--line); }
+.group { display: flex; align-items: center; gap: 8px; }
+.lbl { color: var(--faint); font-size: 10px; text-transform: uppercase; letter-spacing: .16em; }
+.seg { display: inline-flex; }
+.seg button { border: 1px solid var(--line2); background: transparent; color: var(--dim); font: inherit; font-size: 11px; padding: 3px 10px; cursor: pointer; }
+.seg button + button { margin-left: -1px; }
+.seg button[aria-pressed="true"] { background: var(--on); border-color: var(--on); color: #000; font-weight: 600; }
+.toolbar .hint { color: var(--faint); margin-left: auto; }
+
+.concept { margin-bottom: 44px; }
+.label { display: flex; align-items: baseline; gap: 10px; margin: 0 0 4px; font-size: 13px; font-weight: 600; }
+.label b { display: inline-grid; place-items: center; width: 22px; height: 22px; border: 1px solid var(--line2); font-size: 11px; }
+.sub { margin: 0 0 12px; color: var(--dim); max-width: 900px; }
+.stage { display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap; }
+.stage iframe { border: 1px solid var(--line); width: 382px; height: 600px; background: var(--bg); flex: none; }
+.side { display: grid; gap: 10px; }
+.side canvas { display: block; width: 480px; aspect-ratio: 16/9; border: 1px solid var(--line); cursor: zoom-in; }
+.cap { color: var(--faint); font-size: 10px; }
+.meter { display: grid; gap: 4px; width: 480px; }
+.m-row { display: grid; grid-template-columns: 8ch 1fr 9ch; align-items: center; gap: 10px; font-size: 11px; color: var(--dim); }
+.m-bar { position: relative; height: 8px; border: 1px solid var(--line); }
+.m-bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--ok); }
+.m-bar s { position: absolute; top: -3px; bottom: -3px; border-left: 1px dashed var(--fg); }
+.m-row.over { color: var(--bad); }
+.m-row.over .m-bar i { background: var(--bad); }
+.m-row b { text-align: right; font-weight: 600; color: var(--fg); }
+.m-row.over b { color: var(--bad); }
+.takeaway { margin: 12px 0 0; color: var(--dim); max-width: 960px; }
+.takeaway em { color: var(--fg); font-style: normal; }
+
+.notes { margin-top: 8px; max-width: 980px; }
+.notes h2 { font-size: 13px; margin: 0 0 4px; }
+.notes p { color: var(--dim); margin: 0 0 10px; }
+.notes table { border-collapse: collapse; width: 100%; font-size: 11px; }
+.notes th { text-align: left; color: var(--faint); font-weight: 400; font-size: 9px; text-transform: uppercase; letter-spacing: .14em; padding: 4px 10px 6px 0; }
+.notes td { padding: 5px 10px 5px 0; vertical-align: top; color: var(--dim); border-top: 1px solid var(--line); }
+.notes td:first-child { color: var(--fg); white-space: nowrap; }
+.notes .tag { display: inline-block; padding: 0 5px; border: 1px solid var(--line2); font-size: 10px; white-space: nowrap; }
+.notes .strong { color: var(--ok); border-color: rgba(159,211,168,.5); }
+.notes .weak { color: #e3c58a; border-color: rgba(227,197,138,.5); }
+.notes .no { color: var(--bad); border-color: rgba(227,154,154,.5); }
+.notes a { color: var(--fg); }
+</style>
+</head>
+<body>
+<h1>color tab on the real popup (design preview)</h1>
+<p class="intro">This is the real popup: src/popup.html, src/popup.css and the built dist/popup.js, fed by a fake extension that plays one 1080p video. Everything in it works as in the extension (mode list, video switch, presets, tooltips, live performance). The color tab is the only new part. The picture beside it shows what the colors do; hold on it to compare with the original.</p>
+
+<div class="toolbar">
+  <span class="group"><span class="lbl">tab</span><span class="seg" data-ctl="tab"><button type="button" data-v="upscale" aria-pressed="false">upscale</button><button type="button" data-v="color" aria-pressed="true">color</button></span></span>
+  <span class="hint">hold on a picture to see it without color changes</span>
+</div>
+
+<main id="designs">
+<section class="notes" aria-labelledby="notes-h">
+  <h2 id="notes-h">the profiles: from shared presets</h2>
+  <p>No one publishes color presets for watching anime video; the only shared, concrete "anime look" grades are ReShade presets for anime-style games. Each profile below is one of those grades, converted to our controls from the shaders' source code, plus deband and grain from the Kokomins mpv anime guide. The presets' LUTs, bloom and tonemapping cannot be converted, so these carry their main grade, not every detail. Every profile changes at least half of the ten controls.</p>
+  <table>
+    <thead><tr><th>profile</th><th>values</th><th>for</th><th>based on</th></tr></thead>
+    <tbody>
+      <tr><td>1 neutral</td><td>all default</td><td>reference: untouched (Filmmaker Mode principle)</td><td>built in</td></tr>
+      <tr><td>2 slice of life</td><td>hue 0°, brightness 100%, contrast 100%, saturation 101%, gamma 1.00, vibrance 129%, temperature +4, tint 0, deband 35, grain 0.01</td><td>everyday anime streams: clean with a gentle lift in dull colors</td><td>Genshin Stella Mod shipped default (vibrance 129%, saturation 102%, warm filter ≈ +4) + Kokomins deband 35 / grain 0.01 + contrast 103% and gamma 1.02 to undo stream softness (inspired)</td></tr>
+      <tr><td>3 sunlit</td><td>hue 0°, brightness 97%, contrast 92%, saturation 103%, gamma 1.04, vibrance 125%, temperature +14, tint 0, deband 35, grain 0.01</td><td>sunny, airy anime: soft contrast, warm light</td><td>"Immersive Anime – Day" (Genshin, qUINT Lightroom stage: brightness 97%, contrast 92%, gamma 1.04, vibrance 125%, temperature +14; tint left 0, the preset’s −9 is a shader quirk) + Kokomins deband</td></tr>
+      <tr><td>4 shonen</td><td>hue 0°, brightness 98%, contrast 103%, saturation 123%, gamma 1.14, vibrance 157%, temperature 0, tint 0, deband 35, grain 0.01</td><td>strong, saturated color for action and colorful shows</td><td>"Sakurabane" (PSO2 GShade: saturation 123%, vibrance 157%, gamma 1.14, contrast 103%, brightness 98.5%) + Kokomins deband</td></tr>
+      <tr><td>5 moody</td><td>hue 0°, brightness 98%, contrast 92%, saturation 74%, gamma 1.10, vibrance 107%, temperature -12, tint +11, deband 20, grain 0.04</td><td>movies and moody series: desaturated, cool, lifted mid-tones</td><td>"Filmic Fantasy Day" (Genshin: saturation 74%, contrast 92%, gamma 1.10, temperature −12, tint +11) + light deband and Kokomins’ DVD-tier grain 0.04 for texture</td></tr>
+      <tr><td>6 vintage</td><td>hue 0°, brightness 100%, contrast 100%, saturation 145%, gamma 1.22, vibrance 100%, temperature -5, tint +5, deband 25, grain 0.0</td><td>old-film punch: rich color, bright mid-tones</td><td>ReShade Technicolor2 at its defaults (rough fit: saturation 145%, gamma 1.22, temperature −5, tint +5) + light deband</td></tr>
+      </tbody>
+  </table>
+  <p>Sources: <a href="https://github.com/Kramar1337/GenshinImpact-AHK-flex" target="_blank" rel="noopener">Immersive Anime / Filmic Fantasy</a> · <a href="https://github.com/Genshin-Stella-Mod/resources/tree/main/public/resources/ReShade/Presets" target="_blank" rel="noopener">Stella Mod presets</a> · <a href="https://github.com/hitman66/Gshade-PSO2-presets/blob/main/presets/Sakurabane.ini" target="_blank" rel="noopener">Sakurabane</a> · <a href="https://github.com/CeeJayDK/SweetFX/tree/master/Shaders/SweetFX" target="_blank" rel="noopener">SweetFX</a> · <a href="https://github.com/martymcmodding/qUINT/blob/master/Shaders/qUINT_lightroom.fx" target="_blank" rel="noopener">qUINT Lightroom</a> · <a href="https://kokomins.wordpress.com/2019/10/14/mpv-config-guide/" target="_blank" rel="noopener">Kokomins mpv guide</a></p>
+</section>
+</main>
+
+<template id="t-design">
+  <section class="concept">
+    <h2 class="label"><b></b><span class="name"></span></h2>
+    <p class="sub"></p>
+    <div class="stage">
+      <iframe></iframe>
+      <div class="side">
+        <canvas width="480" height="270"></canvas>
+        <span class="cap">video on the page</span>
+        <div class="meter">
+          <div class="m-row" data-t="upscale"><span>upscale</span><span class="m-bar"><i></i><s></s></span><b>—</b></div>
+          <div class="m-row" data-t="color"><span>color</span><span class="m-bar"><i></i><s></s></span><b>—</b></div>
+        </div>
+      </div>
+    </div>
+    <p class="takeaway"></p>
+  </section>
+</template>
+
+<script src="color-demo.js"></script>
+<script>
+const DESIGNS = [
+  { id: 'live', name: 'color tab', sub: 'Folder tabs, rows in percent, dotted numbers you can type into, the profile menu in the head, and "colors without upscale".', take: '' },
+];
+const main = document.getElementById('designs');
+const tpl = document.getElementById('t-design');
+const state = { tab: 'color' };
+const parts = {};
+DESIGNS.forEach((d, i) => {
+  const n = tpl.content.cloneNode(true);
+  n.querySelector('.label b').textContent = String.fromCharCode(65 + i);
+  n.querySelector('.name').textContent = d.name;
+  n.querySelector('.sub').textContent = d.sub;
+  n.querySelector('.takeaway').innerHTML = d.take;
+  const frame = n.querySelector('iframe');
+  frame.title = d.name;
+  const canvas = n.querySelector('canvas');
+  const meter = n.querySelector('.meter');
+  main.append(n);
+  parts[d.id] = { frame, preview: makePreview(canvas), meter };
+  frame.addEventListener('load', () => {
+        frame.contentWindow.postMessage({ type: 'tab', tab: state.tab }, '*');
+  });
+});
+/* A hash-only change does not reload a frame, so a loaded frame is reloaded by hand. */
+function loadFrames() { for (const d of DESIGNS) parts[d.id].frame.src = `popup-live.html#tab=${state.tab}`; }
+loadFrames();
+
+const LIMIT = 600, SCALE_MAX = 700;
+addEventListener('message', (e) => {
+  const d = e.data, p = Object.values(parts).find((x) => x.frame.contentWindow === e.source);
+  if (!p) return;
+  if (d.type === 'color') p.preview.update(d.vals);
+  if (d.type === 'size') {
+    // The toolbar follows the popup's own tab (a "cancel" keeps the color tab open).
+    if (d.tab && d.tab !== state.tab) {
+      state.tab = d.tab;
+      for (const o of document.querySelectorAll('[data-ctl=tab] button')) o.setAttribute('aria-pressed', String(o.dataset.v === d.tab));
+    }
+    // The full content height of the open tab, as the browser sizes a popup window (600px at most).
+    p.frame.style.height = `${Math.min(LIMIT, d.tabs[state.tab]) + 2}px`;
+    p.frame.style.width = `${d.w + 2}px`;
+    for (const row of p.meter.querySelectorAll('.m-row')) {
+      const h = d.tabs[row.dataset.t];
+      row.classList.toggle('over', h > LIMIT);
+      row.querySelector('i').style.width = `${Math.min(100, (h / SCALE_MAX) * 100)}%`;
+      row.querySelector('s').style.left = `${(LIMIT / SCALE_MAX) * 100}%`;
+      row.querySelector('b').textContent = `${h} / ${LIMIT}`;
+    }
+  }
+});
+
+for (const seg of document.querySelectorAll('[data-ctl]')) {
+  for (const b of seg.querySelectorAll('button')) {
+    b.addEventListener('click', () => {
+      const ctl = seg.dataset.ctl;
+      state[ctl] = b.dataset.v;
+      for (const o of seg.querySelectorAll('button')) o.setAttribute('aria-pressed', String(o === b));
+      if (ctl === 'page') loadFrames();
+      else for (const d of DESIGNS) parts[d.id].frame.contentWindow.postMessage(ctl === 'tab' ? { type: 'tab', tab: state.tab } : { type: 'scale', scale: state.scale }, '*');
+    });
+  }
+}
+</script>
+</body>
+</html>

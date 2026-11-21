@@ -1,6 +1,6 @@
 // "What's new" notice after an update. Chrome installs store updates silently, so the
 // background marks the new version and shows a NEW badge; the next popup open shows a
-// one-line banner linking to the release notes and clears both. No network requests:
+// chip in its header linking to the release notes and clears both. No network requests:
 // the site only opens if the user clicks the link.
 
 import { SITE } from './site-links';
@@ -32,6 +32,13 @@ export async function restoreBadge(): Promise<void> {
 export async function pendingWhatsNew(): Promise<string | null> {
   const v = (await chrome.storage.local.get(KEY))[KEY];
   return typeof v === 'string' ? v : null;
+}
+
+/** Background: the notice became pending or was seen. */
+export function onWhatsNewChanged(cb: () => void): void {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && KEY in changes) cb();
+  });
 }
 
 /** Popup: the notice was shown; clear the flag and the badge. */

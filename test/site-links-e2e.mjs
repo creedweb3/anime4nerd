@@ -33,7 +33,8 @@ const ctx = await chromium.launchPersistentContext(fs.mkdtempSync(path.join(os.t
   headless: false,
   executablePath: exe,
   viewport: { width: 380, height: 640 },
-  args: [`--disable-extensions-except=${dist}`, `--load-extension=${dist}`],
+  // Parked off-screen so it does not pop up; A4K_SHOW=1 shows it.
+  args: [...(process.env.A4K_SHOW ? [] : ['--window-position=-32000,-32000']), `--disable-extensions-except=${dist}`, `--load-extension=${dist}`],
 });
 // Answer the site's pages with a stub where Playwright can intercept them. The uninstall tab is
 // opened by the browser itself and may bypass this and load the real page; the test never fills

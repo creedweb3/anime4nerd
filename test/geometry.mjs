@@ -171,9 +171,14 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'a4k-geom-profile-'));
 const ctx = await chromium.launchPersistentContext(profile, {
   headless: false,
   executablePath: exe,
-  args: [`--disable-extensions-except=${dist}`, `--load-extension=${dist}`, '--autoplay-policy=no-user-gesture-required'],
+  // A real window (real GPU), parked off-screen so it does not pop up; A4K_SHOW=1 shows it.
+  args: [...(process.env.A4K_SHOW ? [] : ['--window-position=-32000,-32000']), `--disable-extensions-except=${dist}`, `--load-extension=${dist}`, '--autoplay-policy=no-user-gesture-required'],
 });
 let failures = 0;
+// The clips are 6 s and loop: each loop seeks back to the start, and a seek hides the canvas until
+// the next frame is drawn. Measure once it is showing, not in that gap (a canvas that stays hidden
+// still fails).
+const shown = (page) => page.waitForFunction(() => { const c = document.querySelector('canvas.a4k-canvas'); return !!c && !c.hidden; }, null, { timeout: 5000 }).catch(() => {});
 try {
   const sw = ctx.serviceWorkers()[0] ?? await ctx.waitForEvent('serviceworker', { timeout: 10000 });
   await sw.evaluate((key) => chrome.storage.local.set({ 'anime4k-sources': { [key]: true } }), `127.0.0.1:${port}::127.0.0.1:${port}`);
@@ -187,6 +192,7 @@ try {
     page.on('console', (m) => { if (/GL_INVALID|WebGL: /.test(m.text())) glErrors.push(m.text()); });
     await page.goto(`http://127.0.0.1:${port}/${c.name}`);
     await page.waitForTimeout(15000); // first start compiles shaders
+    await shown(page);
     const r = await page.evaluate(() => {
       const v = document.querySelector('video');
       const cv = document.querySelector('canvas.a4k-canvas');
@@ -214,6 +220,7 @@ try {
     await page.goto(`http://127.0.0.1:${port}/${l.name}`);
     await page.waitForTimeout(12000);
     if (l.after) { await l.after(page); await page.waitForTimeout(3000); }
+    await shown(page);
     const list = await sw.evaluate(async () => {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       return chrome.tabs.sendMessage(tab.id, { type: 'a4k-list' }, { frameId: 0 });
@@ -259,9 +266,12 @@ try {
       ok = Object.entries(l.statuses).every(([s, n]) => counts[s] === n);
       detail = `statuses=${JSON.stringify(counts)}`;
     } else {
-      const r = await page.evaluate((top) => {
+      const r = await page.evaluate(async (top) => {
         const v = document.querySelector('video');
         const c = document.querySelector('canvas.a4k-canvas');
+        // The clip loops, and each loop's seek hides the canvas until the next frame is drawn:
+        // wait for it to be shown and measure in the same task, so a loop cannot fall in between.
+        for (const end = performance.now() + 5000; c?.hidden && performance.now() < end;) await new Promise((ok) => setTimeout(ok, 10));
         const vr = v.getBoundingClientRect();
         const cr = c?.getBoundingClientRect();
         return {

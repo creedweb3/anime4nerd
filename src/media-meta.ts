@@ -219,6 +219,34 @@ export function collectPageMeta(urlOverride?: string): MediaMeta {
   return out;
 }
 
+/** What a card needs from the tab's page: its metadata and host (the fullscreen menu asks for it). */
+export interface PageLabel { meta: MediaMeta; host: string }
+
+/**
+ * A video card's label (popup and fullscreen menu): page metadata merged with the player's
+ * Media Session data. `fallback` (the site) is the title when nothing better is known.
+ */
+export function videoLabel(
+  page: MediaMeta,
+  media: { title: string | null; artist: string | null; album: string | null } | null,
+  fallback: string,
+): { title: string; tag: string; episodeName: string } {
+  const m: MediaMeta = { ...page };
+  if (media) {
+    if (!m.title && media.album) m.title = media.album;
+    if (!m.episodeName && media.title && media.title !== m.title) m.episodeName = media.title;
+    if (!m.title && media.title) m.title = media.title;
+    if (!m.subtitle && media.artist) m.subtitle = media.artist;
+  }
+  const title = m.title || fallback;
+  let tag = '';
+  if (m.episode !== null) tag = m.season !== null ? `S${m.season} E${m.episode}` : `E${m.episode}`;
+  let episodeName = m.episodeName && m.episodeName !== title ? m.episodeName : (m.episode === null && m.subtitle ? m.subtitle : '');
+  // No real name ("Episode 12" beside "S1 E12" says the same thing twice): the card shows the quality there.
+  if (/^\s*(episode|ep\.?|e)\s*#?\d+\s*$/i.test(episodeName) || episodeName.replace(/\s+/g, '').toLowerCase() === tag.replace(/\s+/g, '').toLowerCase()) episodeName = '';
+  return { title, tag, episodeName };
+}
+
 /** Two display lines: ["Title", "E5 - Episode name"]. Second line may be empty. */
 export function formatMeta(m: MediaMeta, fallback: string): [string, string] {
   const title = m.title || fallback;

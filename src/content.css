@@ -14,6 +14,8 @@
 .a4k-cues {
   position: absolute;
   pointer-events: none;
+  user-select: none; /* a selection across the player must not highlight the redrawn cues */
+  -webkit-user-select: none;
   box-sizing: border-box;
   /* The browsers' own caption font and row height: the black strips of two rows just touch. */
   font: 400 1em/1.2 sans-serif;

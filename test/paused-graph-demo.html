@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Anime4Nerd: paused graph ideas</title>
+<style>
+/* Page chrome */
+body { margin: 0; padding: 24px; background: #050505; color: #e4e4e4;
+  font: 12px/1.5 "JetBrains Mono", "Cascadia Mono", Consolas, ui-monospace, monospace; }
+h1 { font-size: 14px; margin: 0 0 4px; }
+.lead { color: #8d8d8d; margin: 0 0 20px; max-width: 760px; }
+.board { display: grid; grid-template-columns: repeat(auto-fill, 300px); gap: 24px; }
+.option h2 { font-size: 12px; margin: 0 0 2px; }
+.option p { color: #8d8d8d; font-size: 11px; margin: 0 0 8px; min-height: 34px; }
+.stage { padding: 16px; background: linear-gradient(135deg, #1b2130, #0d0f14); }
+
+/* Copied from src/fullscreen-menu.ts (CSS constant) */
+.panel { width: 260px; padding: 10px; border: 1px solid #3a3a3a; background: rgba(11,11,11,.94); display: grid; gap: 8px; box-shadow: 0 24px 40px -18px #000; box-sizing: content-box; }
+.status { display: grid; gap: 6px; padding: 8px; border: 1px solid rgba(159,211,168,.6);
+  background: linear-gradient(135deg, rgba(159,211,168,.16), rgba(159,211,168,.02) 60%, transparent) #0b0b0b; }
+.head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.meta { color: #8d8d8d; font-size: 11px; margin-top: -2px; }
+.perf { font-size: 11px; color: #8d8d8d; }
+.graph { display: block; width: 100%; height: 20px; }
+.switch { width: 36px; height: 20px; padding: 0; position: relative; border: 1px solid rgba(159,211,168,.6); background: #0b0b0b; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 18px; width: 14px; height: 14px; background: #9fd3a8; }
+
+/* Idea styles */
+.wrapg { position: relative; }
+.tag { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.tag span { background: #0b0b0b; padding: 0 6px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: #8d8d8d; }
+.pausebox { height: 20px; display: flex; align-items: center; justify-content: center; gap: 6px;
+  color: #8d8d8d; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+.pausebox i { display: inline-block; width: 3px; height: 9px; background: #8d8d8d; box-shadow: 5px 0 0 #8d8d8d; margin-right: 5px; }
+.meter { display: grid; gap: 4px; }
+.meter .row { display: grid; grid-template-columns: 34px 1fr 44px; align-items: center; gap: 6px; font-size: 10px; color: #8d8d8d; }
+.meter .track { position: relative; height: 6px; background: #1c1c1c; }
+.meter .fill { position: absolute; inset: 0 auto 0 0; background: #d0d0d0; opacity: .45; }
+.meter .lim { position: absolute; top: -2px; bottom: -2px; width: 0; border-left: 1px dashed #8d8d8d; }
+.meter b { font-weight: 600; color: #e4e4e4; text-align: right; }
+</style>
+</head>
+<body>
+<h1>Paused graph: ideas</h1>
+<p class="lead">The fullscreen menu while the video is paused. Each card uses the menu's real styles and its bar drawing
+(48 bars, dashed = frame limit). Sample run: 6.8 ms average, 9 ms peak, 42 ms limit.</p>
+<div class="board" id="board"></div>
+
+<script>
+const BARS = 48;
+const BUDGET = 42;
+// A believable 2 s run: about 6.8 ms with a few spikes.
+const RUN = Array.from({ length: BARS }, (_, i) => 6 + Math.sin(i * 0.7) * 0.9 + (i % 11 === 3 ? 2.4 : 0) + (i % 17 === 9 ? 1.6 : 0));
+
+/* Same drawing as FullscreenMenu.drawBars, plus optional empty slots. */
+function drawBars(c, samples, budget, live, opts = {}) {
+  const w = c.clientWidth, h = c.clientHeight, dpr = devicePixelRatio || 1;
+  c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
+  const g = c.getContext('2d'); g.scale(dpr, dpr);
+  const shown = samples.slice(-BARS);
+  const top = Math.max(opts.limitOff ? 0 : budget, ...shown, 1) * (opts.fit ? 1.15 : 1);
+  const bw = w / BARS;
+  if (opts.slots) {
+    g.fillStyle = '#2a2a2a';
+    for (let i = 0; i < BARS - shown.length; i++) g.fillRect(i * bw, h - 1, bw - 1, 1);
+  }
+  g.globalAlpha = live ? 1 : 0.45;
+  shown.forEach((ms, i) => {
+    const bh = Math.max(1, (ms / top) * h);
+    g.fillStyle = ms > budget ? '#e39a9a' : '#d0d0d0';
+    g.fillRect((BARS - shown.length + i) * bw, h - bh, bw - 1, bh);
+  });
+  if (opts.limitOff || budget / top > 1) return;
+  g.globalAlpha = 1; g.strokeStyle = '#585858'; g.setLineDash([3, 3]);
+  const y = Math.round(h - (budget / top) * h) + 0.5;
+  g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke();
+}
+
+const card = (perf, graph) => `
+  <div class="panel"><div class="status">
+    <div class="head"><b>anime4nerd</b><button class="switch" aria-checked="true"></button></div>
+    <div class="meta">1080p → 2880×2160 (2×)</div>
+    <div class="perf">${perf}</div>${graph}
+  </div></div>`;
+
+const IDEAS = [
+  { name: 'Today', note: 'The bug: frames age out while paused, so one bar is left.',
+    perf: 'gpu 13.1 ms / 43 ms · paused', graph: '<canvas class="graph"></canvas>',
+    draw: (c) => drawBars(c, [6.1], BUDGET, false) },
+  { name: 'Frozen', note: 'Keep the last full 2 s from playback, dimmed. Same as the popup.',
+    perf: 'gpu 6.8 ms / 42 ms · paused', graph: '<canvas class="graph"></canvas>',
+    draw: (c) => drawBars(c, RUN, BUDGET, false) },
+  { name: 'Labelled', note: 'Frozen, plus a small "paused" label over the graph.',
+    perf: 'gpu 6.8 ms / 42 ms', graph: '<div class="wrapg"><canvas class="graph"></canvas><div class="tag"><span>paused</span></div></div>',
+    draw: (c) => drawBars(c, RUN, BUDGET, false) },
+  { name: 'Zoomed', note: 'Frozen, but scaled to the bars, not the limit, so they fill the height. Limit line off-scale is hidden.',
+    perf: 'gpu 6.8 ms / 42 ms · paused', graph: '<canvas class="graph"></canvas>',
+    draw: (c) => drawBars(c, RUN, BUDGET, false, { limitOff: true, fit: true }) },
+  { name: 'Slots', note: 'Empty bar slots drawn as faint ticks, so the strip never looks blank.',
+    perf: 'gpu 6.8 ms / 42 ms · paused', graph: '<canvas class="graph"></canvas>',
+    draw: (c) => drawBars(c, RUN.slice(-14), BUDGET, false, { slots: true }) },
+  { name: 'Icon', note: 'Graph swapped for a pause mark while paused. Bars return on play.',
+    perf: 'gpu 6.8 ms / 42 ms', graph: '<div class="pausebox"><i></i>paused</div>' },
+  { name: 'Meter', note: 'Graph swapped for average and peak bars against the limit.',
+    perf: 'gpu 6.8 ms / 42 ms · paused',
+    graph: `<div class="meter">
+      <div class="row"><span>avg</span><div class="track"><div class="fill" style="width:${6.8 / BUDGET * 100}%"></div><div class="lim" style="left:100%"></div></div><b>6.8 ms</b></div>
+      <div class="row"><span>peak</span><div class="track"><div class="fill" style="width:${9 / BUDGET * 100}%"></div><div class="lim" style="left:100%"></div></div><b>9 ms</b></div>
+    </div>` },
+  { name: 'Hidden', note: 'No graph while paused. The card gets 26px shorter.',
+    perf: 'gpu 6.8 ms / 42 ms · paused', graph: '' },
+];
+
+const board = document.getElementById('board');
+for (const idea of IDEAS) {
+  const el = document.createElement('section');
+  el.className = 'option';
+  el.innerHTML = `<h2>${idea.name}</h2><p>${idea.note}</p><div class="stage">${card(idea.perf, idea.graph)}</div>`;
+  board.append(el);
+  const c = el.querySelector('canvas');
+  if (c && idea.draw) idea.draw(c);
+}
+</script>
+</body>
+</html>

@@ -5,40 +5,99 @@
   <title>Anime4Nerd</title>
   <link rel="stylesheet" href="popup.css" />
 </head>
-<body>
+<body data-tab="upscale">
   <header class="bar">
-    <span class="chip">anime4k</span>
+    <span class="chip mode" id="modeChip">
+      <button type="button" id="mode" role="combobox" aria-label="Mode" aria-haspopup="listbox" aria-expanded="false" aria-controls="mode-list" data-tip="Mode: what the extension upscales">auto</button>
+      <div class="mode-list" id="mode-list" role="listbox" aria-label="Mode" hidden>
+        <div class="mode-opt" id="mode-opt-auto" role="option" data-mode="auto" aria-selected="true"><b>auto</b><small>video and manga</small></div>
+        <div class="mode-opt" id="mode-opt-anime" role="option" data-mode="anime" aria-selected="false"><b>anime</b><small>video only</small></div>
+        <div class="mode-opt" id="mode-opt-manga" role="option" data-mode="manga" aria-selected="false"><b>manga</b><small>pages only</small></div>
+      </div>
+    </span>
     <span class="chip" id="hint">off</span>
     <span class="chip grow" id="gpuchip">gpu —</span>
     <span class="chip" id="clock"></span>
-    <a class="chip bug" id="report" href="https://anime4nerd.pages.dev/report" target="_blank" rel="noopener" title="Report a problem" aria-label="Report a problem">
+    <a class="chip bug" id="report" href="https://anime4nerd.pages.dev/report" target="_blank" rel="noopener" draggable="false" data-tip="Report a problem" aria-label="Report a problem">
       <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M5.5 4.5a2.5 2.5 0 0 1 5 0"/><rect x="4.5" y="5" width="7" height="8" rx="3.5"/><path d="M8 7.5V13M2 9h2.5M11.5 9H14M2.5 5l2 1.5M13.5 5l-2 1.5M2.5 13l2-1.5M13.5 13l-2-1.5"/></svg>
     </a>
   </header>
 
-  <a class="update-note" id="whatsnew" href="https://anime4nerd.pages.dev/#changes" target="_blank" rel="noopener" hidden>
-    <span><span class="update-label">updated</span><span class="update-dot">●</span> v<b id="whatsnew-ver"></b></span><span class="update-link">what's new →</span>
-  </a>
+  <!-- After an update, for one popup opening: popup.ts puts this chip in the header in place of the clock. -->
+  <a class="chip new" id="whatsnew" href="https://anime4nerd.pages.dev/#changes" target="_blank" rel="noopener" draggable="false" hidden></a>
 
   <section class="rate-card" id="rate" hidden>
-    <button type="button" class="rate-x" id="rate-x" title="Hide until the next milestone" aria-label="Hide">✕</button>
+    <button type="button" class="rate-x" id="rate-x" data-tip="Hide until the next milestone" aria-label="Hide">✕</button>
     <div class="rate-top">you've upscaled<span class="rate-badge" id="rate-badge"></span></div>
     <div class="rate-big" id="rate-big"></div>
     <div class="rate-row">
       <div class="rate-lines"><span id="rate-l1"></span><br /><span id="rate-l2"></span></div>
       <div class="rate-actions">
-        <a class="rate-go" id="rate-go" target="_blank" rel="noopener">★ rate it</a>
+        <a class="rate-go" id="rate-go" target="_blank" rel="noopener" draggable="false">★ rate it</a>
         <button type="button" class="rate-done" id="rate-done" hidden>✓ already rated</button>
       </div>
     </div>
   </section>
 
   <section class="panel">
-    <div class="panel-head"><span>playing now</span><span id="count"></span></div>
+    <div class="panel-head mp-head">
+      <span id="nowLabel">playing now</span><span id="count"></span>
+      <!-- Mode suggestion (Chrome build), after a switch: "now in manga mode" with an undo, over this row. See popup.ts. -->
+      <div class="mp-done" id="mp-done" role="status" hidden>
+        <span><span class="mp-dot">●</span><span id="mp-done-text"></span></span>
+        <button type="button" class="mp-btn" id="mp-undo">undo</button>
+      </div>
+    </div>
+    <!-- Mode suggestion: the mode leaves this page's manga or video alone. The card the page would get, locked. -->
+    <div class="source mp-preview" id="mp-preview" role="group" aria-label="Mode suggestion" hidden>
+      <div class="mp-dim">
+        <div class="line"><div class="title" id="mp-title"></div><label class="switch"><input type="checkbox" disabled aria-label="Off until the mode changes" /></label></div>
+        <div class="episode"><span class="tag" id="mp-tag"></span><span class="epname" id="mp-name"></span></div>
+      </div>
+      <div class="mp-foot"><span class="mp-row"><button type="button" class="mp-btn primary" id="mp-go"></button><button type="button" class="mp-btn" id="mp-auto">use auto</button></span><span class="mp-paused"><span class="mp-dot">●</span> paused</span></div>
+    </div>
     <div class="sources" id="sources"></div>
+    <div class="source manga-card" id="manga-card" hidden>
+      <div class="line"><div class="title" id="manga-title"></div><label class="switch" id="manga-switch"><input type="checkbox" aria-label="Upscale manga pages on this site" /></label></div>
+      <div class="episode"><span class="tag" id="manga-tag"></span><span class="epname" id="manga-name"></span></div>
+      <div class="state" id="manga-state" hidden></div>
+      <div class="mc-prog" id="manga-prog" hidden>
+        <div class="mc-pages" id="mc-pages" role="img"></div>
+        <div class="mc-counts">
+          <div data-k="done"><b>0</b><span><i class="pkey done"></i>done</span></div>
+          <div data-k="now"><b>0</b><span><i class="pkey now"></i>active</span></div>
+          <div data-k="fail"><b>0</b><span><i class="pkey fail"></i>failed</span></div>
+          <div data-k="wait"><b>0</b><span><i class="pkey"></i>queued</span></div>
+        </div>
+      </div>
+    </div>
     <p class="empty" id="empty">No video found yet. Start playback, then reopen this popup.</p>
   </section>
 
+  <section class="panel" id="pmap" hidden>
+    <div class="panel-head pmap-head">
+      <span>page map</span>
+      <!-- In the heading, so it takes no row: shown only past one set of pages (popup.ts PMAP_SET). -->
+      <span class="pmap-sets" id="pmap-sets" hidden>
+        <button type="button" class="pmap-step" id="pmap-prev" aria-label="previous pages">‹</button>
+        <span id="pmap-range"></span>
+        <button type="button" class="pmap-step" id="pmap-next" aria-label="next pages">›</button>
+      </span>
+      <span class="verdict dim" id="pmap-count"></span>
+    </div>
+    <div class="pmap" id="pmap-grid" role="group" aria-label="pages in this chapter"></div>
+    <div class="kv two">
+      <div><span>Per page</span><b id="pmap-per">–</b></div>
+      <div><span>Left</span><b id="pmap-left">–</b></div>
+    </div>
+  </section>
+
+  <!-- Folder tabs: upscale (performance + preset) and color. popup-color.ts switches them. -->
+  <div class="c-tabs" id="c-tabs" role="tablist">
+    <button type="button" class="c-tab" role="tab" data-t="upscale" aria-selected="true">upscale<span class="t-verdict" id="t-verdict"></span></button>
+    <button type="button" class="c-tab" role="tab" data-t="color" aria-selected="false">color<span class="dot" id="c-dot" hidden>●</span></button>
+  </div>
+  <div class="tab-upscale">
   <section class="panel" id="perf">
     <div class="panel-head"><span>performance</span><span class="verdict dim" id="verdict">● off</span></div>
     <div class="kv">
@@ -50,26 +109,34 @@
       <div><span>Late frames</span><b id="k-late">—</b></div>
     </div>
     <div class="bars" id="bars"></div>
-    <div class="meta" id="legend">no measurements yet</div>
   </section>
 
   <section class="panel">
     <div class="panel-head"><span>preset</span><span id="presetName"></span></div>
     <div class="grid" id="presets"></div>
+    <div class="sub-head">effects</div>
     <div class="pills" id="effects">
       <button type="button" class="pill" data-field="darkenLines" role="menuitemcheckbox">darken lines</button>
       <button type="button" class="pill" data-field="thinLines" role="menuitemcheckbox">thin lines</button>
     </div>
+    <div class="sub-head" id="upscale-head">upscale</div>
     <div class="pills" id="upscale" role="radiogroup" aria-label="upscale">
-      <span class="pills-label">upscale</span>
-      <button type="button" class="pill" data-upscale="auto" role="radio" title="4× only when the video is shown at more than 2× its size">auto</button>
+      <button type="button" class="pill" data-upscale="auto" role="radio" data-tip="4× only when the video is shown at more than 2× its size">auto</button>
       <button type="button" class="pill" data-upscale="2x" role="radio">2×</button>
-      <button type="button" class="pill" data-upscale="4x" role="radio" title="Heavier: about 2× the GPU time and memory of 2×">4×</button>
-      <button type="button" class="pill" data-upscale="8x" role="radio" title="Experimental. Uses the largest scale up to this that fits your GPU (output capped at 8K).">8×</button>
-      <button type="button" class="pill" data-upscale="16x" role="radio" title="Experimental. Uses the largest scale up to this that fits your GPU (output capped at 8K).">16×</button>
-      <button type="button" class="pill" data-upscale="32x" role="radio" title="Experimental. Uses the largest scale up to this that fits your GPU (output capped at 8K).">32×</button>
+      <button type="button" class="pill" data-upscale="4x" role="radio" data-tip="Heavier: about 2× the GPU time and memory of 2×">4×</button>
+      <button type="button" class="pill" data-upscale="8x" role="radio" data-tip="Experimental. Runs lower when your GPU can't keep up.">8×</button>
     </div>
   </section>
+  </div>
+
+  <!-- The color tab: profile menu and on/off switch in the head, ten sliders, "also when not upscaled". -->
+  <section class="panel tab-color" id="color">
+    <div class="panel-head"><div class="pf" id="pf"></div><label class="switch c-power" data-tip="Colors on or off; your values and profile stay as they are"><input type="checkbox" id="c-power" checked aria-label="Colors on" /></label></div>
+    <span class="pf-actions" id="pf-actions"></span>
+    <div class="cs-list" id="cs-list"></div>
+    <label class="ap-card ap-icon ap-full" id="c-always"><svg class="ap-ico" viewBox="0 0 16 16" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><rect x="1.5" y="3" width="13" height="9" rx="1"/><path d="M5.5 14.5h5"/><path class="ap-x" d="M3 1.5l10 12"/></svg><span class="ap-text"><b>also use colors when not upscaled</b><small id="c-always-state">currently: upscaled videos only</small></span><span class="switch"><input type="checkbox" aria-label="Also use colors when a video is not upscaled" /></span></label>
+  </section>
+  <div class="tip" id="tip" role="tooltip" hidden></div>
   <script src="popup.js"></script>
 </body>
 </html>

@@ -1,0 +1,1841 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Anime4Nerd: overflow fixes, before and after</title>
+
+<!--
+  1. BEFORE: src/popup.css, verbatim (copied by a script, one leading newline added).
+     media="not all" keeps it off this page; the script copies its text into both popup iframes.
+-->
+<style id="popup-css" media="not all">
+:root {
+  color-scheme: dark;
+  --bg: #0b0b0b;
+  --panel: #111;
+  --line: #262626;
+  --line2: #3a3a3a;
+  --fg: #e4e4e4;
+  --dim: #8d8d8d;
+  --faint: #585858;
+  --on: #fff;
+  --bar: #d0d0d0;
+  --bar-dim: #3c3c3c;
+  --ok: #9fd3a8;
+  --warn: #e3c58a;
+  --bad: #e39a9a;
+  --g: 159, 211, 168;
+  --r: 227, 154, 154;
+}
+
+* { box-sizing: border-box; }
+
+/*
+ * Baseline: no part of the popup keeps a browser or system default look. One rule each for
+ * hidden elements, text selection, the keyboard focus ring, links, pressed and disabled controls.
+ */
+[hidden] { display: none !important; } /* wins over any class that sets display */
+:root { accent-color: var(--on); caret-color: var(--on); -webkit-tap-highlight-color: transparent; }
+::selection { background: var(--on); color: #000; }
+:focus-visible { outline: 1px solid var(--on); outline-offset: 1px; }
+:focus:not(:focus-visible) { outline: none; }
+a { color: inherit; -webkit-user-drag: none; }
+button:active, a:active { filter: brightness(1.25); }
+button:disabled { opacity: 0.35; cursor: default; }
+input:disabled { cursor: default; }
+
+/*
+ * Scrollbars: one look for every scrolling box in the popup, including ones nobody planned for.
+ * A 10px lane with a 4px thumb in the middle of it, no arrows, no track.
+ * Chromium takes the ::-webkit-scrollbar rules (exact sizes); they stop working as soon as
+ * scrollbar-color or scrollbar-width is set, so those two are only given to browsers without them.
+ */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-button { display: none; }
+::-webkit-scrollbar-thumb { background: var(--line2); background-clip: padding-box; border: 3px solid transparent; }
+::-webkit-scrollbar-thumb:hover, ::-webkit-scrollbar-thumb:active { background-color: var(--dim); }
+@supports not selector(::-webkit-scrollbar) {
+  * { scrollbar-width: thin; scrollbar-color: var(--line2) transparent; }
+}
+/*
+ * A browser popup is at most 600px tall. Taller content scrolls inside body, not in the window:
+ * a window scrollbar is added outside the 380px and makes the right gap wider than the left.
+ * Body keeps a 10px lane free on the right for its bar, the same as the left padding, so both
+ * side gaps are 10px whether the bar shows or not.
+ */
+html { overflow: hidden; }
+body {
+  width: 380px;
+  max-height: 600px;
+  overflow: hidden auto;
+  scrollbar-gutter: stable;
+  margin: 0;
+  padding: 10px 0 10px 10px; /* right: the scrollbar lane. Same as a panel's own padding, so nested boxes step in evenly */
+  background: var(--bg);
+  color: var(--fg);
+  font: 12px/1.5 "JetBrains Mono", "Cascadia Mono", "Fira Code", Consolas, ui-monospace, monospace;
+  cursor: default; /* no text cursor over labels; the text can still be selected and copied */
+}
+
+/* top bar ------------------------------------------------------------------ */
+.bar { display: flex; gap: 4px; margin-bottom: 6px; }
+.chip {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--dim);
+  padding: 3px 8px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.chip.grow { flex: 1; }
+.chip.on { color: var(--on); border-color: var(--line2); }
+.chip.bug { display: flex; align-items: center; padding: 3px 6px; text-decoration: none; }
+.chip.bug:hover { color: var(--fg); border-color: var(--line2); }
+.chip.bug:focus-visible { color: var(--on); border-color: var(--on); }
+/*
+ * Mode dropdown: a chip whose whole box is a button, so a click anywhere on it opens the list.
+ * The button carries the chip's padding; the caret is drawn over it. The chip shows only the
+ * value; its tooltip says it is the mode. The list is the popup's own (see popup.ts): it floats
+ * under the chip and takes no room in the layout.
+ */
+.chip.mode { position: relative; flex: none; padding: 0; }
+.chip.mode:hover, .chip.mode:has([aria-expanded="true"]) { border-color: var(--line2); }
+.chip.mode:has(#mode:focus-visible) { border-color: var(--on); outline: 1px solid var(--on); outline-offset: 1px; }
+#mode {
+  appearance: none;
+  display: block;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  outline: none; /* the chip shows the focus ring */
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  padding: 3px 21px 3px 8px;
+  cursor: pointer;
+}
+.mode-list {
+  position: absolute;
+  top: 100%;
+  left: -1px;
+  z-index: 10;
+  width: max-content;
+  max-width: 170px;
+  margin-top: 7px; /* its top edge lies on the first panel's top line; its left edge on the chip's and the panel's */
+  padding: 2px;
+  border: 1px solid var(--line2);
+  background: var(--panel);
+  box-shadow: 0 10px 18px -8px #000;
+}
+/* While the list is open everything under the header steps back (dimmed and slightly blurred); the header row stays as it is. */
+body > * { transition: opacity 0.12s, filter 0.12s; }
+body:has(#mode[aria-expanded="true"]) > :not(.bar) { opacity: 0.4; filter: blur(1.5px); }
+@media (prefers-reduced-motion: reduce) { body > * { transition: none; } }
+.mode-opt { display: flex; align-items: baseline; gap: 6px; padding: 4px 8px 4px 5px; border: 1px solid transparent; cursor: pointer; } /* 5px: the names start under the chip's own text */
+.mode-opt b { width: 5ch; color: var(--fg); font-weight: 400; }
+.mode-opt::after { content: "●"; margin-left: auto; padding-left: 6px; color: var(--ok); font-size: 8px; visibility: hidden; } /* marks the current mode; its room is kept in every row */
+.mode-opt small { color: var(--faint); font-size: 10px; }
+.mode-opt[aria-selected="true"] b { color: var(--on); font-weight: 600; }
+.mode-opt[aria-selected="true"]::after { visibility: visible; }
+/* One highlight for the row under the pointer and the row the arrow keys are on. */
+.mode-opt.active { background: #1a1a1a; border-color: var(--line2); }
+.mode-opt.active small { color: var(--dim); }
+.chip.mode::after {
+  content: '';
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  margin-top: -1px;
+  border: 3px solid transparent;
+  border-top-color: currentColor;
+  pointer-events: none;
+}
+
+/* tooltip: one box for every [data-tip], placed by popup.ts so it stays inside the popup --------- */
+.tip {
+  position: fixed;
+  z-index: 20;
+  max-width: 240px;
+  padding: 3px 7px;
+  border: 1px solid var(--line2);
+  background: var(--panel);
+  color: var(--fg);
+  font-size: 10px;
+  box-shadow: 0 10px 18px -8px #000;
+  pointer-events: none;
+}
+
+/* what's new banner (after an update) -------------------------------------- */
+.update-note {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 7px 10px;
+  border: 1px solid var(--line2);
+  background: var(--panel);
+  color: var(--dim);
+  font-size: 11px;
+  text-decoration: none;
+}
+.update-label { color: var(--faint); font-size: 9px; text-transform: uppercase; letter-spacing: 0.16em; margin-right: 6px; }
+.update-dot { color: var(--ok); }
+.update-note b { color: var(--on); font-weight: 600; }
+.update-note:hover, .update-note:focus-visible { border-color: var(--dim); }
+.update-note:hover .update-link, .update-note:focus-visible .update-link { color: var(--on); }
+
+/* mode suggestion (Chrome; see popup.ts) -------------------------------------- */
+.mp-btn {
+  border: 1px solid var(--line2);
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  font-size: 11px;
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mp-btn:hover { color: var(--on); border-color: var(--on); }
+.mp-btn.primary { background: var(--on); border-color: var(--on); color: #000; font-weight: 600; }
+.mp-btn.primary:hover { background: var(--bar); border-color: var(--bar); color: #000; }
+.mp-dot { color: var(--ok); }
+/*
+ * The card the page would get after the switch, locked. Red and dashed, like a video card that
+ * is off: the page is not being upscaled.
+ */
+.source.mp-preview { gap: 3px; padding: 6px 12px; border: 1px dashed rgba(var(--r), 0.55); background: linear-gradient(135deg, rgba(var(--r), 0.12), rgba(var(--r), 0.02) 60%, transparent) var(--bg); cursor: default; }
+.source.mp-preview:hover, .source.mp-preview:active { filter: none; }
+.mp-preview:not([hidden]) + .sources:not(:empty) { margin-top: 10px; } /* a video beside the reader: its card keeps the cards' usual distance */
+.mp-dim { display: flex; flex-direction: column; gap: 3px; opacity: 0.5; }
+.mp-preview .switch { pointer-events: none; }
+.mp-preview .switch input { border-color: rgba(var(--r), 0.5); }
+.mp-preview .switch input::after { background: rgba(var(--r), 0.7); }
+.mp-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 5px; color: var(--dim); font-size: 12px; }
+.mp-row { display: flex; align-items: center; gap: 6px; flex: none; }
+.mp-paused { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+.mp-foot .mp-paused, .mp-foot .mp-dot { color: var(--bad); } /* stopped: red, as the off state is everywhere else */
+/*
+ * After a switch: "now in manga mode" and an undo, for a few seconds. It lies over the panel's
+ * head row and takes no room of its own, so the popup keeps its height (600px at most).
+ */
+.mp-head { position: relative; }
+.mp-done { position: absolute; inset: -7px 0 -3px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 3px 0 8px; border: 1px solid var(--line2); background: var(--bg); color: var(--fg); font-size: 10px; letter-spacing: normal; text-transform: none; }
+.mp-done .mp-dot { margin-right: 4px; }
+.mp-done .mp-btn { font-size: 10px; padding: 1px 6px; }
+/* While the suggestion shows, the mode chip takes the stopped colour. */
+.chip.mode.mp-ind-frame { border-color: rgba(var(--r), 0.6); background: linear-gradient(135deg, rgba(var(--r), 0.14), transparent 70%) var(--panel); }
+
+/* rating card (Chrome; see rate-prompt.ts) ---------------------------------- */
+.rate-card {
+  --accent: var(--fg);
+  position: relative;
+  margin-bottom: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line2);
+  background: var(--panel);
+}
+.rate-card.lv2, .rate-card.lv3 {
+  --accent: rgb(var(--g));
+  border-color: rgba(var(--g), 0.5);
+  background: linear-gradient(135deg, rgba(var(--g), 0.12), transparent 60%) var(--panel);
+}
+.rate-card.lv4 {
+  --accent: var(--warn);
+  border-color: rgba(227, 197, 138, 0.6);
+  background: linear-gradient(135deg, rgba(227, 197, 138, 0.14), transparent 60%) var(--panel);
+}
+.rate-top { color: var(--faint); font-size: 10px; }
+.rate-badge {
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 1px solid var(--line2);
+  color: var(--faint);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}
+.rate-card.lv2 .rate-badge, .rate-card.lv3 .rate-badge, .rate-card.lv4 .rate-badge { color: var(--accent); border-color: var(--accent); }
+.rate-big { color: var(--accent); font-size: 22px; font-weight: 700; line-height: 1.1; }
+.rate-row { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; margin-top: 8px; }
+.rate-lines { color: var(--faint); font-size: 10px; }
+.rate-actions { display: flex; flex-direction: column; align-items: stretch; gap: 4px; flex: none; }
+.rate-go {
+  padding: 4px 10px;
+  border: 1px solid var(--warn);
+  background: var(--warn);
+  color: #0b0b0b;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.rate-go:hover, .rate-go:focus-visible { filter: brightness(1.1); }
+.rate-done {
+  padding: 2px 8px;
+  border: 1px solid var(--line2);
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.rate-done:hover, .rate-x:hover { color: var(--on); }
+.rate-x {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--faint);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* panels ------------------------------------------------------------------- */
+.panel {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 10px;
+  margin-bottom: 6px;
+}
+.panel:last-of-type { margin-bottom: 0; }
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  color: var(--faint);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  margin-bottom: 6px;
+}
+
+/* video card --------------------------------------------------------------- */
+.sources { display: grid; gap: 10px; }
+
+.source {
+  border: 1px solid var(--line);
+  background: var(--bg);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  overflow: hidden;
+  transition: background 0.12s, border-color 0.12s;
+}
+/* off: red wash + border; on: green wash + border (X1 combo) */
+.source {
+  background: linear-gradient(135deg, rgba(var(--r), 0.14), rgba(var(--r), 0.02) 60%, transparent) var(--bg);
+  border-color: rgba(var(--r), 0.5);
+}
+.source.on {
+  background: linear-gradient(135deg, rgba(var(--g), 0.16), rgba(var(--g), 0.02) 60%, transparent) var(--bg);
+  border-color: rgba(var(--g), 0.6);
+}
+.source:hover { filter: brightness(1.08); }
+.source:active { filter: brightness(1.18); }
+
+.line { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.title { font-size: 14px; font-weight: 600; line-height: 1.3; }
+.episode { opacity: 0.85; }
+.tag {
+  display: inline-block;
+  border: 1px solid rgba(var(--r), 0.4);
+  padding: 1px 6px;
+  font-size: 10px;
+  color: rgba(var(--r), 0.85);
+  transition: color 0.12s, border-color 0.12s;
+  vertical-align: 2px;
+  white-space: nowrap;
+  margin-right: 4px;
+}
+.source.on .tag { border-color: rgba(var(--g), 0.5); color: rgb(var(--g)); }
+.meta { color: var(--faint); font-size: 11px; }
+
+.state { font-size: 12px; }
+.state.ok { color: var(--ok); }
+.state.warn { color: var(--warn); }
+.state.bad { color: var(--bad); }
+.state.dim { color: var(--dim); }
+.state.off { color: rgba(var(--r), 0.9); }
+
+/* switch: label is the hit area (44px tall), input is the visual */
+.switch { flex: none; display: flex; align-items: center; padding: 8px 0 8px 12px; margin: -8px 0 -8px 0; cursor: pointer; }
+.switch input {
+  appearance: none;
+  width: 36px;
+  height: 20px;
+  border: 1px solid var(--line2);
+  background: var(--bg);
+  position: relative;
+  cursor: pointer;
+  margin: 2px 0 0;
+}
+.switch input::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: var(--bar-dim);
+  transition: left 0.08s, background 0.08s;
+}
+.switch input { border-color: rgba(var(--r), 0.45); }
+.switch input::after { background: rgba(var(--r), 0.75); }
+.switch input:checked { border-color: rgba(var(--g), 0.6); }
+.switch input:checked::after { left: 18px; background: rgb(var(--g)); }
+.switch:hover input { border-color: var(--on); }
+
+/* performance panel ---------------------------------------------------------- */
+.verdict { text-transform: none; letter-spacing: 0; font-size: 11px; }
+.verdict.ok { color: var(--ok); } .verdict.warn { color: var(--warn); } .verdict.bad { color: var(--bad); } .verdict.dim { color: var(--dim); }
+#perf .meta { margin-top: 4px; }
+
+/* gpu: six boxes + bars ---------------------------------------------------- */
+.kv { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.kv div { border: 1px solid var(--line); padding: 3px 8px; min-height: 40px; }
+.kv span {
+  display: block;
+  color: var(--faint);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.kv b { display: block; font-size: 14px; font-weight: 600; white-space: nowrap; line-height: 1.4; }
+.kv b.ok { color: var(--ok); } .kv b.warn { color: var(--warn); } .kv b.bad { color: var(--bad); }
+
+.bars {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 20px;
+  border-bottom: 1px solid var(--line);
+  margin-top: 2px;
+}
+.bars i { flex: 1; background: var(--bar); display: block; min-height: 1px; }
+.bars i.empty { background: var(--bar-dim); }
+.bars i.over { background: var(--bad); }
+.bars i.stale { opacity: 0.45; }
+.bars s { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--faint); pointer-events: none; }
+
+.empty { color: var(--faint); margin: 0; font-size: 11px; }
+
+/* presets ------------------------------------------------------------------ */
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.tile {
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--dim);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  padding: 5px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+}
+.tile small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile:hover { border-color: var(--line2); }
+.tile b { color: var(--fg); font-size: 12px; font-weight: 600; }
+.tile small { font-size: 10px; color: var(--faint); }
+.tile[aria-checked="true"] { background: #1a1a1a; border-color: var(--on); }
+.tile[aria-checked="true"] b::before { content: "▸ "; color: var(--on); }
+
+.pills { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.pill {
+  border: 1px solid var(--line2);
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  font-size: 11px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.pill:hover { color: var(--on); border-color: var(--on); }
+.pill::before { content: "+ "; }
+.pill[aria-checked="true"] { background: var(--on); color: #000; border-color: var(--on); }
+.pill[aria-checked="true"]:hover { background: var(--bar); border-color: var(--bar); color: #000; }
+.pill[aria-checked="true"]::before { content: "✓ "; }
+.pill[role="radio"]::before, .pill[role="radio"][aria-checked="true"]::before { content: none; }
+.pills-label { color: var(--faint); font-size: 11px; align-self: center; margin-right: auto; }
+
+.note { display: none; }
+
+/* manga mode (local prototype): chapter card in "playing now" ------------------- */
+.manga-card { margin-top: 10px; }
+.sources:empty + .manga-card { margin-top: 0; }
+/* one line: chapter tag and "9 pages · colour · 2000×2798", vertically centred together */
+.manga-card .episode, .mp-preview .episode { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.manga-card .tag, .mp-preview .tag { vertical-align: baseline; margin-right: 0; flex: none; }
+.manga-card .epname, .mp-preview .epname { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+/* No separator line in the card: the status line, or the bar, sits a little lower instead. */
+.manga-card .mc-prog, .manga-card .state { margin-top: 4px; }
+/*
+ * Progress: one block per page in page order, all the same size, on one row whatever the page
+ * count. A long chapter (see MC_MAX_BLOCKS in popup.ts) gets one segment per state instead, as
+ * wide as its share of the pages, so no block is ever thinner than a pixel.
+ */
+.mc-pages { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 2px; }
+.mc-pages i { height: 6px; background: var(--bar-dim); }
+.mc-pages i.done { background: var(--ok); }
+.mc-pages i.fail { background: var(--bad); }
+.mc-pages i.now { background: transparent; box-shadow: inset 0 0 0 1px var(--on); }
+.mc-pages.shares { display: flex; }
+.mc-pages.shares i { flex: 0 0 0; min-width: 2px; }
+/* Counts: four equal boxes, a coloured square and one word over the number, both centred. */
+.mc-counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+.mc-counts > div { display: flex; flex-direction: column-reverse; justify-content: center; align-items: center; gap: 1px; min-width: 0; border: 1px solid var(--line); padding: 5px 0 4px; }
+.mc-counts b { font-size: 12px; font-weight: 600; line-height: 1.2; color: var(--fg); }
+.mc-counts [data-k="done"] b { color: var(--ok); }
+.mc-counts [data-k="fail"] b { color: var(--bad); }
+.mc-counts span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding-left: 0.12em; /* balances the tracking after the last letter, so the label sits on the centre line */
+  color: var(--faint);
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.mc-counts .zero b { color: var(--faint); }
+.mc-counts .zero .pkey { opacity: 0.4; }
+.manga-card.unsupported .switch { opacity: 0.35; pointer-events: none; }
+/* mode "manga": a video card shows its stored switch, but it cannot be flipped */
+.source.paused { cursor: default; }
+.source.paused .switch { opacity: 0.35; pointer-events: none; }
+
+/* manga mode: header tag and page map ------------------------------------------ */
+.chip.manga { color: var(--ok); border-color: rgba(var(--g), 0.5); }
+
+/*
+ * One square per page. The sizes are chosen so every cell and gap is a whole pixel: the tray's
+ * border (1px) and padding (2px) leave 332px of the panel's 338px, which is 12 cells of 24px and
+ * 11 gaps of 4px. Columns and rows are both the fixed cell size, so a cell is square whatever
+ * width is left; only the space between columns can stretch.
+ */
+.pmap {
+  --cell: 24px;
+  display: grid;
+  grid-template-columns: repeat(12, var(--cell));
+  grid-auto-rows: var(--cell);
+  justify-content: space-between;
+  gap: 4px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  margin-bottom: 8px;
+}
+/*
+ * Long chapters: three rows and a scrollbar. The cells keep their size and the gaps give way:
+ * the scrollbar takes 11px, which leaves 321px, 12 cells of 24px and 11 gaps of 3px. The columns
+ * are spread over the width rather than given a fixed gap, so a scrollbar of another width
+ * changes the gaps and never the cells. The thumb is the popup's usual 4px (see the top of the file).
+ */
+.pmap.long {
+  column-gap: 0;
+  row-gap: 3px;
+  max-height: calc(3 * var(--cell) + 2 * 3px + 6px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.pmap.long::-webkit-scrollbar { width: 11px; }
+.pmap.long::-webkit-scrollbar-thumb { border-width: 3px 3px 3px 4px; }
+
+/* A cell and its square beside the counts share one look. States change colours only, never the box. */
+.pcell, .pkey { border: 1px solid var(--line2); background: transparent; }
+.pcell.done, .pkey.done { background: var(--ok); border-color: var(--ok); }
+.pcell.fail, .pkey.fail { background: var(--bad); border-color: var(--bad); }
+.pcell.now, .pkey.now { border-style: dashed; border-color: var(--on); }
+
+.pcell {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  color: var(--dim);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: 0;
+  cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s, color 0.12s;
+}
+.pcell.done, .pcell.fail { color: var(--bg); }
+.pcell.now { color: var(--on); animation: pcell-now 0.9s ease-in-out infinite alternate; }
+.pcell[aria-disabled='true'] { cursor: default; }
+.pcell:not([aria-disabled='true']):hover { border-color: var(--on); }
+.pcell:not(.done, .fail, [aria-disabled='true']):hover { color: var(--on); }
+@keyframes pcell-now { from { opacity: 1; } to { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) {
+  .pcell { transition: none; }
+  .pcell.now { animation: none; }
+}
+
+.kv.two { grid-template-columns: repeat(2, 1fr); }
+.pkey { flex: none; width: 6px; height: 6px; }
+</style>
+
+<!--
+  2. THE FIX BLOCK (CSS). Added after popup.css in the After popup only. Every After popup gets
+     this same block. Port it to src/popup.css as it is (each part says what it replaces).
+-->
+<style id="fix-css" media="not all">
+/* Graph gap: 10px below the stat boxes, as the panel's padding (was 2px). */
+.bars { margin-top: 10px; }
+/*
+ * Side gaps: 10px on the left and 10px on the right, always. When the popup scrolls, its bar sits
+ * outside the right gap: the popup becomes 7px wider (a 4px bar and 3px of air after it), so the content keeps its
+ * width and both gaps. popup.ts sets .scrolls on <html> after each repaint.
+ */
+body { padding: 10px; scrollbar-gutter: auto; }
+html.scrolls body { width: 387px; }
+/* The popup's own bar is a solid 6px strip at the very edge: no transparent margin around the thumb, so the
+   gap you see between the content and the bar is the same 10px as the gap on the left. */
+body::-webkit-scrollbar { width: 7px; } /* a 4px bar + 3px of air between it and the popup's edge */
+body::-webkit-scrollbar-thumb { border: solid transparent; border-width: 3px 3px 3px 0; background-clip: padding-box; } /* air on the edge side, top and bottom; none on the content side, so the gap before the bar is the same 10px as on the left */
+/* DESIGN OPTIONS: looks for the popup's own bar. The popup is 380px + the bar's width while it scrolls. */
+html.sb-slim body::-webkit-scrollbar { width: 5px; } /* 2px bar */
+html.sb-slim.scrolls body { width: 385px; }
+html.sb-wide body::-webkit-scrollbar { width: 9px; } /* 6px bar */
+html.sb-wide.scrolls body { width: 389px; }
+html.sb-track body::-webkit-scrollbar-track { background: var(--panel); }
+html.sb-bright body::-webkit-scrollbar-thumb { background: var(--fg); }
+html.sb-accent body::-webkit-scrollbar-thumb { background: var(--ok); }
+html.sb-hollow body::-webkit-scrollbar-thumb { background: var(--bg); box-shadow: inset 0 0 0 1px var(--dim); }
+html.sb-hollow body::-webkit-scrollbar-track { background: var(--bg); }
+html.sb-blocks body::-webkit-scrollbar-thumb { background: repeating-linear-gradient(to bottom, var(--dim) 0 6px, transparent 6px 8px); }
+html.sb-line body::-webkit-scrollbar-track { background: linear-gradient(to right, transparent 0 2.5px, var(--line2) 2.5px 3.5px, transparent 3.5px); }
+html.sb-line body::-webkit-scrollbar-thumb { background: var(--dim); }
+/* Effect pills line up with the preset tiles above them: same three columns, same gap, so each pill is exactly one tile wide. */
+#effects { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+#effects .pill { text-align: left; padding-left: 8px; padding-right: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* DESIGN OPTIONS: telling the preset panel's three groups apart, without separator lines */
+.sep-space #effects, .sep-space #upscale { margin-top: 14px; }
+.sep-head { margin: 6px 0 4px; color: var(--faint); font-size: 9px; text-transform: uppercase; letter-spacing: 0.16em; line-height: 1.5; }
+.sep-heads #effects, .sep-heads #upscale { margin-top: 0; }
+.sep-heads #upscale .pills-label { display: none; }
+/* Upscale: six equal boxes across the full width, on the same 6px gap as the tiles and the effect buttons. Two of them are exactly one tile wide, so the row lines up with the columns above. */
+.sep-heads #upscale { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.sep-heads #upscale .pill { padding-left: 0; padding-right: 0; text-align: center; }
+.sep-side .sep-side { align-self: center; justify-self: end; color: var(--faint); font-size: 11px; }
+.sep-shape #effects .pill { border-style: dashed; }
+.sep-shape #effects .pill.on { border-style: solid; }
+.sep-mark #presets, .sep-mark #effects, .sep-mark #upscale { position: relative; }
+.sep-mark #effects, .sep-mark #upscale { margin-top: 12px; }
+.sep-mark #effects::before, .sep-mark #upscale::before { content: ''; position: absolute; left: 0; top: -7px; width: 16px; height: 2px; background: var(--line2); }
+/* A card with no episode info still fills its three rows (same 89.5px card either way) */
+/* Long title and no episode info: two title lines, then the tag row instead of the info line (22 + 5 + 16.5 = 43.5px for the title) */
+.source.fill-title.fill-both .line { min-height: 43.5px; }
+.source.fill-title.fill-both .line .title { line-height: 21.75px; }
+.source.fill-both .meta { display: none; }
+.source.fill-both .episode { display: flex; }
+.source.fill-both .epname { color: var(--dim); }
+.source.fill-title:not(.fill-both) .episode { display: none; }
+.source.fill-title .line { min-height: 46px; align-items: flex-start; } /* title row 22 + gap 5 + episode row 19 */
+.source.fill-title .line .title { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; line-height: 23px; }
+.source.fill-quality .epname { color: var(--dim); }
+/* Every key square is a filled colour, none outlined: done green, active white, failed red, queued grey. The page bar's active squares match. */
+.mc-counts .pkey { border: 0; background: var(--faint); }
+.mc-counts .pkey.done { background: var(--ok); }
+.mc-counts .pkey.fail { background: var(--bad); }
+.mc-counts .pkey.now { background: var(--on); }
+.mc-pages i.now { background: var(--on); box-shadow: none; }
+/* Count tiles: the number on top, its word under it */
+.mc-counts > div { flex-direction: column; padding: 5px 0; } /* equal space above the number and under the word */
+/* Page bar: every page is the same 6px square with the same gap, whatever the page count. A full row is 39 squares; longer chapters wrap to a second row. */
+.mc-pages:not(.shares) { grid-auto-flow: row; grid-template-columns: repeat(auto-fill, 6px); grid-auto-columns: auto; justify-content: start; gap: 2px; } /* exact 2px gaps: spreading 39 squares over 312px would give 2.05px, which rounds unevenly */
+.mc-pages:not(.shares) i { width: 6px; height: 6px; }
+/* Every full card is the same height whatever it holds: the episode row keeps its height with or without a tag. */
+.source:not(.compact):not(.manga-card) .episode { min-height: 19px; }
+/* Not possible: the reason, in the state's own colour, on the info line */
+.source .meta .why { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--bad); opacity: 0.85; }
+/* ===== FIX BLOCK: CSS ========================================================================= */
+
+/*
+ * F1. Fonts: scripts the monospace fonts do not cover (Arabic, Hebrew, CJK, Korean) take a sans
+ * face from this list, never the browser's serif default. Replaces the family list in body's `font`.
+ */
+body {
+  font-family: "JetBrains Mono", "Cascadia Mono", "Fira Code", Consolas, ui-monospace, monospace,
+    "Segoe UI", "Noto Sans", "Noto Sans Arabic", "Noto Sans Hebrew", "Yu Gothic UI", "Hiragino Sans",
+    "Microsoft YaHei", "Malgun Gothic", sans-serif;
+}
+
+/*
+ * F2. One line, then an ellipsis: titles, the episode line, the info line, the state. popup.ts
+ * puts the full text in the element's data-tip when it is cut. min-width: 0 lets the text give
+ * way, so the switch never moves.
+ */
+.line { min-width: 0; }
+.line .title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source .episode { display: flex; align-items: center; gap: 6px; min-width: 0; opacity: 1; }
+.source .episode > :not(.state) { opacity: 0.85; }
+.source .tag { flex: none; max-width: 50%; margin-right: 0; overflow: hidden; text-overflow: ellipsis; vertical-align: baseline; }
+.source .epname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source .state { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Info line: the host gives way first; resolution, scale and the "capped" note always show. */
+.source .meta { display: flex; min-width: 0; white-space: nowrap; }
+.source .meta .host { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.source .meta .res { flex: none; white-space: pre; }
+/* The state sits at the end of the episode line, under the switch it belongs to. */
+.source .episode .state { flex: none; margin-left: auto; }
+
+/* F3. Tooltip: a long host or URL breaks inside the box. */
+.tip { overflow-wrap: anywhere; }
+
+/*
+ * F4. "what's new" after an update: a chip in the header in place of the clock, for the one popup
+ * that shows it. It takes no height. If the row is full it is the chip that gives way.
+ * Replaces the .update-note rules.
+ */
+.chip.new { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--ok); border-color: rgba(var(--g), 0.5); text-decoration: none; }
+.chip.new:hover, .chip.new:focus-visible { color: var(--on); border-color: var(--ok); }
+
+/*
+ * F5. Rating: one row over the first panel's head row (as .mp-done does), so it takes no height.
+ * Level colours come from the .rate-card.lvN rules, which stay. Replaces the other .rate-* rules.
+ */
+.rate-card.rate-strip { position: absolute; inset: -7px 0 -3px; display: flex; align-items: center; gap: 6px; margin: 0; padding: 0 3px 0 8px; font-size: 10px; letter-spacing: normal; text-transform: none; }
+.rate-strip .rate-text { flex: 1 1 auto; display: flex; align-items: center; gap: 6px; min-width: 0; }
+.rate-strip .rate-big { flex: none; font-size: 10px; line-height: 1.5; white-space: nowrap; }
+.rate-strip .rate-badge { min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: baseline; }
+.rate-strip .rate-go, .rate-strip .rate-done { flex: none; padding: 1px 6px; font-size: 10px; }
+.rate-strip .rate-x { position: static; flex: none; padding: 4px; }
+
+/*
+ * F6. Headroom in the base layout. The performance legend moves into the tooltip of the graph and
+ * of the verdict; the gaps inside the panels become the 6px used between panels and tiles.
+ */
+#legend { display: none; }
+.pills { margin-top: 6px; }
+.kv { gap: 6px; }
+.kv b { line-height: 1.3; } /* as .title, the other 14px text: the tile is its 40px min-height */
+.mc-counts { margin-top: 6px; }
+.pmap { margin-bottom: 6px; }
+
+/*
+ * F7. Compact card: every video after the first, and a video beside a manga reader. One row:
+ * a dot in the state colour, the title, the switch. The rest is in the card's tooltip.
+ */
+.source.compact { padding: 5px 12px; }
+.source.compact > :not(.line) { display: none; }
+.source.compact .title::before { content: "●"; margin-right: 6px; font-size: 8px; vertical-align: 2px; color: var(--dim); }
+.source.compact[data-state="ok"] .title::before { color: var(--ok); }
+.source.compact[data-state="warn"] .title::before { color: var(--warn); }
+.source.compact[data-state="bad"] .title::before { color: var(--bad); }
+.source.compact[data-state="off"] .title::before { color: rgba(var(--r), 0.9); }
+
+/* F8. Page map beside a video card: same three rows as without a video (popup.ts sets --rows and .long). */
+/* No tray behind the cells: no background, border or padding. The cells sit straight on the panel. */
+.pmap { background: none; border: 0; padding: 0; }
+/* Same gap between rows as between columns: the 12 cells span the panel exactly, and the row gap copies the column gap. */
+#pmap { container-type: inline-size; }
+.pmap:not(.long) { justify-content: start; gap: calc((100cqw - 12 * var(--cell)) / 11); }
+.pmap.long { max-height: calc(var(--rows, 3) * var(--cell) + (var(--rows, 3) - 1) * 3px); }
+
+/* ===== END OF FIX BLOCK: CSS ================================================================== */
+</style>
+
+<!-- 3. This demo page only. -->
+<style>
+/* the popup's tokens, repeated because popup.css above does not apply to this page */
+:root {
+  color-scheme: dark;
+  --bg: #0b0b0b;
+  --panel: #111;
+  --line: #262626;
+  --line2: #3a3a3a;
+  --fg: #e4e4e4;
+  --dim: #8d8d8d;
+  --faint: #585858;
+  --on: #fff;
+  --ok: #9fd3a8;
+  --warn: #e3c58a;
+  --bad: #e39a9a;
+  --g: 159, 211, 168;
+  --r: 227, 154, 154;
+}
+* { box-sizing: border-box; }
+::selection { background: var(--on); color: #000; }
+html { scrollbar-width: thin; scrollbar-color: var(--line2) transparent; }
+body {
+  margin: 0;
+  padding: 20px 24px 40px;
+  background: #171717;
+  color: var(--fg);
+  font: 12px/1.5 "JetBrains Mono", "Cascadia Mono", "Fira Code", Consolas, ui-monospace, monospace;
+}
+h1 { margin: 0 0 2px; font-size: 14px; font-weight: 600; }
+.intro { margin: 0 0 14px; color: var(--dim); font-size: 11px; max-width: 110ch; }
+.head { color: var(--faint); font-size: 9px; text-transform: uppercase; letter-spacing: 0.16em; }
+
+.controls { display: grid; gap: 8px; margin-bottom: 16px; padding: 10px; border: 1px solid var(--line); background: var(--panel); }
+.group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.group .head { flex: none; width: 84px; }
+.btn { border: 1px solid var(--line2); background: transparent; color: var(--dim); font: inherit; font-size: 11px; padding: 4px 10px; cursor: pointer; }
+.btn:hover { color: var(--on); border-color: var(--on); }
+.btn:focus-visible { outline: 1px solid var(--on); outline-offset: 2px; }
+.btn[aria-pressed="true"] { background: var(--on); border-color: var(--on); color: #000; }
+
+.what { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 0 0 12px; }
+.what b { font-size: 14px; font-weight: 600; }
+.what span { color: var(--dim); font-size: 11px; }
+
+.pair { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 24px; }
+.side { width: 380px; }
+.side-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+.side-top b { font-size: 14px; font-weight: 600; }
+.badge { border: 1px solid var(--line2); padding: 1px 6px; font-size: 10px; white-space: nowrap; }
+.badge.ok { color: var(--ok); border-color: rgba(var(--g), 0.5); }
+.badge.warn { color: var(--warn); border-color: rgba(227, 197, 138, 0.6); }
+.badge.bad { color: var(--bad); border-color: rgba(var(--r), 0.5); }
+.side-check { min-height: 18px; margin-bottom: 6px; font-size: 11px; color: var(--dim); }
+.side-check.ok { color: var(--ok); }
+.side-check.bad { color: var(--bad); }
+.side iframe { display: block; width: 380px; height: 600px; border: 0; background: var(--bg); box-shadow: 0 0 0 1px var(--line2), 0 24px 40px -18px #000; }
+
+.fix { display: grid; gap: 4px; max-width: 784px; margin: 20px auto 0; padding: 10px; border: 1px solid var(--line); background: var(--panel); }
+.fix p { margin: 0; }
+.fix .ref { color: var(--faint); font-size: 11px; }
+footer { max-width: 784px; margin: 20px auto 0; color: var(--dim); font-size: 11px; }
+footer ul { margin: 4px 0 0; padding-left: 18px; }
+</style>
+</head>
+<body>
+<h1>Overflow fixes: before and after</h1>
+<p class="intro">The real popup (src/popup.css and the body of src/popup.html) with sample data, twice. Left: as it is today. Right: the same popup plus one fix block. Nothing here talks to the extension. Each popup is 380px wide and at most 600px tall, as in the browser. Hover a cut text to see the popup's own tooltip.</p>
+
+<div class="controls" id="controls">
+  <div class="group" role="group" aria-label="Card without episode info"><span class="head">no episode</span>
+    <button type="button" class="btn" data-fill="empty" title="The episode row stays empty">empty</button>
+    <button type="button" class="btn" data-fill="title" title="The title may use two lines">2-line title</button>
+    <button type="button" class="btn" data-fill="quality" title="The row shows the source quality as a tag and the output size">quality row</button>
+    <button type="button" class="btn" data-fill="smart" title="Long title: two lines. Short title: the quality row">smart</button>
+  </div>
+  <div class="group" role="group" aria-label="Scrollbar style"><span class="head">scrollbar</span>
+    <button type="button" class="btn" data-sb="solid" title="4px grey bar, 3px from the edge">medium</button>
+    <button type="button" class="btn" data-sb="slim" title="2px bar">slim</button>
+    <button type="button" class="btn" data-sb="wide" title="6px bar">wide</button>
+    <button type="button" class="btn" data-sb="track" title="Thumb on a faint track">track</button>
+    <button type="button" class="btn" data-sb="bright" title="White thumb">bright</button>
+    <button type="button" class="btn" data-sb="accent" title="Green thumb, the on colour">accent</button>
+    <button type="button" class="btn" data-sb="hollow" title="Outlined thumb, like a chip">hollow</button>
+    <button type="button" class="btn" data-sb="blocks" title="Thumb in small blocks, like the page bar">blocks</button>
+    <button type="button" class="btn" data-sb="line" title="A 1px track line with a 6px thumb on it">line</button>
+  </div>
+  <div class="group" role="group" aria-label="Preset groups"><span class="head">groups</span>
+    <button type="button" class="btn" data-sep="none" title="No separation (as it is)">none</button>
+    <button type="button" class="btn" data-sep="space" title="A wider gap between the three groups">space</button>
+    <button type="button" class="btn" data-sep="heads" title="A small heading over each group, like the panel heading">headings</button>
+    <button type="button" class="btn" data-sep="side" title="The group name in the empty third column, like the word upscale">side label</button>
+    <button type="button" class="btn" data-sep="shape" title="Effects are dashed switches, presets stay solid">shape</button>
+    <button type="button" class="btn" data-sep="mark" title="A short accent mark at the left of each group">marks</button>
+  </div>
+</div>
+
+<p class="what"><b id="what-name"></b><span id="what-ref"></span></p>
+
+<main class="pair">
+  <section class="side" aria-label="Before">
+    <div class="side-top"><span class="head">before · today</span><b id="h-before"></b><span class="badge" id="b-before"></span></div>
+    <div class="side-check" id="c-before"></div>
+    <iframe id="f-before" title="Popup today"></iframe>
+  </section>
+  <section class="side" aria-label="After">
+    <div class="side-top"><span class="head">after · fix block</span><b id="h-after"></b><span class="badge" id="b-after"></span></div>
+    <div class="side-check" id="c-after"></div>
+    <iframe id="f-after" title="Popup with the fixes"></iframe>
+  </section>
+</main>
+
+<div class="fix"><span class="head">the fix</span><p id="fix-text"></p><p class="ref" id="fix-ref"></p></div>
+
+<footer>
+  <span class="head">separate fixes, no visual</span>
+  <ul>
+    <li>Videos in several frames of one host share a card: the video id must include the frame id.</li>
+    <li>Tall webtoon strips fail with the GPU texture limit: renderer work, not a popup issue.</li>
+  </ul>
+</footer>
+
+<!-- The popup's body: src/popup.html between <body> and its script, copied by a script. External links point nowhere. -->
+<template id="popup-body">
+<header class="bar">
+    <!-- Firefox has no manga mode: popup.ts swaps this for a plain "anime4k" chip there. -->
+    <span class="chip mode" id="modeChip">
+      <button type="button" id="mode" role="combobox" aria-label="Mode" aria-haspopup="listbox" aria-expanded="false" aria-controls="mode-list" data-tip="Mode: what the extension upscales">auto</button>
+      <div class="mode-list" id="mode-list" role="listbox" aria-label="Mode" hidden>
+        <div class="mode-opt" id="mode-opt-auto" role="option" data-mode="auto" aria-selected="true"><b>auto</b><small>video and manga</small></div>
+        <div class="mode-opt" id="mode-opt-anime" role="option" data-mode="anime" aria-selected="false"><b>anime</b><small>video only</small></div>
+        <div class="mode-opt" id="mode-opt-manga" role="option" data-mode="manga" aria-selected="false"><b>manga</b><small>pages only</small></div>
+      </div>
+    </span>
+    <span class="chip" id="hint">off</span>
+    <span class="chip grow" id="gpuchip">gpu —</span>
+    <span class="chip" id="clock"></span>
+    <a class="chip bug" id="report" href="#" draggable="false" data-tip="Report a problem" aria-label="Report a problem">
+      <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M5.5 4.5a2.5 2.5 0 0 1 5 0"/><rect x="4.5" y="5" width="7" height="8" rx="3.5"/><path d="M8 7.5V13M2 9h2.5M11.5 9H14M2.5 5l2 1.5M13.5 5l-2 1.5M2.5 13l2-1.5M13.5 13l-2-1.5"/></svg>
+    </a>
+  </header>
+
+  <a class="update-note" id="whatsnew" href="#" draggable="false" hidden>
+    <span><span class="update-label">updated</span><span class="update-dot">●</span> v<b id="whatsnew-ver"></b></span><span class="update-link">what's new →</span>
+  </a>
+
+  <section class="rate-card" id="rate" hidden>
+    <button type="button" class="rate-x" id="rate-x" data-tip="Hide until the next milestone" aria-label="Hide">✕</button>
+    <div class="rate-top">you've upscaled<span class="rate-badge" id="rate-badge"></span></div>
+    <div class="rate-big" id="rate-big"></div>
+    <div class="rate-row">
+      <div class="rate-lines"><span id="rate-l1"></span><br /><span id="rate-l2"></span></div>
+      <div class="rate-actions">
+        <a class="rate-go" id="rate-go" draggable="false">★ rate it</a>
+        <button type="button" class="rate-done" id="rate-done" hidden>✓ already rated</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head mp-head">
+      <span id="nowLabel">playing now</span><span id="count"></span>
+      <!-- Mode suggestion (Chrome build), after a switch: "now in manga mode" with an undo, over this row. See popup.ts. -->
+      <div class="mp-done" id="mp-done" role="status" hidden>
+        <span><span class="mp-dot">●</span><span id="mp-done-text"></span></span>
+        <button type="button" class="mp-btn" id="mp-undo">undo</button>
+      </div>
+    </div>
+    <!-- Mode suggestion: the mode leaves this page's manga or video alone. The card the page would get, locked. -->
+    <div class="source mp-preview" id="mp-preview" role="group" aria-label="Mode suggestion" hidden>
+      <div class="mp-dim">
+        <div class="line"><div class="title" id="mp-title"></div><label class="switch"><input type="checkbox" disabled aria-label="Off until the mode changes" /></label></div>
+        <div class="episode"><span class="tag" id="mp-tag"></span><span class="epname" id="mp-name"></span></div>
+      </div>
+      <div class="mp-foot"><span class="mp-row"><button type="button" class="mp-btn primary" id="mp-go"></button><button type="button" class="mp-btn" id="mp-auto">use auto</button></span><span class="mp-paused"><span class="mp-dot">●</span> paused</span></div>
+    </div>
+    <div class="sources" id="sources"></div>
+    <div class="source manga-card" id="manga-card" hidden>
+      <div class="line"><div class="title" id="manga-title"></div><label class="switch" id="manga-switch"><input type="checkbox" aria-label="Upscale manga pages on this site" /></label></div>
+      <div class="episode"><span class="tag" id="manga-tag"></span><span class="epname" id="manga-name"></span></div>
+      <div class="state" id="manga-state" hidden></div>
+      <div class="mc-prog" id="manga-prog" hidden>
+        <div class="mc-pages" id="mc-pages" role="img"></div>
+        <div class="mc-counts">
+          <div data-k="done"><b>0</b><span><i class="pkey done"></i>done</span></div>
+          <div data-k="now"><b>0</b><span><i class="pkey now"></i>active</span></div>
+          <div data-k="fail"><b>0</b><span><i class="pkey fail"></i>failed</span></div>
+          <div data-k="wait"><b>0</b><span><i class="pkey"></i>queued</span></div>
+        </div>
+      </div>
+    </div>
+    <p class="empty" id="empty">No video found yet. Start playback, then reopen this popup.</p>
+  </section>
+
+  <section class="panel" id="pmap" hidden>
+    <div class="panel-head"><span>page map</span><span class="verdict dim" id="pmap-count"></span></div>
+    <div class="pmap" id="pmap-grid" role="group" aria-label="pages in this chapter"></div>
+    <div class="kv two">
+      <div><span>Per page</span><b id="pmap-per">–</b></div>
+      <div><span>Left</span><b id="pmap-left">–</b></div>
+    </div>
+  </section>
+
+  <section class="panel" id="perf">
+    <div class="panel-head"><span>performance</span><span class="verdict dim" id="verdict">● off</span></div>
+    <div class="kv">
+      <div><span>GPU</span><b id="k-load">—</b></div>
+      <div><span>Per frame</span><b id="k-ms">—</b></div>
+      <div><span>Output</span><b id="k-fps">—</b></div>
+      <div><span>Avg · peak</span><b id="k-avg">—</b></div>
+      <div><span>Frame limit</span><b id="k-limit">—</b></div>
+      <div><span>Late frames</span><b id="k-late">—</b></div>
+    </div>
+    <div class="bars" id="bars"></div>
+    <div class="meta" id="legend">no measurements yet</div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><span>preset</span><span id="presetName"></span></div>
+    <div class="grid" id="presets"></div>
+    <div class="pills" id="effects">
+      <button type="button" class="pill" data-field="darkenLines" role="menuitemcheckbox">darken lines</button>
+      <button type="button" class="pill" data-field="thinLines" role="menuitemcheckbox">thin lines</button>
+    </div>
+    <div class="pills" id="upscale" role="radiogroup" aria-label="upscale">
+      <span class="pills-label">upscale</span>
+      <button type="button" class="pill" data-upscale="auto" role="radio" data-tip="4× only when the video is shown at more than 2× its size">auto</button>
+      <button type="button" class="pill" data-upscale="2x" role="radio">2×</button>
+      <button type="button" class="pill" data-upscale="4x" role="radio" data-tip="Heavier: about 2× the GPU time and memory of 2×">4×</button>
+      <button type="button" class="pill" data-upscale="8x" role="radio" data-tip="Experimental. Uses the largest scale up to this that fits your GPU (output capped at 8K).">8×</button>
+      <button type="button" class="pill" data-upscale="16x" role="radio" data-tip="Experimental. Uses the largest scale up to this that fits your GPU (output capped at 8K).">16×</button>
+      <button type="button" class="pill" data-upscale="32x" role="radio" data-tip="Experimental. Uses the largest scale up to this that fits your GPU (output capped at 8K).">32×</button>
+    </div>
+  </section>
+  <div class="tip" id="tip" role="tooltip" hidden></div>
+</template>
+
+<script>
+(function () {
+  'use strict';
+
+  // =============================================================================================
+  // Sample data (stands in for chrome.* and the content script)
+  // =============================================================================================
+  const PRESETS = [['A', 'Mode A', 'sharp'], ['B', 'Mode B', 'soft'], ['C', 'Mode C', 'denoise'], ['AA', 'A+A', 'sharper, heavy'], ['BB', 'B+B', 'softer, heavy'], ['CA', 'C+A', 'denoise+sharp']];
+  const UPSCALE_WANT = { auto: null, '2x': 2, '4x': 4, '8x': 8, '16x': 16, '32x': 32 };
+  const POPUP_MAX = 600;
+  const BARS = 48;
+  const PMAP_COLS = 12;
+  const PMAP_ROWS = 3;
+  const MC_MAX_BLOCKS = 80;
+  const CELL_STATES = ['done', 'now', 'fail', 'wait'];
+  const CELL_WORD = { done: 'done', now: 'in progress', fail: 'failed', wait: 'waiting' };
+  const SOURCE_FPS = 24;
+
+  const words = (n, seed) => seed.repeat(Math.ceil(n / seed.length)).slice(0, n).trim();
+  const LONG_SERIES = 'The Reincarnated Aristocrat Who Was Exiled Uses His Appraisal Skill To Rise In The World And Build The Strongest Territory';
+  const T60 = 'That Time I Got Reincarnated as a Slime Second Season Part 2';
+  const T95 = 'I Was Reincarnated as the 7th Prince so I Can Take My Time Perfecting My Magical Ability Part 2';
+  const T_CJK = '転生したらスライムだった件 第2期 '.repeat(4).slice(0, 60);
+  const T_ARABIC = 'هجوم العمالقة الموسم الأخير Attack on Titan الجزء الثالث الحلقة الخاصة';
+  const T_HEBREW = 'מתקפת הטיטאנים העונה האחרונה חלק שלישי הפרק המיוחד';
+  const WORD = 'Some_Show_S01E05_1080p_x265_10bit_AAC_5.1_MultiSub_BluRay_Remux_HEVC_HDR10_DolbyVision_GroupName_ABCDEF12_final_v2_fixed.mkv';
+  const SLUG = 'volume-12-chapter-104-the-very-long-arc-name-part-two-of-three';
+  const LONG_HOST = 'watch.the-very-long-anime-streaming-site-name.example';
+  const STREAM_HOST = `stream-edge-node-0042-eu-central.${'x'.repeat(63)}.${'y'.repeat(50)}.cdn.test`;
+  const NO_CORS = 'This video source does not allow browser upscaling (cross-origin without CORS). Normal playback is available.';
+  const TOO_BIG = 'Source is 2160p; up to 1440p is supported (2× output would need too much GPU memory).';
+
+  function vid(o = {}) {
+    return { title: 'Sousou no Frieren', tag: 'S1 E12', epName: 'Episode 12', frameHost: null, mediaHost: 'cdn.miruro.tv', height: 1080,
+      enabled: true, status: 'Active', playing: true, message: '', maxScale: 4, gpuMs: 6.8, ...o };
+  }
+  /** A reader: `run` 'off' (site switch off), 'done' (every page upscaled) or 'busy' (some done, two active, one failed). */
+  function reader(o = {}) {
+    const total = o.total ?? 12;
+    const run = o.run ?? 'done';
+    const loaded = run === 'busy' ? Math.floor(total * 0.75) : total;
+    const marks = Array.from({ length: loaded }, (_, i) => (run !== 'busy' ? 'done' : i === 6 ? 'fail' : i < loaded / 2 ? 'done' : i < loaded / 2 + 2 ? 'now' : 'todo'));
+    return { series: 'Witch Hat Atelier', chapter: '12', volume: null, chapterTitle: '', total, marks, loading: run === 'busy' ? 2 : 0,
+      siteOn: run !== 'off', grey: false, size: { w: 600, h: 860 }, imageHost: 'img.mangadot.net', pageMs: 420, reasons: ['chapter number', `${total} stacked pages`], ...o };
+  }
+  function page(o = {}) {
+    return { host: 'miruro.tv', mode: 'auto', preset: 'A', upscale: 'auto', banner: null, rate: null, videos: [vid()], manga: null, ...o };
+  }
+  const RATE = {
+    2: { level: 2, badge: 'regular', big: '12 episodes · 10 h', lines: ['your lines just got a power-up', "it's growing on you, isn't it?"], alreadyRated: false },
+    3: { level: 3, badge: 'binge no jutsu', big: '48 episodes · 33 h', lines: ['that is about 4 full seasons.', "you're hooked, tell others?"], alreadyRated: true },
+    4: { level: 4, badge: 'hokage', big: '200 episodes · 111 h', lines: ['that is 4.6 days of sharper anime.', "you're basically senpai now, rate it?"], alreadyRated: true },
+  };
+  const READER_HOST = 'mangadot.net';
+
+  const FIX = {
+    base: 'Base layout: the performance legend ("last 2 s · dashed = limit · red = late") moves into the tooltip of the graph and of the verdict, the gaps inside the panels become 6px everywhere, and the card state sits at the end of the episode line.',
+    title: 'Title on one line with an ellipsis; the full title is in the popup\'s own tooltip. The switch never moves.',
+    banner: 'The banner becomes a chip in the header, in place of the clock, for the one popup that shows it. It takes no height.',
+    cap: 'Info line on one line: the host gives way first, the resolution and the "capped" note always show. The reason (GPU limit) and the full host are in the tooltip.',
+    rate: 'The rating card stays as it is (the full card looked better). The popup scrolls while it shows; the bar sits outside the right gap, so both side gaps stay 10px.',
+    many: 'The first card stays full. Every other video is a compact one-row card: state as a dot colour, title, switch; the details are in its tooltip. 2 videos fit; the scrollbar starts at 3.',
+    state: 'Short state ("● Not possible") on one line, and a few plain words of reason on the line under it; the full message is in the tooltip.',
+    script: 'One line with an ellipsis, full title in the tooltip; Arabic, Hebrew and CJK take a sans face from the font list, never a serif.',
+    manga: 'Series name on one line with an ellipsis, full name in the tooltip. The banner is a header chip.',
+    both: 'A reader on the page: the video card is compact, the page map stands in for the performance panel (as it already does on reader pages), and the map shows two rows before it scrolls.',
+    word: 'min-width: 0 on the title, so an unbroken word is cut with an ellipsis and the switch stays in the card.',
+    tag: 'The chapter tag is at most half the card wide, cut with an ellipsis; the full tag is in its tooltip.',
+    tip: 'Tooltip text breaks anywhere (overflow-wrap: anywhere), so a long host stays inside the 240px box.',
+    key: 'Opening the mode list scrolls the popup to the top first.',
+    zoom: 'When the browser gives the popup less than 600px (zoom above 100%), body takes the real viewport height as its max-height and scrolls with its own scrollbar.',
+  };
+
+  const SCENARIOS = [
+    { id: 'base', group: 'common', label: 'one video', name: 'One video, upscaling (the normal popup)', sweep: '600px (599.7, 0.3px spare)', fix: FIX.base, data: () => page() },
+    { id: 'noep', group: 'common', label: 'no episode, short title', name: 'Short title, and the site gives no season or episode', sweep: '600px (fits, but the card has an empty row)', fix: 'A card with no episode info fills its row: a long title takes two lines, a short one gets the quality as a tag.', data: () => page({ videos: [vid({ title: 'Sousou no Frieren', tag: '', epName: '' })] }) },
+    { id: 't60', group: 'common', label: `${T60.length}-char title`, name: `Video title of ${T60.length} characters`, sweep: '607px', fix: FIX.title, data: () => page({ videos: [vid({ title: T60, tag: '', epName: '' })] }) },
+    { id: 't95', group: 'common', label: `${T95.length}-char title`, name: `Video title of ${T95.length} characters`, sweep: '614px with a title of two lines; this one has four', fix: FIX.title, data: () => page({ videos: [vid({ title: T95 })] }) },
+    { id: 'banner', group: 'common', label: 'what\'s new', name: '"what\'s new" banner after an update + one video', sweep: '638px', fix: FIX.banner, data: () => page({ banner: '1.2.6' }) },
+    { id: 'cap', group: 'common', label: '32× capped', name: 'Upscale 32× on a 1080p video: "capped" note', sweep: '616px', fix: FIX.cap, data: () => page({ upscale: '32x' }) },
+    { id: 'caphost', group: 'common', label: '32× + long host', name: 'Upscale 32× on a 1080p video, long host name', sweep: '633px', fix: FIX.cap, data: () => page({ upscale: '32x', host: LONG_HOST }) },
+
+    { id: 'rate0', group: 'occasional', label: 'rating, no video', name: 'Rating card (level 3, "already rated") on a page without video', sweep: '646px', fix: FIX.rate, data: () => page({ videos: [], rate: RATE[3] }) },
+    { id: 'rate1', group: 'occasional', label: 'rating + video', name: 'Rating card (level 2) + one video', sweep: '705px', fix: FIX.rate, data: () => page({ rate: RATE[2] }) },
+    { id: 'rate2', group: 'occasional', label: 'rating (rated) + video', name: 'Rating card (level 4, "already rated") + one video', sweep: '726px', fix: FIX.rate, data: () => page({ rate: RATE[4] }) },
+    { id: 'v2', group: 'occasional', label: '2 videos', name: 'Two videos on one page', sweep: '723px', fix: FIX.many, data: () => page({ videos: [vid(), vid({ title: 'Sousou no Frieren (preview)', enabled: false, status: 'Off', height: 360 })] }) },
+    { id: 'v3', group: 'occasional', label: '3 videos', name: 'Three videos on one page', sweep: '847px', fix: FIX.many, data: () => page({ videos: [vid(), vid({ enabled: false, status: 'Off' }), vid({ status: 'Waiting' })] }) },
+    { id: 'v5', group: 'occasional', label: '5 videos', name: 'Five videos on one page (on, off, paused, waiting, not possible)', sweep: 'about 1094px (1130px with a "not possible" card)', fix: FIX.many,
+      data: () => page({ videos: [vid(), vid({ enabled: false, status: 'Off' }), vid({ playing: false, frameHost: 'player.miruro.tv' }), vid({ status: 'Waiting' }), vid({ status: 'Unavailable', message: NO_CORS, frameHost: 'embed.cdn.test' })] }) },
+    { id: 'cors', group: 'occasional', label: 'not possible: CORS', name: '"Not possible": cross-origin stream without CORS', sweep: '636px', fix: FIX.state, data: () => page({ videos: [vid({ status: 'Unavailable', message: NO_CORS })] }) },
+    { id: 'uhd', group: 'occasional', label: 'not possible: 2160p', name: '"Not possible": 2160p source', sweep: '636px', fix: FIX.state, data: () => page({ videos: [vid({ status: 'Unavailable', message: TOO_BIG, height: 2160 })] }) },
+    { id: 'cjk', group: 'occasional', label: 'CJK title', name: 'Japanese title of 60 full-width characters', sweep: '625px', fix: FIX.script, data: () => page({ videos: [vid({ title: T_CJK, tag: '', epName: '' })] }) },
+    { id: 'arabic', group: 'occasional', label: 'Arabic title', name: 'Arabic title mixed with Latin', sweep: '632px, Arabic drawn in Times New Roman', fix: FIX.script, data: () => page({ videos: [vid({ title: T_ARABIC, tag: 'S2 E5', epName: 'Episode 5' })] }) },
+    { id: 'hebrew', group: 'occasional', label: 'Hebrew title', name: 'Hebrew title', sweep: '614px, Hebrew drawn in Times New Roman', fix: FIX.script, data: () => page({ videos: [vid({ title: T_HEBREW, tag: 'S2 E5', epName: 'Episode 5' })] }) },
+    { id: 'mlong0', group: 'occasional', label: 'long series, off', name: 'Reader: long series name, 30 pages, site off', sweep: '618px', fix: FIX.manga,
+      data: () => page({ host: READER_HOST, videos: [], manga: reader({ series: LONG_SERIES, volume: '12', chapter: '172.5', chapterTitle: 'The Long Awaited Reunion At The Border Fortress', total: 30, run: 'off' }) }) },
+    { id: 'mlong1', group: 'occasional', label: 'long series, on', name: 'Reader: long series name, 30 pages, upscaling', sweep: '650px', fix: FIX.manga,
+      data: () => page({ host: READER_HOST, videos: [], manga: reader({ series: LONG_SERIES, volume: '12', chapter: '172.5', chapterTitle: 'The Long Awaited Reunion At The Border Fortress', total: 30 }) }) },
+    { id: 'm280', group: 'occasional', label: '280-char series', name: 'Reader: series name of 280 characters, 12 pages, upscaling', sweep: '685px', fix: FIX.manga,
+      data: () => page({ host: READER_HOST, videos: [], manga: reader({ series: words(280, `${LONG_SERIES} `), chapter: '281', chapterTitle: 'The Reunion' }) }) },
+    { id: 'mbanner', group: 'occasional', label: 'reader + what\'s new', name: 'Reader running, 48 pages + "what\'s new" banner', sweep: '618px', fix: FIX.manga,
+      data: () => page({ host: READER_HOST, videos: [], banner: '1.2.6', manga: reader({ total: 48, run: 'busy' }) }) },
+
+    { id: 'vr0', group: 'rare', label: 'video + reader, off', name: 'Video and manga reader on one page, reader off', sweep: '775px', fix: FIX.both,
+      data: () => page({ host: READER_HOST, videos: [vid({ tag: '', epName: '', title: 'Witch Hat Atelier PV' })], manga: reader({ total: 9, run: 'off' }) }) },
+    { id: 'vr1', group: 'rare', label: 'video + reader, on', name: 'Video and manga reader on one page, mode manga, reader running', sweep: '807px', fix: FIX.both,
+      data: () => page({ host: READER_HOST, mode: 'manga', videos: [vid({ tag: '', epName: '', title: 'Witch Hat Atelier PV', status: 'Waiting' })], manga: reader({ total: 9 }) }) },
+    { id: 'worst', group: 'rare', label: 'worst stack', name: 'Worst stack: banner + rating card + video on + reader with 30 pages', sweep: '1028px', fix: `${FIX.banner} ${FIX.rate} ${FIX.both}`,
+      data: () => page({ host: READER_HOST, banner: '1.2.6', rate: RATE[3], videos: [vid({ tag: '', epName: '', title: 'Witch Hat Atelier PV' })], manga: reader({ total: 30 }) }) },
+
+    { id: 'word', group: 'broken', label: 'unbroken title', name: `Title that is one unbroken word of ${WORD.length} characters`, sweep: '575px, switch pushed out of the card', fix: FIX.word,
+      data: () => page({ videos: [vid({ title: WORD, tag: '', epName: '' })] }), check: checkSwitch },
+    { id: 'tag', group: 'broken', label: 'long chapter tag', name: `Reader: chapter tag of ${SLUG.length} characters from the URL`, sweep: '525px, tag reaches x=428.9 in a 380px popup', fix: FIX.tag,
+      data: () => page({ host: READER_HOST, videos: [], manga: reader({ series: 'Reader', chapter: SLUG, total: 9 }) }), check: checkTag },
+    { id: 'tip', group: 'broken', label: 'long tooltip', name: 'Tooltip holding a long host name', sweep: 'text 570.7px past its 240px box', fix: FIX.tip,
+      data: () => page({ videos: [vid({ frameHost: 'player.very-long-cdn-hostname-for-streams.example', mediaHost: STREAM_HOST })] }), act: actTip, check: checkTip },
+    { id: 'key', group: 'broken', label: 'mode list, scrolled', name: 'Mode list opened by keyboard while the popup is scrolled down (5 videos)', sweep: 'list opens above the visible area', fix: FIX.key,
+      data: () => page({ videos: [vid(), vid({ enabled: false, status: 'Off' }), vid({ playing: false }), vid({ status: 'Waiting' }), vid()] }), act: actModeKey, check: checkList },
+    { id: 'zoom125', group: 'broken', label: 'zoom 125%', name: 'Browser zoom 125%: the popup viewport is 480px tall', sweep: '120px cut off below, no scrollbar', fix: FIX.zoom, view: 480, data: () => page() },
+    { id: 'zoom150', group: 'broken', label: 'zoom 150%', name: 'Browser zoom 150%: the popup viewport is 400px tall', sweep: 'about 200px cut off below, no scrollbar', fix: FIX.zoom, view: 400, data: () => page() },
+  ];
+
+  // =============================================================================================
+  // TODAY: what src/popup.ts paints, with the sample data. Used by both popups, unchanged.
+  // =============================================================================================
+  function setText(el, text) { if (el.textContent !== text) el.textContent = text; }
+  function setTip(el, text) { if (text) el.dataset.tip = text; else delete el.dataset.tip; }
+  const pLabel = (h) => (h ? `${h}p` : '?');
+  function fmtTime(ms) { const sec = ms / 1000; return sec < 9.95 ? `${sec.toFixed(1)} s` : sec < 59.5 ? `${Math.round(sec)} s` : `${Math.round(sec / 60)} min`; }
+  function samplesFor(ms) { return Array.from({ length: BARS }, (_, i) => Math.round(ms * (0.8 + 0.5 * (((i * 7919) % 13) / 13)) * 10) / 10); }
+
+  function statsOf(d, v) {
+    if (!v.enabled || v.status !== 'Active' || d.mode === 'manga') return null;
+    const scale = Math.min(UPSCALE_WANT[d.upscale] ?? 2, v.maxScale);
+    return { gpuMs: v.gpuMs, fps: v.playing ? SOURCE_FPS : 0, samples: samplesFor(v.gpuMs), outputWidth: Math.round((v.height * 16) / 9) * scale, outputHeight: v.height * scale };
+  }
+  function cardState(d, v) {
+    if (d.mode === 'manga') return { cls: 'dim', text: '● Paused: manga mode' };
+    if (!v.enabled) return { cls: 'off', text: '● Off · tap to turn on' };
+    switch (v.status) {
+      case 'Active': return v.playing ? { cls: 'ok', text: '● Upscaling' } : { cls: 'dim', text: '● Paused' };
+      case 'Loading': return { cls: 'warn', text: '● Starting…' };
+      case 'Waiting': return { cls: 'dim', text: '● Waiting for video' };
+      case 'Suspended': return { cls: 'dim', text: '● Paused (fullscreen / PiP / hidden tab)' };
+      case 'Unavailable': return { cls: 'bad', text: `● Not possible — ${v.message.toLowerCase()}` };
+      default: return { cls: 'dim', text: '● Off' };
+    }
+  }
+  function capNote(upscale, scale) {
+    const want = UPSCALE_WANT[upscale];
+    return want !== null && scale < want ? ` · ${want}× capped: GPU limit` : '';
+  }
+
+  function paintCard(doc, d, v) {
+    const el = doc.createElement('div');
+    el.className = 'source';
+    el.innerHTML = `
+    <div class="line"><div class="title"></div><label class="switch"><input type="checkbox" /></label></div>
+    <div class="episode"><span class="tag"></span><span class="epname"></span></div>
+    <div class="meta"></div>
+    <div class="state"></div>`;
+    const q = (s) => el.querySelector(s);
+    setText(q('.title'), v.title || d.host);
+    setText(q('.tag'), v.tag);
+    q('.tag').hidden = !v.tag;
+    setText(q('.epname'), v.epName);
+    q('.episode').hidden = !v.tag && !v.epName;
+    const stats = statsOf(d, v);
+    const outH = stats ? stats.outputHeight : v.height * 2;
+    const out = stats ? `${stats.outputWidth}×${stats.outputHeight}` : pLabel(outH);
+    const scale = v.height ? Math.round(outH / v.height) : 0;
+    const res = v.height ? ` · ${pLabel(v.height)} → ${out} (${scale}×)${stats ? capNote(d.upscale, scale) : ''}` : '';
+    setText(q('.meta'), `${d.host}${res}`);
+    const frameHost = v.frameHost ?? d.host;
+    q('.meta').dataset.tip = frameHost !== d.host ? `player frame: ${frameHost} · stream: ${v.mediaHost}` : `stream: ${v.mediaHost}`;
+    const st = cardState(d, v);
+    setText(q('.state'), st.text);
+    q('.state').className = `state ${st.cls}`;
+    const paused = d.mode === 'manga';
+    q('input').disabled = paused;
+    q('input').checked = v.enabled;
+    el.classList.toggle('paused', paused);
+    el.classList.toggle('on', v.enabled);
+    q('.switch').addEventListener('click', (e) => e.preventDefault()); // the sample is fixed
+    return el;
+  }
+
+  function paintPerf(doc, d, v) {
+    const $ = (s) => doc.querySelector(s);
+    const f = (n, dec = 1) => (n === null ? '—' : n.toFixed(dec));
+    const bars = $('#bars');
+    const barEls = [];
+    for (let i = 0; i < BARS; i += 1) { const b = doc.createElement('i'); barEls.push(b); bars.append(b); }
+    const limitEl = doc.createElement('s');
+    bars.append(limitEl);
+    const t = { load: $('#k-load'), ms: $('#k-ms'), fps: $('#k-fps'), avg: $('#k-avg'), limit: $('#k-limit'), late: $('#k-late') };
+    if (!v || !v.enabled) {
+      setText($('#verdict'), '● off');
+      for (const bar of barEls) { bar.className = 'empty'; bar.style.height = '1px'; }
+      limitEl.style.display = 'none';
+      setText($('#legend'), v ? 'turn the video on to start measuring' : 'no video');
+      return;
+    }
+    const s = statsOf(d, v);
+    const live = !!s && v.playing && s.fps > 0;
+    const budget = s ? 1000 / SOURCE_FPS : null;
+    const samples = s ? s.samples : [];
+    const avg = samples.length ? samples.reduce((a, b) => a + b, 0) / samples.length : null;
+    const peak = samples.length ? Math.max(...samples) : null;
+    const late = budget !== null && samples.length ? samples.filter((ms) => ms > budget).length : null;
+    const gpuMs = s ? s.gpuMs : null;
+    const load = live && budget !== null && gpuMs !== null ? gpuMs / budget : null;
+    setText(t.load, load === null ? '—' : `${Math.round(load * 100)}%`);
+    t.load.className = load === null ? '' : load > 1 ? 'bad' : load > 0.8 ? 'warn' : 'ok';
+    setText(t.ms, gpuMs === null ? '—' : `${f(gpuMs)} ms`);
+    setText(t.fps, live ? `${s.fps.toFixed(0)} fps` : 'paused');
+    setText(t.avg, avg === null ? '—' : `${f(avg, 0)} · ${f(peak, 0)}`);
+    setText(t.limit, budget === null ? '—' : `${f(budget, 0)} ms`);
+    setText(t.late, late === null ? '—' : `${late} / 2 s`);
+    let vc = 'dim'; let vt = '● paused';
+    if (v.status === 'Unavailable') { vc = 'bad'; vt = '● not possible'; } else if (v.status === 'Loading') { vc = 'warn'; vt = '● starting'; } else if (live) {
+      if (load > 1) { vc = 'bad'; vt = '● dropping frames'; } else if (load > 0.8) { vc = 'warn'; vt = '● near limit'; } else { vc = 'ok'; vt = '● keeping up'; }
+    }
+    setText($('#verdict'), vt);
+    $('#verdict').className = `verdict ${vc}`;
+    const scale = Math.max(budget ?? 0, peak ?? 0, 1);
+    for (let i = 0; i < BARS; i += 1) {
+      const b = barEls[i];
+      if (i >= samples.length) { b.className = 'empty'; b.style.height = '1px'; continue; }
+      b.className = `${budget !== null && samples[i] > budget ? 'over' : ''}${live ? '' : ' stale'}`;
+      b.style.height = `${Math.max(4, Math.round((samples[i] / scale) * 100))}%`;
+    }
+    limitEl.style.display = budget !== null ? '' : 'none';
+    if (budget !== null) limitEl.style.bottom = `${Math.round((budget / scale) * 100)}%`;
+    setText($('#legend'), samples.length ? `last 2 s · dashed = limit · red = late${live ? '' : ' · last run'}` : 'no measurements yet');
+  }
+
+  function pageStates(m, on) {
+    return Array.from({ length: m.total }, (_, i) => { const mark = on ? m.marks[i] : undefined; return mark === 'done' || mark === 'now' || mark === 'fail' ? mark : 'wait'; });
+  }
+  function countStates(states) { const c = { done: 0, now: 0, fail: 0, wait: 0 }; for (const st of states) c[st] += 1; return c; }
+
+  function paintManga(doc, d) {
+    const $ = (s) => doc.querySelector(s);
+    const m = d.manga;
+    const card = $('#manga-card');
+    card.hidden = !m;
+    $('#upscale').hidden = !!m;
+    $('#pmap').hidden = !m;
+    if (!m) return;
+    const on = m.siteOn;
+    const done = on ? m.marks.filter((k) => k === 'done').length : 0;
+    card.classList.toggle('on', on);
+    $('#manga-switch input').checked = on;
+    $('#manga-switch').addEventListener('click', (e) => e.preventDefault());
+    setText($('#manga-title'), m.series ?? d.host);
+    setTip($('#manga-title'), m.reasons.length ? `Detected: ${m.reasons.join(' · ')}` : '');
+    $('#manga-tag').hidden = !m.chapter;
+    setText($('#manga-tag'), `${m.volume ? `vol ${m.volume} · ` : ''}ch ${m.chapter ?? ''}`);
+    const upscaled = on && done > 0;
+    const size = upscaled ? `${m.size.w * 2}×${m.size.h * 2}` : `${m.size.w}×${m.size.h}`;
+    setText($('#manga-name'), [m.chapterTitle, `${m.total} page${m.total === 1 ? '' : 's'}`, m.grey === null ? '' : m.grey ? 'b&w' : 'colour', size].filter(Boolean).join(' · '));
+    setTip($('#manga-name'), [`${m.size.w}×${m.size.h}${upscaled ? ` → ${m.size.w * 2}×${m.size.h * 2}` : ''}`, `pages from ${m.imageHost}`].join(' · '));
+    const text = on ? '' : '● off · switch on to upscale this chapter';
+    const state = $('#manga-state');
+    state.hidden = !text;
+    state.className = `state ${on ? '' : 'off'}`;
+    setText(state, text);
+    $('#manga-prog').hidden = !!text;
+    setTip(card, text ? '' : 'Alt+M compares a page with its original');
+    const states = pageStates(m, on);
+    const counts = countStates(states);
+    if (!text) {
+      const pageBar = $('#mc-pages');
+      const shares = states.length > MC_MAX_BLOCKS;
+      pageBar.classList.toggle('shares', shares);
+      for (const st of shares ? CELL_STATES : states) {
+        const block = doc.createElement('i');
+        block.className = st;
+        if (shares) { block.style.flexGrow = String(counts[st]); block.hidden = counts[st] === 0; }
+        pageBar.append(block);
+      }
+      for (const k of CELL_STATES) {
+        const box = $(`.mc-counts [data-k="${k}"]`);
+        setText(box.querySelector('b'), String(counts[k]));
+        box.classList.toggle('zero', counts[k] === 0);
+      }
+      setTip($('.mc-counts [data-k="fail"]'), counts.fail ? 'last error: fetch failed' : '');
+    }
+    // page map
+    const grid = $('#pmap-grid');
+    const reachable = m.marks.length + m.loading;
+    for (let i = 0; i < m.total; i += 1) {
+      const cell = doc.createElement('button');
+      cell.type = 'button';
+      cell.tabIndex = i === 0 ? 0 : -1;
+      cell.textContent = String(i + 1);
+      cell.className = states[i] === 'wait' ? 'pcell' : `pcell ${states[i]}`;
+      const there = i < reachable;
+      const label = there ? `go to page ${i + 1}, ${on ? CELL_WORD[states[i]] : 'off'}` : `page ${i + 1}, not loaded yet`;
+      cell.dataset.tip = label;
+      cell.setAttribute('aria-label', label);
+      if (!there) cell.setAttribute('aria-disabled', 'true');
+      grid.append(cell);
+    }
+    grid.classList.toggle('long', m.total > PMAP_COLS * PMAP_ROWS);
+    setText($('#pmap-count'), `● ${counts.done} / ${m.total}`);
+    $('#pmap-count').className = `verdict ${!on ? 'dim' : counts.fail ? 'warn' : 'ok'}`;
+    const per = on ? m.pageMs : null;
+    const left = m.marks.filter((mk) => mk === 'now' || mk === 'todo').length + m.loading;
+    setText($('#pmap-per'), per === null ? '–' : fmtTime(per));
+    $('#pmap-per').className = per === null ? '' : 'ok';
+    setText($('#pmap-left'), per === null || !left ? '–' : `~${fmtTime(per * left)}`);
+    setTip($('#pmap-left'), per === null || !left ? '' : 'at most: several pages are worked on at once');
+  }
+
+  /** Fills one popup document as src/popup.ts would for this page. */
+  function paintToday(doc, d) {
+    const $ = (s) => doc.querySelector(s);
+    // settings
+    setText($('#mode'), d.mode);
+    for (const o of doc.querySelectorAll('.mode-opt')) o.setAttribute('aria-selected', String(o.dataset.mode === d.mode));
+    for (const [value, label, desc] of PRESETS) {
+      const b = doc.createElement('button');
+      b.type = 'button'; b.className = 'tile'; b.dataset.preset = value; b.setAttribute('role', 'menuitemradio');
+      b.setAttribute('aria-checked', String(value === d.preset));
+      const name = doc.createElement('b'); name.textContent = label;
+      const small = doc.createElement('small'); small.textContent = desc;
+      b.append(name, small);
+      $('#presets').append(b);
+    }
+    setText($('#presetName'), PRESETS.find((p) => p[0] === d.preset)[1]);
+    for (const b of doc.querySelectorAll('[data-field]')) b.setAttribute('aria-checked', 'false');
+    for (const b of doc.querySelectorAll('[data-upscale]')) b.setAttribute('aria-checked', String(b.dataset.upscale === d.upscale));
+    setText($('#clock'), '21:10');
+    // notices
+    if (d.banner) { setText($('#whatsnew-ver'), d.banner); $('#whatsnew').hidden = false; }
+    if (d.rate) {
+      $('#rate').classList.add(`lv${d.rate.level}`);
+      setText($('#rate-badge'), d.rate.badge);
+      setText($('#rate-big'), d.rate.big);
+      setText($('#rate-l1'), d.rate.lines[0]);
+      setText($('#rate-l2'), d.rate.lines[1]);
+      $('#rate-done').hidden = !d.rate.alreadyRated;
+      $('#rate').hidden = false;
+    }
+    // cards
+    for (const v of d.videos) $('#sources').append(paintCard(doc, d, v));
+    setText($('#count'), d.videos.length > 1 ? `${d.videos.length} videos` : '');
+    paintManga(doc, d);
+    $('#empty').hidden = d.videos.length > 0 || !!d.manga;
+    const reading = !!d.manga && d.videos.length === 0;
+    setText($('#nowLabel'), reading ? 'reading now' : 'playing now');
+    $('#perf').hidden = reading;
+    $('#hint').classList.toggle('manga', reading);
+    if (!reading) paintPerf(doc, d, d.videos.find((v) => v.enabled) ?? d.videos[0] ?? null);
+    // header chips
+    const stats = d.videos.map((v) => statsOf(d, v));
+    const active = stats.filter(Boolean).length;
+    const on = d.videos.filter((v) => v.enabled).length;
+    const mangaBusy = reading && d.manga.siteOn && d.manga.marks.includes('done');
+    setText($('#hint'), reading ? (mangaBusy ? `manga · ${d.preset.toLowerCase()}` : 'manga')
+      : d.videos.length === 0 ? 'off' : active ? `on · ${d.preset.toLowerCase()}` : !on ? 'off' : d.mode === 'manga' ? 'paused' : 'starting');
+    $('#hint').classList.toggle('on', active > 0 || mangaBusy);
+    const perPage = reading && d.manga.siteOn ? d.manga.pageMs : null;
+    const gpuMs = active ? stats.filter(Boolean).reduce((a, s) => a + s.gpuMs, 0) : null;
+    setText($('#gpuchip'), perPage !== null ? `${fmtTime(perPage)} / page` : gpuMs !== null ? `gpu ${gpuMs.toFixed(1)} ms` : 'gpu —');
+    $('#gpuchip').classList.toggle('on', perPage !== null || gpuMs !== null);
+  }
+
+  /** Today's tooltip and mode list (src/popup.ts), for one popup window. Returns the functions the fix wraps. */
+  function behaveToday(win) {
+    const doc = win.document;
+    const TIP_DELAY_MS = 400;
+    const TIP_GAP = 4;
+    const tipEl = doc.getElementById('tip');
+    let tipFor = null;
+    let tipTimer = 0;
+    const ui = {};
+    ui.hideTip = () => { win.clearTimeout(tipTimer); if (tipFor) tipFor.removeAttribute('aria-describedby'); tipFor = null; tipEl.hidden = true; };
+    ui.showTip = () => {
+      const el = tipFor;
+      const text = el && el.dataset.tip;
+      if (!el || !text || !el.isConnected || el.getAttribute('aria-expanded') === 'true') { ui.hideTip(); return; }
+      tipEl.textContent = text;
+      tipEl.hidden = false;
+      tipEl.style.left = '0';
+      tipEl.style.top = '0';
+      if (el.getAttribute('aria-label') !== text) el.setAttribute('aria-describedby', 'tip');
+      const r = el.getBoundingClientRect();
+      const box = doc.body.getBoundingClientRect();
+      const left = Math.min(r.left, box.right - tipEl.offsetWidth - TIP_GAP);
+      const below = r.bottom + TIP_GAP;
+      const top = below + tipEl.offsetHeight + TIP_GAP <= box.bottom ? below : r.top - tipEl.offsetHeight - TIP_GAP;
+      tipEl.style.left = `${Math.max(box.left + TIP_GAP, left)}px`;
+      tipEl.style.top = `${Math.max(box.top + TIP_GAP, top)}px`;
+    };
+    ui.armTip = (target, delay) => {
+      const el = target instanceof win.Element ? target.closest('[data-tip]') : null;
+      if (el === tipFor) return;
+      ui.hideTip();
+      if (!el) return;
+      tipFor = el;
+      if (delay) tipTimer = win.setTimeout(ui.showTip, delay); else ui.showTip();
+    };
+    doc.addEventListener('pointerover', (e) => ui.armTip(e.target, TIP_DELAY_MS));
+    doc.addEventListener('pointerout', (e) => { if (tipFor && !(e.relatedTarget instanceof win.Node && tipFor.contains(e.relatedTarget))) ui.hideTip(); });
+    doc.addEventListener('focusin', (e) => { if (e.target instanceof win.Element && e.target.matches(':focus-visible')) ui.armTip(e.target, 0); });
+    doc.addEventListener('focusout', () => ui.hideTip());
+    doc.addEventListener('pointerdown', () => ui.hideTip());
+    doc.addEventListener('scroll', () => ui.hideTip(), true);
+    doc.addEventListener('contextmenu', (e) => e.preventDefault());
+    doc.addEventListener('click', (e) => { if (e.target instanceof win.Element && e.target.closest('a[href="#"]')) e.preventDefault(); });
+
+    const modeBtn = doc.getElementById('mode');
+    const modeList = doc.getElementById('mode-list');
+    const modeOpts = [...modeList.querySelectorAll('[role="option"]')];
+    let modeActive = 0;
+    const setActive = (i) => {
+      modeActive = Math.max(0, Math.min(modeOpts.length - 1, i));
+      modeOpts.forEach((o, n) => o.classList.toggle('active', n === modeActive));
+      modeBtn.setAttribute('aria-activedescendant', modeOpts[modeActive].id);
+    };
+    ui.openModeList = (open) => {
+      if (open === !modeList.hidden) return;
+      modeList.hidden = !open;
+      modeBtn.setAttribute('aria-expanded', String(open));
+      if (open) { ui.hideTip(); setActive(modeOpts.findIndex((o) => o.getAttribute('aria-selected') === 'true')); } else modeBtn.removeAttribute('aria-activedescendant');
+    };
+    /** Arrow keys open the list and move the highlight; Esc and Enter close it. The sample's mode stays. */
+    ui.onModeKey = (key) => {
+      const open = !modeList.hidden;
+      if (key === 'Escape' || key === 'Enter') { ui.openModeList(false); return; }
+      if (key !== 'ArrowDown' && key !== 'ArrowUp') return;
+      ui.openModeList(true);
+      if (open) setActive(modeActive + (key === 'ArrowDown' ? 1 : -1));
+    };
+    modeBtn.addEventListener('click', () => ui.openModeList(modeList.hidden));
+    modeBtn.addEventListener('keydown', (e) => { if (/^(Arrow(Up|Down)|Escape)$/.test(e.key)) e.preventDefault(); ui.onModeKey(e.key); });
+    modeList.addEventListener('pointermove', (e) => { const i = modeOpts.indexOf(e.target.closest('[role="option"]')); if (i >= 0) setActive(i); });
+    modeList.addEventListener('click', () => ui.openModeList(false));
+    doc.addEventListener('pointerdown', (e) => { if (!e.target.closest('#modeChip')) ui.openModeList(false); });
+    return ui;
+  }
+
+  // =============================================================================================
+  // ===== FIX BLOCK: JS ===== behaviour and markup for the After popup. Runs after paintToday(),
+  // on the same DOM. Each part names the place in src/ it belongs to. `opt.stateBeside` is this
+  // page's "state line" switch.
+  // =============================================================================================
+  const PMAP_ROWS_BESIDE_VIDEO = 3; // same as without a video: the two-row cap made a 30-page chapter scroll inside the map
+  /** Short state for a card; the long text becomes the tooltip. popup.ts: cardState() and paintMangaCard(). */
+  function shortState(text) {
+    const rules = [
+      [/^● Not possible — (.*)$/, '● Not possible', (m) => m[1].charAt(0).toUpperCase() + m[1].slice(1)],
+      [/^● Paused \((.*)\)$/, '● Suspended', () => 'Paused while the video is in fullscreen, picture-in-picture or a hidden tab'],
+      [/^● Paused: manga mode$/, '● Paused', () => 'Manga mode: videos are not upscaled'],
+      [/^● Off · tap to turn on$/, '● Off', () => 'Tap to turn on'],
+      [/^● Waiting for video$/, '● Waiting', () => 'Waiting for the video to start'],
+      [/^● Anime4Nerd was updated/, '● Reload', () => 'Anime4Nerd was updated: reload this page to finish'],
+      [/^● this reader draws pages on a canvas/, '● Not possible', () => 'This reader draws pages on a canvas, so they cannot be upscaled yet'],
+    ];
+    for (const [re, short, tip] of rules) { const m = text.match(re); if (m) return { text: short, tip: tip(m) }; }
+    return { text, tip: '' };
+  }
+  /**
+   * A few plain words for why a video cannot be upscaled, shown on the card's info line; the full
+   * message stays in the tooltip. popup.ts: next to cardState(). Unknown reasons: their first clause.
+   */
+  function shortReason(message) {
+    if (/cross-origin|CORS/i.test(message)) return 'this site blocks access to its video';
+    const big = /Source is (\d+p); up to (\d+p)/i.exec(message);
+    if (big) return `source is ${big[1]} · up to ${big[2]} works`;
+    if (/texture limit/i.test(message)) return 'too large for this GPU';
+    if (/WebGL|GPU/i.test(message)) return 'the GPU is not available';
+    return message.split(/[.(;:]/)[0].trim().toLowerCase();
+  }
+  const isCut = (el) => el.scrollWidth > el.clientWidth;
+  /** Full text into the tooltip when the element is cut; a tooltip it already has is kept after it. */
+  function cutTip(el) {
+    if (!el.textContent || !isCut(el)) return;
+    setTip(el, [el.textContent, el.dataset.tip].filter(Boolean).join(' · '));
+  }
+
+  function applyFixes(win, ui, opt) {
+    const doc = win.document;
+    const $ = (s) => doc.querySelector(s);
+
+    // F4. popup.html + showWhatsNew(): the note is a header chip in place of the clock.
+    const note = $('#whatsnew');
+    if (!note.hidden) {
+      const version = $('#whatsnew-ver').textContent;
+      note.className = 'chip new';
+      note.textContent = `● new v${version}`;
+      setTip(note, `Updated to v${version} · see what's new`);
+      $('#clock').replaceWith(note);
+    }
+
+    // F5. popup.html + showRateCard(): one row inside the first panel's head row.
+    // Not used: the user keeps the full rating card ("old style looked better"), and accepts that
+    // the popup scrolls while it shows.
+    const rate = $('#rate');
+    if (false && !rate.hidden) {
+      const [badge, big, go, done, x] = ['#rate-badge', '#rate-big', '#rate-go', '#rate-done', '#rate-x'].map($);
+      const text = doc.createElement('span');
+      text.className = 'rate-text';
+      setTip(text, [badge.textContent, `you've upscaled ${big.textContent}`, $('#rate-l1').textContent, $('#rate-l2').textContent].join(' · '));
+      text.append(big, badge);
+      go.textContent = '★ rate';
+      done.textContent = '✓ rated';
+      setTip(done, 'Already rated: never ask again');
+      rate.replaceChildren(text, go, done, x);
+      rate.classList.add('rate-strip');
+      $('.mp-head').insertBefore(rate, $('#mp-done'));
+    }
+
+    // F2 + F7. popup.ts buildCard() / patchCard(): short state, info line in two parts, compact cards.
+    const beside = !$('#manga-card').hidden; // a reader on the page: the video card is compact
+    [...doc.querySelectorAll('#sources .source')].forEach((card, i) => {
+      const q = (s) => card.querySelector(s);
+      const state = q('.state');
+      const st = shortState(state.textContent);
+      setText(state, st.text);
+      setTip(state, st.tip);
+      // Info line: "host" + " · 1080p → 7680×4320 (4×) · 32× capped"; why it is capped goes to the tooltip.
+      const meta = q('.meta');
+      const full = meta.textContent;
+      const at = full.indexOf(' · ');
+      const host = doc.createElement('span');
+      host.className = 'host';
+      host.textContent = at < 0 ? full : full.slice(0, at);
+      const res = doc.createElement('span');
+      res.className = 'res';
+      res.textContent = at < 0 ? '' : full.slice(at).replace(' capped: GPU limit', ' capped');
+      meta.replaceChildren(host, res);
+      const capped = /(\d+× capped): GPU limit/.exec(full);
+      setTip(meta, [isCut(host) ? host.textContent : '', meta.dataset.tip, capped ? `${capped[1]}: GPU limit` : ''].filter(Boolean).join(' · '));
+      // Not possible: the info line says why in a few words (the resolution line means nothing then).
+      if (st.text === '● Not possible' && st.tip) {
+        const why = doc.createElement('span');
+        why.className = 'why';
+        why.textContent = shortReason(st.tip);
+        meta.replaceChildren(why);
+        setTip(meta, st.tip);
+      }
+      // "S1 E12" + "Episode 12" says the same thing twice (popup.ts labelFor() adds "Episode N" when a
+      // site gives no episode name). Beside the tag, show the quality instead; the info line keeps the host.
+      if (q('.tag').textContent && /^Episode \d+$/.test(q('.epname').textContent) && i === 0 && !beside) {
+        const m2 = /^ · (.*)$/.exec(res.textContent);
+        if (st.text === '● Not possible') {
+          q('.epname').textContent = ''; // no quality to show: the tag alone
+        } else if (m2) {
+          q('.epname').textContent = m2[1];
+          const stream = /stream: (\S+)/.exec(meta.dataset.tip ?? '');
+          res.textContent = stream ? ` · stream ${stream[1]}` : '';
+          card.classList.add('fill-quality');
+        }
+      }
+      // No episode info (no tag, no episode name): the row would be empty. Fill it with what is known.
+      const bare = !q('.tag').textContent && !q('.epname').textContent && st.text !== '● Not possible';
+      if (bare && i === 0 && !beside && opt.fill !== 'empty') {
+        const title = q('.title');
+        const long = title.scrollWidth > title.clientWidth;
+        const quality = /^ · (\S+) → (.*)$/.exec(res.textContent);
+        if (opt.fill === 'smart' && long && quality) {
+          // A tag no matter what. Long title: two lines for the title, and the bottom row becomes the
+          // tag row ("1080p" tag, output, host) in place of the plain info line. Same card height.
+          q('.tag').textContent = quality[1]; q('.tag').hidden = false;
+          q('.epname').textContent = `→ ${quality[2]} · ${host.textContent}`;
+          setTip(q('.episode'), [host.textContent, meta.dataset.tip].filter(Boolean).join(' · '));
+          card.classList.add('fill-title', 'fill-both');
+        } else if (opt.fill === 'title') {
+          card.classList.add('fill-title'); // the title takes the row: up to two lines
+        } else {
+          // "1080p" as the tag, the output beside it; the info line keeps the host (and stream host).
+          const m = /^ · (\S+) → (.*)$/.exec(res.textContent);
+          if (m) {
+            q('.tag').textContent = m[1]; q('.tag').hidden = false;
+            q('.epname').textContent = `→ ${m[2]}`;
+            const stream = /stream: (\S+)/.exec(meta.dataset.tip ?? '');
+            res.textContent = stream ? ` · stream ${stream[1]}` : '';
+            card.classList.add('fill-quality');
+          }
+        }
+      }
+      // The state at the end of the episode line (the line stays when there is no episode text).
+      if (opt.stateBeside) { q('.episode').append(state); q('.episode').hidden = false; }
+      // Compact: every card after the first, and any card beside a reader.
+      const compact = i > 0 || beside;
+      card.classList.toggle('compact', compact);
+      card.dataset.state = state.className.replace('state ', '');
+      if (compact) {
+        const episode = [q('.tag').textContent, q('.epname').textContent].filter(Boolean).join(' ');
+        setTip(card, [q('.title').textContent, episode, full, st.tip ? `${st.text.slice(2)}: ${st.tip}` : st.text.slice(2)].filter(Boolean).join(' · '));
+        delete meta.dataset.tip;
+      }
+    });
+
+    // paintMangaCard(): the same short states for the reader card.
+    const mangaState = $('#manga-state');
+    if (!mangaState.hidden) { const st = shortState(mangaState.textContent); setText(mangaState, st.text); if (st.tip) setTip(mangaState, st.tip); }
+
+    // refresh(): a reader on the page: the page map stands in for the performance panel, also beside a video.
+    const readerShown = !$('#pmap').hidden;
+    if (readerShown) $('#perf').hidden = true;
+    // F8. paintPageMap(): two rows beside a video card (PMAP_ROWS otherwise), then the map scrolls.
+    const grid = $('#pmap-grid');
+    if (readerShown && beside && doc.querySelector('#sources .source')) {
+      grid.style.setProperty('--rows', String(PMAP_ROWS_BESIDE_VIDEO));
+      grid.classList.toggle('long', grid.children.length > PMAP_COLS * PMAP_ROWS_BESIDE_VIDEO);
+    }
+
+    // F6. paintPerf() / paintMangaPerf(): the legend text is the tooltip of the graph and of the verdict.
+    const legend = $('#legend').textContent;
+    setTip($('#bars'), legend);
+    setTip($('#verdict'), legend);
+    // One status, in the performance panel's heading (the user's choice), not on the card as well.
+    // It is the open card's own state ("● Upscaling", "● Off", "● Not possible", ...); when the
+    // video is behind it reads "● Near limit" (amber) or "● Dropping frames" (red) instead.
+    // With no performance panel (a reader on the page) the state stays on the card.
+    const verdict = $('#verdict');
+    const open = $('#sources .source:not(.compact) .state');
+    if (open && !$('#perf').hidden) {
+      const speed = /(warn|bad)/.exec(verdict.className);
+      const behind = speed && /Upscaling/.test(open.textContent);
+      setText(verdict, behind ? (speed[1] === 'warn' ? '● Near limit' : '● Dropping frames') : open.textContent);
+      verdict.className = `verdict ${behind ? speed[1] : open.className.replace('state', '').trim() || 'dim'}`;
+      setTip(verdict, [open.dataset.tip, $('#legend').textContent].filter(Boolean).join(' · '));
+      open.hidden = true;
+    } else if (!open) {
+      verdict.hidden = true; // nothing to report: no card
+    }
+
+    // F2. After every repaint: a text that is cut shows its full text in the tooltip.
+    for (const el of doc.querySelectorAll('.source:not(.compact) .line .title, .mp-preview .title, .epname, .tag, .source .state, .chip.new, .rate-badge')) cutTip(el);
+
+    // DESIGN OPTIONS (pick one): the look of the popup's own scrollbar.
+    doc.documentElement.classList.add(`sb-${opt.sb}`);
+
+    // DESIGN OPTIONS (pick one): how the three groups in the preset panel are told apart.
+    const presetPanel = $('#presets').closest('.panel');
+    presetPanel.classList.add(`sep-${opt.sep}`);
+    if (opt.sep === 'heads') {
+      for (const [id, word] of [['effects', 'effects'], ['upscale', 'upscale']]) {
+        if ($(`#${id}`).hidden) continue; /* no heading over a group that is not shown (upscale on manga pages) */ const h = doc.createElement('div'); h.className = 'sep-head'; h.textContent = word; $(`#${id}`).before(h);
+      }
+    }
+    if (opt.sep === 'side') { const l = doc.createElement('span'); l.className = 'sep-side'; l.textContent = 'effects'; $('#effects').append(l); }
+
+    // openModeList(): the list hangs under the chip, so the popup goes to the top before it opens.
+    const openModeList = ui.openModeList;
+    ui.openModeList = (open) => { if (open) doc.body.scrollTop = 0; openModeList(open); };
+
+    // Start-up + window resize: a viewport lower than the body (browser zoom above 100%) becomes
+    // body's max-height, so body scrolls instead of being cut. Only ever set when the window has
+    // already refused to grow, so it cannot hold the popup small.
+    const fitViewport = () => {
+      doc.body.style.maxHeight = '';
+      if (doc.body.offsetHeight > win.innerHeight) doc.body.style.maxHeight = `${win.innerHeight}px`;
+      // After each repaint too: the bar's lane is added to the popup's width only while it scrolls.
+      // The content width does not depend on it, so this cannot flip back and forth.
+      doc.documentElement.classList.toggle('scrolls', doc.body.scrollHeight > doc.body.clientHeight);
+    };
+    win.addEventListener('resize', fitViewport);
+    fitViewport();
+  }
+  // ===== END OF FIX BLOCK: JS ====================================================================
+
+  // =============================================================================================
+  // This demo page: scenario picker, the two iframes, measuring
+  // =============================================================================================
+  const shown = (el) => { const cs = el.ownerDocument.defaultView.getComputedStyle(el); return cs.display !== 'none' && cs.visibility !== 'hidden' && el.getClientRects().length > 0; };
+  const r1 = (v) => Math.round(v * 10) / 10;
+
+  /** Measures one popup: content height, whether it fits its viewport, side gaps, texts cut without a tooltip. */
+  function probe(win) {
+    const doc = win.document; const body = doc.body;
+    const b = body.getBoundingClientRect();
+    const panels = [...doc.querySelectorAll('section.panel')].filter(shown);
+    const exact = r1(panels[panels.length - 1].getBoundingClientRect().bottom - b.top + body.scrollTop + 10);
+    const view = win.innerHeight;
+    const cut = body.offsetHeight > view + 0.5; // body is taller than its window and html does not scroll
+    const scrolls = !cut && body.scrollHeight > body.clientHeight;
+    const lines = (el) => {
+      const range = doc.createRange(); range.selectNodeContents(el);
+      const rects = [...range.getClientRects()].filter((q) => q.width > 0.5 && q.height > 0.5).sort((x, y) => x.top - y.top);
+      let n = 0; let bottom = -1e9;
+      for (const q of rects) { if ((q.top + q.bottom) / 2 > bottom) { n += 1; bottom = q.bottom; } else bottom = Math.max(bottom, q.bottom); }
+      return n;
+    };
+    const name = (el) => `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : `.${String(el.className).split(' ')[0]}`}`;
+    const noTip = []; const wrapped = [];
+    for (const el of body.querySelectorAll('*')) {
+      if (el.closest('#tip, #mode-list') || !shown(el)) continue;
+      const cs = win.getComputedStyle(el);
+      if (cs.textOverflow === 'ellipsis' && el.scrollWidth > el.clientWidth && !el.closest('[data-tip]')) noTip.push(name(el));
+    }
+    for (const el of doc.querySelectorAll('.bar > .chip, .source .title, .source .episode, .source .meta, .source .state, .rate-strip, .kv b, .pill, .tile b')) {
+      if (shown(el) && el.textContent.trim() && lines(el) > 1) wrapped.push(name(el));
+    }
+    const bar = doc.querySelector('.bar');
+    const chips = [...bar.children].filter(shown).map((el) => el.getBoundingClientRect());
+    const edge = b.left + body.clientLeft + body.clientWidth;
+    const past = [...body.querySelectorAll('.bar > *, .source *, .rate-card *, .panel > *')].filter((el) => shown(el) && !el.closest('#mode-list') && el.getBoundingClientRect().width > 0.5 && el.getBoundingClientRect().right > edge + 0.5).map(name);
+    return {
+      exact, view, cut, scrolls, over: r1(exact - Math.min(view, POPUP_MAX)),
+      gaps: [...new Set(panels.map((p) => { const r = p.getBoundingClientRect(); return `${r1(r.left - b.left)}/${r1(b.right - r.right)}`; }))].join(' '),
+      noTip, wrapped, past: [...new Set(past)],
+      headerOneRow: new Set(chips.map((r) => Math.round(r.top))).size === 1 && new Set(chips.map((r) => Math.round(r.height))).size === 1 && bar.scrollWidth <= bar.clientWidth,
+    };
+  }
+
+  // Scenario checks: { ok, text } for the line above each popup.
+  function checkSwitch(win) {
+    const ok = [...win.document.querySelectorAll('.source')].filter(shown).every((card) => {
+      const s = card.querySelector('.switch input').getBoundingClientRect(); const c = card.getBoundingClientRect();
+      return s.right <= c.right && s.left >= c.left;
+    });
+    return { ok, text: ok ? 'switch inside the card' : 'switch pushed out of the card' };
+  }
+  function checkTag(win) {
+    const tag = win.document.getElementById('manga-tag').getBoundingClientRect();
+    const card = win.document.getElementById('manga-card').getBoundingClientRect();
+    const ok = tag.right <= card.right - 12;
+    return { ok, text: ok ? `tag ${r1(tag.width)}px wide, inside the card` : `tag ${r1(tag.width)}px wide, ${r1(tag.right - (card.right - 12))}px past the card's text area` };
+  }
+  function checkTip(win) {
+    const tip = win.document.getElementById('tip');
+    if (tip.hidden) return { ok: false, text: 'tooltip not shown' };
+    const t = tip.getBoundingClientRect();
+    const range = win.document.createRange(); range.selectNodeContents(tip);
+    const spill = r1(Math.max(0, Math.max(...[...range.getClientRects()].map((q) => q.right)) - t.right));
+    const inside = t.left >= 0 && t.right <= win.innerWidth && t.top >= 0 && t.bottom <= win.innerHeight;
+    const ok = spill <= 0.5 && inside;
+    return { ok, text: ok ? `tooltip ${r1(t.width)}×${r1(t.height)}px, all text inside the box` : `tooltip text runs ${spill}px past its box` };
+  }
+  function checkList(win) {
+    const list = win.document.getElementById('mode-list');
+    if (list.hidden) return { ok: false, text: 'mode list not open' };
+    const l = list.getBoundingClientRect();
+    const ok = l.top >= 0 && l.bottom <= win.innerHeight;
+    return { ok, text: ok ? 'mode list open and visible' : `mode list open, but ${r1(-l.bottom)}px above the visible area` };
+  }
+  // Scenario actions: run in both popups once they are painted.
+  function actTip(win, ui) { ui.armTip(win.document.querySelector('#sources .source .meta'), 0); }
+  function actModeKey(win, ui) { win.document.body.scrollTop = win.document.body.scrollHeight; ui.onModeKey('ArrowDown'); }
+
+  const frames = { before: document.getElementById('f-before'), after: document.getElementById('f-after') };
+  const popupCss = document.getElementById('popup-css').textContent;
+  const fixCss = document.getElementById('fix-css').textContent;
+  const popupBody = document.getElementById('popup-body').innerHTML;
+  let current = SCENARIOS[0];
+  const opt = { stateBeside: true, sep: 'heads', fill: 'smart', sb: 'solid' };
+  const results = {};
+
+  function load(side, sc) {
+    return new Promise((resolve) => {
+      const frame = frames[side];
+      const view = sc.view ?? POPUP_MAX;
+      frame.style.height = `${view}px`;
+      frame.addEventListener('load', () => {
+        const win = frame.contentWindow;
+        paintToday(win.document, sc.data());
+        const ui = behaveToday(win);
+        if (side === 'after') applyFixes(win, ui, { ...opt });
+        const m = probe(win);
+        if (sc.act) sc.act(win, ui);
+        m.check = sc.check ? sc.check(win) : null;
+        // The real popup window is as tall as its content, up to its limit.
+        frame.style.height = `${Math.min(view, Math.ceil(win.document.body.getBoundingClientRect().height))}px`;
+        // ...and as wide as its body: 380px, or 390px while the fixed popup scrolls.
+        const wide = win.document.documentElement.classList.contains('scrolls');
+        frame.style.width = wide ? `${win.document.body.offsetWidth}px` : '';
+        if (wide) { win.dispatchEvent(new Event('resize')); }
+        resolve(m);
+      }, { once: true });
+      frame.srcdoc = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Anime4Nerd</title><style>${popupCss}</style>${
+        side === 'after' ? `<style>${fixCss}</style>` : ''}</head><body>${popupBody}</body></html>`;
+    });
+  }
+
+  function report(side, m) {
+    document.getElementById(`h-${side}`).textContent = `${m.exact} px`;
+    const badge = document.getElementById(`b-${side}`);
+    badge.className = `badge ${m.cut ? 'bad' : m.scrolls ? 'warn' : 'ok'}`;
+    badge.textContent = m.cut ? `cut off (${m.over} px, no scrollbar)` : m.scrolls ? `scrolls (+${m.over} px)` : `fits (${r1(-m.over)} px spare)`;
+    const check = document.getElementById(`c-${side}`);
+    check.className = `side-check ${m.check ? (m.check.ok ? 'ok' : 'bad') : ''}`;
+    check.textContent = m.check ? `● ${m.check.text}` : `viewport ${m.view} px`;
+  }
+
+  async function select(id) {
+    current = SCENARIOS.find((s) => s.id === id) ?? SCENARIOS[0];
+    for (const b of document.querySelectorAll('[data-scenario]')) b.setAttribute('aria-pressed', String(b.dataset.scenario === current.id));
+    for (const b of document.querySelectorAll('[data-sb]')) b.setAttribute('aria-pressed', String(b.dataset.sb === opt.sb));
+    for (const b of document.querySelectorAll('[data-fill]')) b.setAttribute('aria-pressed', String(b.dataset.fill === opt.fill));
+    for (const b of document.querySelectorAll('[data-sep]')) b.setAttribute('aria-pressed', String(b.dataset.sep === opt.sep));
+    for (const b of document.querySelectorAll('[data-opt]')) b.setAttribute('aria-pressed', String((b.dataset.opt === 'beside') === opt.stateBeside));
+    document.getElementById('what-name').textContent = current.name;
+    document.getElementById('what-ref').textContent = `${current.group} case`;
+    document.getElementById('fix-text').textContent = current.fix;
+    document.getElementById('fix-ref').textContent = `Real popup, measured by test/popup-overflow-sweep.mjs: ${current.sweep}.`;
+    const [before, after] = await Promise.all([load('before', current), load('after', current)]);
+    report('before', before);
+    report('after', after);
+    results[current.id] = { before, after };
+    return results[current.id];
+  }
+
+  // Picker: one row of buttons per group, built from the list.
+  const controls = document.getElementById('controls');
+  const optRow = controls.firstElementChild;
+  for (const group of ['common', 'occasional', 'rare', 'broken']) {
+    const row = document.createElement('div');
+    row.className = 'group';
+    row.setAttribute('role', 'group');
+    row.setAttribute('aria-label', group);
+    const head = document.createElement('span');
+    head.className = 'head';
+    head.textContent = group;
+    row.append(head);
+    for (const sc of SCENARIOS.filter((s) => s.group === group)) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'btn'; b.dataset.scenario = sc.id; b.textContent = sc.label; b.title = sc.name;
+      row.append(b);
+    }
+    controls.insertBefore(row, optRow);
+  }
+  controls.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.opt) opt.stateBeside = b.dataset.opt === 'beside';
+    if (b.dataset.sep) opt.sep = b.dataset.sep;
+    if (b.dataset.fill) opt.fill = b.dataset.fill;
+    if (b.dataset.sb) opt.sb = b.dataset.sb;
+    void select(b.dataset.scenario ?? current.id);
+  });
+
+  window.overflowDemo = { ids: SCENARIOS.map((s) => s.id), select, opt, frames };
+  void select(location.hash.slice(1) || 'base');
+}());
+</script>
+</body>
+</html>

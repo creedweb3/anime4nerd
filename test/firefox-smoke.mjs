@@ -38,6 +38,10 @@ execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size
 execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=854x480:rate=24:duration=6',
   '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-an', path.join(work, 'v.mp4')]);
 
+// Load cap: 60 fps full-frame noise (every pixel changes, so nothing is reused).
+execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'nullsrc=size=960x540:rate=60:duration=40,geq=random(1)*255:128:128',
+  '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '35', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-an', path.join(work, 'noise.mp4')]);
+
 const video = (src, extra = '') => `<video src="${src}" ${extra} muted loop autoplay playsinline style="display:block;width:960px;height:540px"></video>`;
 const html = (res, body) => { res.writeHead(200, { 'content-type': 'text/html' }); res.end(`<!doctype html><body style="margin:0">${body}</body>`); };
 let pagePort;
@@ -49,6 +53,7 @@ const PAGES = {
   cors: () => video(`http://localhost:${mediaPort}/cors/v.webm`, 'crossorigin="anonymous"'),
   nocors: () => video(`http://localhost:${mediaPort}/plain/v.webm`),
   iframe: () => `<iframe src="http://localhost:${mediaPort}/frame" width="1000" height="600" allowfullscreen></iframe>`,
+  heavy: () => video('noise.mp4'),
   fs: () => `<div id="box" style="width:960px;height:540px">${video('v.webm')}</div><button id="go">fs</button><script>go.onclick = () => document.querySelector('video').requestFullscreen()</script>`,
 };
 function listen(handler) {
@@ -82,7 +87,14 @@ const other = `localhost:${mediaPort}`;
 const sources = Object.fromEntries([`${page}::same-origin`, `${page}::${page}`, `${page}::${other}`, `${other}::same-origin`, `${other}::${other}`].map((k) => [k, true]));
 fs.appendFileSync(path.join(dist, 'background.js'), `
 browser.storage.local.set({ 'anime4k-sources': ${JSON.stringify(sources)} });
+let heavySet = false;
 setInterval(async () => {
+  // The load-cap check: 4x with the heaviest preset, set once its page is open.
+  if (!heavySet && (await browser.tabs.query({ url: 'http://127.0.0.1/heavy*' })).length) {
+    heavySet = true;
+    const cur = (await browser.storage.sync.get('anime4k')).anime4k ?? {};
+    await browser.storage.sync.set({ anime4k: { ...cur, preset: 'BB', upscale: '4x' } });
+  }
   for (const tab of await browser.tabs.query({ url: 'http://127.0.0.1/*' })) {
     const out = [];
     for (const f of await browser.webNavigation.getAllFrames({ tabId: tab.id }).catch(() => [])) {
@@ -198,6 +210,34 @@ try {
     await p.waitForTimeout(8000);
     const info = (await list(p))[0];
     check('nocors', info?.status === 'Unavailable' && /CORS/.test(info.message), `status=${info?.status} ${info?.message ?? ''}`);
+    await p.close();
+  }
+
+  {
+    // GPU-load cap without GPU timer queries: the frame rate reads 60 for a 60 fps video, fence
+    // timing measures the GPU, and the cap is right both ways: it steps down to 2x if and only if
+    // 4x was dropping frames. (4x, not 8x: headless Firefox may render in software, in RAM.)
+    const p = await ctx.newPage();
+    await p.goto(`http://${page}/heavy`);
+    const trail = [];
+    let info = null;
+    let fenced = false; // fence timings seen at some point: they start over once the cap resizes
+    for (let i = 0; i < 40; i++) {
+      await p.waitForTimeout(500);
+      info = (await list(p))[0];
+      const st = info?.stats;
+      const step = `${info?.status}${st ? `@${st.outputWidth} ${st.fps}/${st.sourceFps?.toFixed(1)}fps busy${st.busySamples?.length ?? '-'}` : ''}${info?.loadCapped ? ' capped' : ''}`;
+      if (trail.at(-1) !== step) trail.push(step);
+      if ((st?.busySamples?.length ?? 0) > 0 || st?.timerSupported) fenced = true;
+      // Capped at 2x, and fence timings seen: a 4x that stalled outright can cap before its first one.
+      if (info?.loadCapped && st?.outputWidth === 1920 && fenced) break;
+    }
+    const st = info?.stats;
+    const fpsRight = Math.abs((st?.sourceFps ?? 0) - 60) <= 3;
+    const fenceTimed = fenced;
+    const keptUp4x = trail.some((t) => /@3840 /.test(t)) && !info?.loadCapped && (st?.fps ?? 0) >= 0.92 * 60;
+    const cappedRight = info?.loadCapped && st?.outputWidth === 1920;
+    check('load-cap', fpsRight && fenceTimed && (cappedRight || keptUp4x), trail.join(' | '));
     await p.close();
   }
 

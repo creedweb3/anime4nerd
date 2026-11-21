@@ -35,11 +35,15 @@ const configs = [
 // Firefox has no background service worker, ignores use_dynamic_url, and needs a fixed add-on id
 // plus the data-collection declaration AMO requires (Firefox 140+ understands it). Desktop only:
 // no gecko_android key, because the add-on has not been tested on Firefox for Android.
+// Firefox's default MV3 extension-page policy adds upgrade-insecure-requests, which would turn the
+// background's manga image fetches from http readers into https requests that fail; Chrome's
+// default has no such rule, so the Firefox policy is set to Chrome's script rule alone.
 function firefoxManifest() {
   const m = JSON.parse(readFileSync('manifest.json', 'utf8'));
   // AMO allows at most 45 characters in the name; the Chrome name is longer.
   m.name = 'Anime4Nerd: Anime Upscaler & Video Enhancer';
   delete m.minimum_chrome_version;
+  m.content_security_policy = { extension_pages: "script-src 'self'" };
   m.background = { scripts: ['background.js'] };
   m.web_accessible_resources = m.web_accessible_resources.map(({ use_dynamic_url, ...r }) => r);
   m.browser_specific_settings = {

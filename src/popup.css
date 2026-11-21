@@ -19,17 +19,59 @@
 
 * { box-sizing: border-box; }
 
-html, body { overflow-x: hidden; }
+/*
+ * Baseline: no part of the popup keeps a browser or system default look. One rule each for
+ * hidden elements, text selection, the keyboard focus ring, links, pressed and disabled controls.
+ */
+[hidden] { display: none !important; } /* wins over any class that sets display */
+:root { accent-color: var(--on); caret-color: var(--on); -webkit-tap-highlight-color: transparent; }
+::selection { background: var(--on); color: #000; }
+:focus-visible { outline: 1px solid var(--on); outline-offset: 1px; }
+:focus:not(:focus-visible) { outline: none; }
+a { color: inherit; -webkit-user-drag: none; }
+button:active, a:active { filter: brightness(1.25); }
+button:disabled { opacity: 0.35; cursor: default; }
+input:disabled { cursor: default; }
+
+/*
+ * Scrollbars: one look for every scrolling box in the popup, including ones nobody planned for.
+ * A 10px lane with a 4px thumb in the middle of it, no arrows, no track.
+ * Chromium takes the ::-webkit-scrollbar rules (exact sizes); they stop working as soon as
+ * scrollbar-color or scrollbar-width is set, so those two are only given to browsers without them.
+ */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-button { display: none; }
+::-webkit-scrollbar-thumb { background: var(--line2); background-clip: padding-box; border: 3px solid transparent; }
+::-webkit-scrollbar-thumb:hover, ::-webkit-scrollbar-thumb:active { background-color: var(--dim); }
+@supports not selector(::-webkit-scrollbar) {
+  * { scrollbar-width: thin; scrollbar-color: var(--line2) transparent; }
+}
+/*
+ * A browser popup is at most 600px tall. Taller content scrolls inside body, not in the window.
+ * Side gaps: 10px on the left and 10px on the right, always. When the popup scrolls, its bar sits
+ * outside the right gap: the popup becomes 7px wider (a 4px bar and 3px of air after it), so the
+ * content keeps its width and both gaps. popup.ts sets .scrolls on <html> after each repaint.
+ */
+html { overflow: hidden; }
 body {
   width: 380px;
+  max-height: 600px;
+  overflow: hidden auto;
   margin: 0;
-  padding: 6px 8px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--line2) transparent;
+  padding: 10px; /* same as a panel's own padding, so nested boxes step in evenly */
   background: var(--bg);
   color: var(--fg);
-  font: 12px/1.5 "JetBrains Mono", "Cascadia Mono", "Fira Code", Consolas, ui-monospace, monospace;
+  /* After the monospace faces: sans faces for scripts they do not cover (Arabic, Hebrew, CJK, Korean), never the browser's serif default. */
+  font: 12px/1.5 "JetBrains Mono", "Cascadia Mono", "Fira Code", Consolas, ui-monospace, monospace,
+    "Segoe UI", "Noto Sans", "Noto Sans Arabic", "Noto Sans Hebrew", "Yu Gothic UI", "Hiragino Sans",
+    "Microsoft YaHei", "Malgun Gothic", sans-serif;
+  cursor: default; /* no text cursor over labels; the text can still be selected and copied */
 }
+html.scrolls body { width: 387px; }
+/* The popup's own bar: no air on the content side, so the gap before it is the same 10px as on the left; 3px of air on the edge side, above and below. */
+body::-webkit-scrollbar { width: 7px; }
+body::-webkit-scrollbar-thumb { border-width: 3px 3px 3px 0; }
 
 /* top bar ------------------------------------------------------------------ */
 .bar { display: flex; gap: 4px; margin-bottom: 6px; }
@@ -45,28 +87,131 @@ body {
 .chip.on { color: var(--on); border-color: var(--line2); }
 .chip.bug { display: flex; align-items: center; padding: 3px 6px; text-decoration: none; }
 .chip.bug:hover { color: var(--fg); border-color: var(--line2); }
-.chip.bug:focus-visible { color: var(--on); border-color: var(--on); outline: 1px solid var(--on); outline-offset: 1px; }
-
-/* what's new banner (after an update) -------------------------------------- */
-.update-note {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 8px;
-  margin-bottom: 6px;
-  padding: 7px 10px;
+.chip.bug:focus-visible { color: var(--on); border-color: var(--on); }
+/*
+ * Mode dropdown: a chip whose whole box is a button, so a click anywhere on it opens the list.
+ * The button carries the chip's padding; the caret is drawn over it. The chip shows only the
+ * value; its tooltip says it is the mode. The list is the popup's own (see popup.ts): it floats
+ * under the chip and takes no room in the layout.
+ */
+.chip.mode { position: relative; flex: none; padding: 0; }
+.chip.mode:hover, .chip.mode:has([aria-expanded="true"]) { border-color: var(--line2); }
+.chip.mode:has(#mode:focus-visible) { border-color: var(--on); outline: 1px solid var(--on); outline-offset: 1px; }
+#mode {
+  appearance: none;
+  display: block;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  outline: none; /* the chip shows the focus ring */
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  padding: 3px 21px 3px 8px;
+  cursor: pointer;
+}
+.mode-list {
+  position: absolute;
+  top: 100%;
+  left: -1px;
+  z-index: 10;
+  width: max-content;
+  max-width: 170px;
+  margin-top: 7px; /* its top edge lies on the first panel's top line; its left edge on the chip's and the panel's */
+  padding: 2px;
   border: 1px solid var(--line2);
   background: var(--panel);
-  color: var(--dim);
-  font-size: 11px;
-  text-decoration: none;
+  box-shadow: 0 10px 18px -8px #000;
 }
-.update-note[hidden] { display: none; }
-.update-label { color: var(--faint); font-size: 9px; text-transform: uppercase; letter-spacing: 0.16em; margin-right: 6px; }
-.update-dot { color: var(--ok); }
-.update-note b { color: var(--on); font-weight: 600; }
-.update-note:hover, .update-note:focus-visible { border-color: var(--dim); outline: none; }
-.update-note:hover .update-link, .update-note:focus-visible .update-link { color: var(--on); }
+/* While the list is open everything under the header steps back (dimmed and slightly blurred); the header row stays as it is. */
+body > * { transition: opacity 0.12s, filter 0.12s; }
+body:has(#mode[aria-expanded="true"]) > :not(.bar) { opacity: 0.4; filter: blur(1.5px); }
+/* ...and nothing outside the list reacts to the pointer (no hand cursor, hover or tooltip): a click there only closes the list. */
+body:has(#mode[aria-expanded="true"]) > :not(.bar),
+body:has(#mode[aria-expanded="true"]) .bar > :not(#modeChip) { pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { body > * { transition: none; } }
+.mode-opt { display: flex; align-items: baseline; gap: 6px; padding: 4px 8px 4px 5px; border: 1px solid transparent; cursor: pointer; } /* 5px: the names start under the chip's own text */
+.mode-opt b { width: 5ch; color: var(--fg); font-weight: 400; }
+.mode-opt::after { content: "●"; margin-left: auto; padding-left: 6px; color: var(--ok); font-size: 8px; visibility: hidden; } /* marks the current mode; its room is kept in every row */
+.mode-opt small { color: var(--faint); font-size: 10px; }
+.mode-opt[aria-selected="true"] b { color: var(--on); font-weight: 600; }
+.mode-opt[aria-selected="true"]::after { visibility: visible; }
+/* One highlight for the row under the pointer and the row the arrow keys are on. */
+.mode-opt.active { background: #1a1a1a; border-color: var(--line2); }
+.mode-opt.active small { color: var(--dim); }
+.chip.mode::after {
+  content: '';
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  margin-top: -1px;
+  border: 3px solid transparent;
+  border-top-color: currentColor;
+  pointer-events: none;
+}
+
+/* tooltip: one box for every [data-tip], placed by popup.ts so it stays inside the popup --------- */
+.tip {
+  position: fixed;
+  z-index: 20;
+  max-width: 240px;
+  padding: 3px 7px;
+  border: 1px solid var(--line2);
+  background: var(--panel);
+  color: var(--fg);
+  font-size: 10px;
+  overflow-wrap: anywhere; /* a long host or URL breaks inside the box */
+  box-shadow: 0 10px 18px -8px #000;
+  pointer-events: none;
+}
+
+/*
+ * "what's new" after an update: a chip in the header in place of the clock, for the one popup
+ * that shows it. It takes no height. If the row is full it is the chip that gives way.
+ */
+.chip.new { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--ok); border-color: rgba(var(--g), 0.5); text-decoration: none; }
+.chip.new:hover, .chip.new:focus-visible { color: var(--on); border-color: var(--ok); }
+
+/* mode suggestion (Chrome; see popup.ts) -------------------------------------- */
+.mp-btn {
+  border: 1px solid var(--line2);
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  font-size: 11px;
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mp-btn:hover { color: var(--on); border-color: var(--on); }
+.mp-btn.primary { background: var(--on); border-color: var(--on); color: #000; font-weight: 600; }
+.mp-btn.primary:hover { background: var(--bar); border-color: var(--bar); color: #000; }
+.mp-dot { color: var(--ok); }
+/*
+ * The card the page would get after the switch, locked. Red and dashed, like a video card that
+ * is off: the page is not being upscaled.
+ */
+.source.mp-preview { gap: 3px; padding: 6px 12px; border: 1px dashed rgba(var(--r), 0.55); background: linear-gradient(135deg, rgba(var(--r), 0.12), rgba(var(--r), 0.02) 60%, transparent) var(--bg); cursor: default; }
+.source.mp-preview:hover, .source.mp-preview:active { filter: none; }
+.mp-preview:not([hidden]) + .sources:not(:empty) { margin-top: 10px; } /* a video beside the reader: its card keeps the cards' usual distance */
+.mp-dim { display: flex; flex-direction: column; gap: 3px; opacity: 0.5; }
+.mp-preview .switch { pointer-events: none; }
+.mp-preview .switch input { border-color: rgba(var(--r), 0.5); }
+.mp-preview .switch input::after { background: rgba(var(--r), 0.7); }
+.mp-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 5px; color: var(--dim); font-size: 12px; }
+.mp-row { display: flex; align-items: center; gap: 6px; flex: none; }
+.mp-paused { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+.mp-foot .mp-paused, .mp-foot .mp-dot { color: var(--bad); } /* stopped: red, as the off state is everywhere else */
+/*
+ * After a switch: "now in manga mode" and an undo, for a few seconds. It lies over the panel's
+ * head row and takes no room of its own, so the popup keeps its height (600px at most).
+ */
+.mp-head { position: relative; }
+.mp-done { position: absolute; inset: -7px 0 -3px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 3px 0 8px; border: 1px solid var(--line2); background: var(--bg); color: var(--fg); font-size: 10px; letter-spacing: normal; text-transform: none; }
+.mp-done .mp-dot { margin-right: 4px; }
+.mp-done .mp-btn { font-size: 10px; padding: 1px 6px; }
+/* While the suggestion shows, the mode chip takes the stopped colour. */
+.chip.mode.mp-ind-frame { border-color: rgba(var(--r), 0.6); background: linear-gradient(135deg, rgba(var(--r), 0.14), transparent 70%) var(--panel); }
 
 /* rating card (Chrome; see rate-prompt.ts) ---------------------------------- */
 .rate-card {
@@ -77,7 +222,6 @@ body {
   border: 1px solid var(--line2);
   background: var(--panel);
 }
-.rate-card[hidden] { display: none; }
 .rate-card.lv2, .rate-card.lv3 {
   --accent: rgb(var(--g));
   border-color: rgba(var(--g), 0.5);
@@ -115,7 +259,7 @@ body {
   text-decoration: none;
   white-space: nowrap;
 }
-.rate-go:hover, .rate-go:focus-visible { filter: brightness(1.1); outline: none; }
+.rate-go:hover, .rate-go:focus-visible { filter: brightness(1.1); }
 .rate-done {
   padding: 2px 8px;
   border: 1px solid var(--line2);
@@ -126,7 +270,6 @@ body {
   cursor: pointer;
   white-space: nowrap;
 }
-.rate-done[hidden] { display: none; }
 .rate-done:hover, .rate-x:hover { color: var(--on); }
 .rate-x {
   position: absolute;
@@ -188,31 +331,62 @@ body {
 .source:hover { filter: brightness(1.08); }
 .source:active { filter: brightness(1.18); }
 
-.line { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
-.title { font-size: 14px; font-weight: 600; line-height: 1.3; }
-.episode { opacity: 0.85; }
+/*
+ * Every text in a card is one line, then an ellipsis; popup.ts puts the full text in the tooltip
+ * when it is cut. min-width: 0 lets the text give way, so the switch never moves.
+ */
+.line { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; min-width: 0; }
+.title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; line-height: 1.3; }
+/* one line: the tag and the text beside it, vertically centred together */
+.episode { display: flex; align-items: center; gap: 6px; min-width: 0; opacity: 0.85; }
 .tag {
-  display: inline-block;
+  flex: none;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   border: 1px solid rgba(var(--r), 0.4);
   padding: 1px 6px;
   font-size: 10px;
   color: rgba(var(--r), 0.85);
   transition: color 0.12s, border-color 0.12s;
-  vertical-align: 2px;
   white-space: nowrap;
-  margin-right: 4px;
 }
 .source.on .tag { border-color: rgba(var(--g), 0.5); color: rgb(var(--g)); }
-.meta { color: var(--faint); font-size: 11px; }
-.hr { border-top: 1px solid var(--line); margin: 2px 0; }
+.epname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Info line: the host gives way first; resolution, scale and the "capped" note always show. (A stream host longer than the line is cut too.) */
+.meta { display: flex; min-width: 0; white-space: nowrap; color: var(--faint); font-size: 11px; }
+.meta .host { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.meta .res { flex: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: pre; }
+/* "4× capped": the GPU couldn't keep up with the chosen scale, in the warn colour */
+.capn { color: var(--warn); }
+/* Not possible: the reason, in the state's own colour, on the info line */
+.meta .why { overflow: hidden; text-overflow: ellipsis; color: var(--bad); opacity: 0.85; }
+/* Every full video card is the same height whatever it holds: the episode row keeps its height with or without a tag. */
+.source:not(.compact):not(.manga-card) .episode { min-height: 19px; }
+/* No episode name: the quality stands beside the tag (see patchCard in popup.ts). */
+.source.quality .epname, .source.two-line .epname { color: var(--dim); }
+/* Long title and no episode info: two title lines, then the tag row instead of the info line (22 + 5 + 16.5 = 43.5px for the title). */
+.source.two-line .line { min-height: 43.5px; }
+.source.two-line .title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; overflow-wrap: anywhere; line-height: 21.75px; }
+.source.two-line .meta { display: none; }
+/*
+ * Compact card: every video but the open one, and a video beside a manga reader. One row: a dot
+ * in the state colour, the title, the switch. The rest is in the card's tooltip.
+ */
+.source.compact { padding: 5px 12px; }
+.source.compact > :not(.line) { display: none; }
+.source.compact .title::before { content: "●"; margin-right: 6px; font-size: 8px; vertical-align: 2px; color: var(--dim); }
+.source.compact[data-state="ok"] .title::before { color: var(--ok); }
+.source.compact[data-state="warn"] .title::before { color: var(--warn); }
+.source.compact[data-state="bad"] .title::before { color: var(--bad); }
+.source.compact[data-state="off"] .title::before { color: rgba(var(--r), 0.9); }
 
-.state { font-size: 12px; }
+.state { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .state.ok { color: var(--ok); }
 .state.warn { color: var(--warn); }
 .state.bad { color: var(--bad); }
 .state.dim { color: var(--dim); }
 .state.off { color: rgba(var(--r), 0.9); }
-.episode[hidden], .tag[hidden] { display: none; }
 
 /* switch: label is the hit area (44px tall), input is the visual */
 .switch { flex: none; display: flex; align-items: center; padding: 8px 0 8px 12px; margin: -8px 0 -8px 0; cursor: pointer; }
@@ -245,10 +419,10 @@ body {
 /* performance panel ---------------------------------------------------------- */
 .verdict { text-transform: none; letter-spacing: 0; font-size: 11px; }
 .verdict.ok { color: var(--ok); } .verdict.warn { color: var(--warn); } .verdict.bad { color: var(--bad); } .verdict.dim { color: var(--dim); }
-#perf .meta { margin-top: 4px; }
+.verdict.off { color: rgba(var(--r), 0.9); }
 
 /* gpu: six boxes + bars ---------------------------------------------------- */
-.kv { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.kv { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .kv div { border: 1px solid var(--line); padding: 3px 8px; min-height: 40px; }
 .kv span {
   display: block;
@@ -257,7 +431,7 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.1em;
 }
-.kv b { display: block; font-size: 14px; font-weight: 600; white-space: nowrap; line-height: 1.4; }
+.kv b { display: block; font-size: 14px; font-weight: 600; white-space: nowrap; line-height: 1.3; } /* as .title, the other 14px text: the tile is its 40px min-height */
 .kv b.ok { color: var(--ok); } .kv b.warn { color: var(--warn); } .kv b.bad { color: var(--bad); }
 
 .bars {
@@ -267,7 +441,7 @@ body {
   gap: 1px;
   height: 20px;
   border-bottom: 1px solid var(--line);
-  margin-top: 2px;
+  margin-top: 10px; /* as the panel's padding */
 }
 .bars i { flex: 1; background: var(--bar); display: block; min-height: 1px; }
 .bars i.empty { background: var(--bar-dim); }
@@ -276,7 +450,6 @@ body {
 .bars s { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--faint); pointer-events: none; }
 
 .empty { color: var(--faint); margin: 0; font-size: 11px; }
-.empty[hidden] { display: none; }
 
 /* presets ------------------------------------------------------------------ */
 .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
@@ -300,7 +473,15 @@ body {
 .tile[aria-checked="true"] { background: #1a1a1a; border-color: var(--on); }
 .tile[aria-checked="true"] b::before { content: "▸ "; color: var(--on); }
 
-.pills { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+/* Small headings tell the panel's groups apart (no separator lines); same look as .panel-head. */
+.sub-head { margin: 6px 0 4px; color: var(--faint); font-size: 9px; text-transform: uppercase; letter-spacing: 0.16em; line-height: 1.5; }
+.pills { display: grid; gap: 6px; }
+/* Effects line up with the preset tiles above them: same three columns, same gap, so each is exactly one tile wide. */
+#effects { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#effects .pill { padding-left: 8px; padding-right: 8px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Upscale: six equal boxes across the full width. Two of them are exactly one tile wide, so the row lines up with the columns above. */
+#upscale { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+#upscale .pill { padding-left: 0; padding-right: 0; text-align: center; }
 .pill {
   border: 1px solid var(--line2);
   background: transparent;
@@ -310,10 +491,297 @@ body {
   padding: 4px 10px;
   cursor: pointer;
 }
+.pill:hover { color: var(--on); border-color: var(--on); }
 .pill::before { content: "+ "; }
 .pill[aria-checked="true"] { background: var(--on); color: #000; border-color: var(--on); }
+.pill[aria-checked="true"]:hover { background: var(--bar); border-color: var(--bar); color: #000; }
 .pill[aria-checked="true"]::before { content: "✓ "; }
 .pill[role="radio"]::before, .pill[role="radio"][aria-checked="true"]::before { content: none; }
-.pills-label { color: var(--faint); font-size: 11px; align-self: center; margin-right: auto; }
 
 .note { display: none; }
+
+/* manga mode (local prototype): chapter card in "playing now" ------------------- */
+.manga-card { margin-top: 10px; }
+.sources:empty + .manga-card { margin-top: 0; }
+/* No separator line in the card: the status line, or the bar, sits a little lower instead. */
+.manga-card .mc-prog, .manga-card .state { margin-top: 4px; }
+/*
+ * Progress: one block per page in page order, every one the same 6px square with the same 2px
+ * gap whatever the page count. A full row is 39 squares; longer chapters wrap to more rows.
+ * (Exact 2px gaps: spreading 39 squares over 312px would give 2.05px, which rounds unevenly.)
+ * A long chapter (see MC_MAX_BLOCKS in popup.ts) gets one segment per state instead, as wide as
+ * its share of the pages.
+ */
+.mc-pages { display: grid; grid-template-columns: repeat(auto-fill, 6px); justify-content: start; gap: 2px; }
+.mc-pages i { height: 6px; background: var(--bar-dim); }
+.mc-pages i.done { background: var(--ok); }
+.mc-pages i.fail { background: var(--bad); }
+.mc-pages i.now { background: var(--on); }
+.mc-pages.shares { display: flex; }
+.mc-pages.shares i { flex: 0 0 0; min-width: 2px; }
+/* Counts: four equal boxes, the number over a coloured square and one word, both centred. */
+.mc-counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 6px; }
+.mc-counts > div { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 1px; min-width: 0; border: 1px solid var(--line); padding: 5px 0; } /* equal space above the number and under the word */
+.mc-counts b { font-size: 12px; font-weight: 600; line-height: 1.2; color: var(--fg); }
+.mc-counts [data-k="done"] b { color: var(--ok); }
+.mc-counts [data-k="fail"] b { color: var(--bad); }
+.mc-counts span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding-left: 0.12em; /* balances the tracking after the last letter, so the label sits on the centre line */
+  color: var(--faint);
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.mc-counts .zero b { color: var(--faint); }
+.mc-counts .zero .pkey { opacity: 0.4; }
+/* Every key square is a filled colour, none outlined: done green, active white, failed red, queued grey. The page bar's active squares match. */
+.pkey { flex: none; width: 6px; height: 6px; background: var(--faint); }
+.pkey.done { background: var(--ok); }
+.pkey.fail { background: var(--bad); }
+.pkey.now { background: var(--on); }
+.manga-card.unsupported .switch { opacity: 0.35; pointer-events: none; }
+/* mode "manga": a video card shows its stored switch, but it cannot be flipped */
+.source.paused { cursor: default; }
+.source.paused .switch { opacity: 0.35; pointer-events: none; }
+
+/* manga mode: header tag and page map ------------------------------------------ */
+.chip.manga { color: var(--ok); border-color: rgba(var(--g), 0.5); }
+
+/*
+ * One square per page, straight on the panel (no tray behind the cells). Columns and rows are
+ * both the fixed cell size, so a cell is square. The 12 cells span the panel exactly, in line
+ * with the two tiles below, and the gap between rows copies the gap between columns.
+ */
+#pmap { container-type: inline-size; }
+.pmap {
+  --cell: 24px;
+  display: grid;
+  grid-template-columns: repeat(12, var(--cell));
+  grid-auto-rows: var(--cell);
+  justify-content: start;
+  gap: calc((100cqw - 12 * var(--cell)) / 11);
+  margin-bottom: 6px;
+}
+
+/* States change a cell's colours only, never its box. */
+.pcell { border: 1px solid var(--line2); background: transparent; }
+.pcell.done { background: var(--ok); border-color: var(--ok); }
+.pcell.fail { background: var(--bad); border-color: var(--bad); }
+.pcell.now { border-style: dashed; border-color: var(--on); }
+
+.pcell {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  color: var(--dim);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: 0;
+  cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s, color 0.12s;
+}
+.pcell.done, .pcell.fail { color: var(--bg); }
+.pcell.now { color: var(--on); animation: pcell-now 0.9s ease-in-out infinite alternate; }
+.pcell[aria-disabled='true'] { cursor: default; }
+.pcell:not([aria-disabled='true']):hover { border-color: var(--on); }
+.pcell:not(.done, .fail, [aria-disabled='true']):hover { color: var(--on); }
+@keyframes pcell-now { from { opacity: 1; } to { opacity: 0.45; } }
+/* A chapter past one set of pages shows one set at a time; the arrows sit in the heading, taking no row. */
+.pcell[hidden] { display: none; }
+.pmap-head { align-items: center; }
+.pmap-sets { display: flex; align-items: center; gap: 6px; color: var(--dim); letter-spacing: 0.04em; font-variant-numeric: tabular-nums; }
+.pmap-sets[hidden] { display: none; }
+#pmap-range { min-width: 7ch; text-align: center; } /* 1–120 and 241–300: the arrows stay put */
+.pmap-step {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 14px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line2);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+.pmap-step:not(:disabled):hover { border-color: var(--on); color: var(--on); }
+.pmap-step:disabled { border-color: var(--line); color: var(--faint); cursor: default; }
+@media (prefers-reduced-motion: reduce) {
+  .pcell { transition: none; }
+  .pcell.now { animation: none; }
+}
+
+.kv.two { grid-template-columns: repeat(2, 1fr); }
+
+/* folder tabs under the video card: upscale · color (popup-color.ts) ------------- */
+.c-tabs { display: grid; grid-template-columns: 1fr 1fr; margin-bottom: -1px; position: relative; z-index: 1; }
+.c-tab { border: 1px solid transparent; border-bottom-color: var(--line); background: transparent; color: var(--faint); font: inherit; font-size: 11px; padding: 4px 0; cursor: pointer; transition: border-color 0.12s, color 0.12s; }
+.c-tab[aria-selected="true"] { background: var(--panel); border-color: var(--line); border-bottom-color: var(--panel); color: var(--on); font-weight: 600; }
+.c-tab:hover:not([aria-selected="true"]) { color: var(--fg); }
+.c-tab .dot { color: var(--ok); margin-left: 5px; font-size: 9px; vertical-align: 1px; }
+.c-tab .dot.off { color: rgba(var(--r), 0.9); }
+/* The performance verdict rides on the upscale tab as a dot in its colour; its words are the tooltip. */
+.t-verdict { margin-left: 6px; font-weight: 400; font-size: 9px; vertical-align: 1px; }
+.t-verdict.ok { color: var(--ok); } .t-verdict.warn { color: var(--warn); } .t-verdict.bad { color: var(--bad); } .t-verdict.dim { color: var(--dim); }
+.t-verdict.off { color: rgba(var(--r), 0.9); }
+body[data-tab="upscale"] .tab-color, body[data-tab="color"] .tab-upscale { display: none; }
+body.no-tabs #c-tabs, body.no-tabs .tab-color { display: none; }
+body.no-tabs[data-tab="color"] .tab-upscale { display: block; }
+.tab-upscale #perf > .panel-head { display: none; }
+
+/* color sliders: name · track · ↺ · number ------------------------------------------ */
+.cs-list { display: grid; gap: 2px; }
+.cs { display: grid; grid-template-columns: 11ch 1fr max-content; align-items: center; gap: 8px; height: 22px; }
+/*
+ * The end of a row: a 13px column for ↺ and a 4ch column for the number, so every ↺ lines up and
+ * every number lines up on its right edge. 6px on each side of ↺ (the row gap less 2px on the left).
+ */
+.cs-end { display: grid; grid-template-columns: 13px 4ch; column-gap: 6px; align-items: center; margin-left: -2px; font-size: 11px; } /* ch measured at the numbers' own size */
+.cs-end .cs-val, .cs-end .cs-edit { grid-column: 2; justify-self: end; text-align: right; }
+/* ↺ resets only this setting; shown on changed rows */
+.cs-reset { grid-column: 1; width: 13px; height: 16px; display: grid; place-items: center; padding: 0; border: 0; background: transparent; color: var(--dim); cursor: pointer; visibility: hidden; }
+.cs.edited .cs-reset { visibility: visible; } /* only where the value differs from the selected profile */
+.cs-reset:hover, .cs-reset:focus-visible { color: var(--on); }
+.cs-name { color: var(--dim); font-size: 11px; }
+.cs.changed .cs-name { color: var(--fg); }
+.cs-val { position: relative; justify-self: end; color: var(--faint); font-size: 11px; font-weight: 400; text-align: right; font-variant-numeric: tabular-nums; cursor: text;
+  text-decoration: underline dotted var(--faint); text-underline-offset: 3px; }
+.cs-val:hover { color: var(--on); text-decoration-style: solid; text-decoration-color: var(--on); }
+.cs.changed .cs-val { color: var(--on); font-weight: 600; }
+.cs-track { position: relative; height: 22px; cursor: pointer; touch-action: none; }
+.cs-track::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid var(--line2); }
+.cs-zero { position: absolute; left: var(--z); top: 6px; height: 10px; border-left: 1px solid var(--faint); }
+.cs-fill { position: absolute; left: var(--a); width: var(--w); top: calc(50% - 1px); height: 3px; background: var(--on); }
+/* The thumb stays inside the track at both ends (it would stick out 4px and crowd the ↺). */
+.cs-thumb { position: absolute; left: clamp(0px, calc(var(--p) - 4px), calc(100% - 8px)); top: 4px; width: 8px; height: 14px; background: var(--bg); border: 1px solid var(--dim); }
+.cs.changed .cs-thumb { background: var(--on); border-color: var(--on); }
+.cs-track:hover .cs-thumb { border-color: var(--on); }
+.cs-track:focus-visible { outline: none; }
+.cs-track:focus-visible .cs-thumb { outline: 1px solid var(--on); outline-offset: 1px; }
+/* A rare 5-character value (hue past ±99°, gamma 10.00) reaches left, so ↺ moves aside for it. */
+/* A 5-character value ("10.00", "+120°") gets a wider number column on its own row: that slider is
+   a few pixels shorter, so slider, ↺ and number never overlap. */
+.cs.long .cs-end { grid-template-columns: 13px max-content; }
+/* Typing a value: same place, size and weight as the number; a thin line under the text only. */
+.cs-edit { justify-self: end; display: inline-flex; align-items: baseline; }
+.cs-unit { color: var(--on); font-size: 11px; font-weight: 600; }
+.cs-input { padding: 0; border: 0; border-bottom: 1px solid var(--dim); background: transparent; color: var(--on); caret-color: var(--on); font: inherit; font-size: 11px; font-weight: 600; line-height: 16px; text-align: right; outline: none; font-variant-numeric: tabular-nums; }
+.cs-input::selection { background: var(--line2); color: var(--on); }
+
+/* "also use colors when not upscaled": a grey card, a screen icon crossed out while off, a state line */
+.ap-card { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; padding: 7px 10px; cursor: pointer;
+  border: 1px solid var(--line2); background: var(--bg); transition: border-color 0.12s; }
+.ap-card:hover { border-color: var(--dim); }
+.ap-card .switch { padding: 0; margin: 0; }
+.ap-card .switch input { margin: 0; }
+.ap-text { display: flex; flex-direction: column; min-width: 0; }
+.ap-text b { color: var(--fg); font-size: 11px; font-weight: 600; }
+.ap-text small { color: var(--faint); font-size: 10px; }
+.ap-icon { justify-content: flex-start; }
+.ap-icon .ap-text { flex: 1; }
+.ap-ico { flex: none; color: var(--dim); transition: color 0.12s; } /* grey in both states; the cross says off */
+.ap-card.on .ap-x { display: none; }
+.ap-full { gap: 10px; padding: 7px 10px; }
+.ap-full .ap-text small { font-size: 11px; color: var(--dim); }
+.ap-full .ap-ico { align-self: center; }
+
+/* profile menu in the color head ------------------------------------------------------ */
+.pf { position: relative; }
+.pf-open { position: relative; border: 0; background: transparent; color: var(--faint); font: inherit; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; padding: 0 13px 0 0; cursor: pointer; }
+.pf-open b { color: var(--on); font-weight: 600; }
+.pf-open::after { content: ""; position: absolute; right: 0; top: 50%; margin-top: -1px; border: 3px solid transparent; border-top-color: currentColor; }
+.pf-open:hover, .pf-open[aria-expanded="true"] { color: var(--fg); }
+/* The list is the mode list's .mode-list / .mode-opt; only its place and width differ. */
+.pf-list { top: 100%; left: -6px; margin-top: 6px; min-width: 140px; max-width: 200px; text-transform: none; letter-spacing: normal; outline: none; }
+/* 9 rows or more: two columns, filled top to bottom, with "custom" across both at the foot. */
+.pf-list.two { display: grid; grid-auto-flow: column; grid-template-rows: repeat(var(--rows), auto); grid-template-columns: 1fr 1fr; column-gap: 9px; width: 330px; max-width: 330px; }
+.pf-list.two .mode-opt[data-id="custom"] { grid-column: 1 / -1; margin-top: 3px; }
+/* The left column's rows draw the line between the columns; "custom" sits under a line across both. */
+.pf-list.two .mode-opt.c1::before { content: ""; position: absolute; top: -1px; bottom: -1px; right: -6px; border-right: 1px solid var(--line2); pointer-events: none; }
+.pf-list.two .mode-opt[data-id="custom"]::before { content: ""; position: absolute; left: 0; right: 0; top: -3px; border-top: 1px solid var(--line2); pointer-events: none; }
+/* number · name · ⋯, each in its own column, so the marks line up from row to row */
+.pf-list .mode-opt { position: relative; display: grid; grid-template-columns: 2ch minmax(0, 1fr) 18px; align-items: center; column-gap: 6px; padding: 5px 4px 5px 6px; }
+.pf-list .mode-opt::after { content: none; } /* the number shows which one is current, not a ● */
+.pf-num { grid-column: 1; grid-row: 1; color: var(--faint); font-size: 11px; text-align: right; font-variant-numeric: tabular-nums; }
+.pf-list .mode-opt[aria-selected="true"] .pf-num { color: var(--ok); font-weight: 600; }
+.pf-list .mode-opt.active .pf-num { color: var(--dim); }
+.pf-list .mode-opt[aria-selected="true"].active .pf-num { color: var(--ok); }
+.pf-list .mode-opt b { grid-column: 2; grid-row: 1; width: auto; min-width: 0; font-size: 12.5px; line-height: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-list .mode-opt[data-id="custom"] b { font-style: italic; }
+/* the custom row's bullet: one digit wide and centered on it, where a "1"-"9" would sit */
+.pf-bul { display: inline-block; width: 1ch; font-style: normal; font-weight: 700; font-size: 1.4em; line-height: 0; text-align: center; vertical-align: -0.08em; }
+.pf-dots { grid-column: 3; grid-row: 1; position: relative; width: 18px; height: 18px; border: 0; background: transparent; color: var(--faint); padding: 0; cursor: pointer; }
+/* three 2px dots drawn in CSS, so they sit exactly on the row's middle (the ⋯ character sits low) */
+button.pf-dots::before { content: ""; position: absolute; left: 50%; top: 50%; width: 2px; height: 2px; margin: -1px 0 0 -1px; background: currentColor; box-shadow: -4px 0 currentColor, 4px 0 currentColor; }
+span.pf-dots { cursor: default; }
+.pf-dots:hover { color: var(--on); }
+.pf-more { top: 100%; left: auto; right: 0; margin-top: 2px; min-width: 0; z-index: 12; }
+.pf-more .mode-opt::after { content: none; }
+.pf-more .mode-opt.warn b { color: var(--bad); }
+.pf-more .mode-opt b { font-size: 12px; }
+.pf-list .pf-input { grid-column: 2; grid-row: 1; width: 100%; font-size: 12.5px; }
+/* While the list is open only the rest of the color panel steps back; a click outside only closes it. */
+.tab-color > :not(.panel-head) { transition: opacity 0.12s, filter 0.12s; }
+body.pf-listing .tab-color > :not(.panel-head) { opacity: 0.4; filter: blur(1.5px); pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .tab-color > * { transition: none; } }
+.pf-act { height: var(--act-h, 18px); border: 1px solid var(--line2); background: transparent; color: var(--dim); font: inherit; font-size: 10px; line-height: 1; padding: 0 6px; cursor: pointer; white-space: nowrap; }
+.pf-act:hover { color: var(--on); border-color: var(--on); }
+.pf-full { height: var(--act-h, 18px); display: inline-flex; align-items: center; border: 1px solid var(--line); color: var(--faint); font-size: 10px; line-height: 1; padding: 0 6px; white-space: nowrap; cursor: default; }
+/* the name field, in the dotted-underline type-in style */
+.pf-input { width: 11ch; padding: 0; border: 0; border-bottom: 1px solid var(--dim); background: transparent; color: var(--on); font: inherit; font-size: 11px; font-weight: 600; text-transform: none; letter-spacing: 0; outline: none; }
+.pf-input::placeholder { color: var(--faint); font-weight: 400; }
+.pf-input::selection { background: var(--line2); color: var(--on); }
+/* amber dot after the profile name: changed since it was saved */
+.pf-mod { font-style: normal; color: var(--warn); font-size: 8px; letter-spacing: 0; margin-left: 5px; vertical-align: 1px; }
+
+/* the color head: profile name, then the colors on/off switch; they never overlap */
+.tab-color > .panel-head { align-items: center; gap: 8px; --act-h: 18px; }
+.tab-color .pf { min-width: 0; flex: 0 1 auto; }
+.pf-open { display: flex; align-items: baseline; max-width: 100%; white-space: nowrap; }
+.pf-open .pf-lbl, .pf-open .pf-mod { flex: none; }
+.pf-open b { min-width: 0; overflow: hidden; text-overflow: ellipsis; } /* a long name gets "…" */
+.c-power { flex: none; margin: -4px 0 -4px auto; padding: 4px 0 4px 10px; }
+.c-power input { width: 32px; height: var(--act-h); margin: 0; }
+.c-power input::after { top: 2px; left: 2px; width: calc(var(--act-h) - 6px); height: calc(var(--act-h) - 6px); }
+.c-power input:checked::after { left: calc(32px - var(--act-h) + 2px); }
+/* Off: everything under the head steps back and cannot be changed; the values stay. */
+.colors-off .tab-color > :not(.panel-head), .colors-off .tab-color .pf { opacity: 0.35; pointer-events: none; transition: opacity 0.12s; }
+.colors-off .tab-color .pf-actions { display: none; }
+
+/* the line under the head: "● unsaved changes  update profile · save new · reset" */
+.tab-color > .pf-actions { display: flex; align-items: center; gap: 6px; margin: -1px 0 8px; text-transform: none; letter-spacing: 0; }
+.tab-color > .pf-actions:empty { display: none; }
+.pf-note { margin-right: auto; color: var(--dim); font-size: 10px; white-space: nowrap; }
+.pf-note .pf-mod { margin: 0 5px 0 0; }
+.tab-color > .pf-actions .pf-input { width: 14ch; }
+
+/* "unsaved changes" card: a child of body, placed over the color panel */
+.tab-color { position: relative; }
+.pf-confirm { position: fixed; z-index: 30; display: grid; gap: 2px; padding: 10px 12px;
+  border: 1px solid rgba(227, 197, 138, 0.5); background: linear-gradient(135deg, rgba(227, 197, 138, 0.12), transparent 60%) var(--panel);
+  box-shadow: 0 10px 18px -8px #000; text-transform: none; letter-spacing: normal; }
+.pf-confirm b { color: var(--fg); font-size: 12px; font-weight: 600; }
+.pf-confirm b .pf-mod { margin: 0 6px 0 0; }
+.pf-confirm small { color: var(--faint); font-size: 10px; }
+/* three equal buttons across the card's full width, like the upscale pills */
+.pf-confirm-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+.pf-confirm-row .mp-btn { text-align: center; padding-left: 0; padding-right: 0; }
+/* While it shows, everything but the header and the card steps back; a click outside it is "cancel". */
+body.pf-asking > :not(.pf-confirm):not(.bar) { opacity: 0.4; filter: blur(1.5px); pointer-events: none; }

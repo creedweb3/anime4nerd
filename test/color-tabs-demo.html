@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Anime4Nerd: tab row options</title>
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #0b0b0b; --panel: #111; --line: #262626; --line2: #3a3a3a;
+  --fg: #e4e4e4; --dim: #8d8d8d; --faint: #585858; --on: #fff; --ok: #9fd3a8; --bad: #e39a9a;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 28px 32px 60px;
+  background: #050505;
+  color: var(--fg);
+  font: 12px/1.5 "JetBrains Mono", "Cascadia Mono", "Fira Code", Consolas, ui-monospace, monospace;
+}
+h1 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
+.intro { margin: 0 0 14px; max-width: 900px; color: var(--dim); }
+.toolbar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; margin: 0 -32px 22px; padding: 10px 32px; background: rgba(5,5,5,.92); border-bottom: 1px solid var(--line); }
+.group { display: flex; align-items: center; gap: 8px; }
+.lbl { color: var(--faint); font-size: 10px; text-transform: uppercase; letter-spacing: .16em; }
+.seg { display: inline-flex; }
+.seg button { border: 1px solid var(--line2); background: transparent; color: var(--dim); font: inherit; font-size: 11px; padding: 3px 10px; cursor: pointer; }
+.seg button + button { margin-left: -1px; }
+.seg button[aria-pressed="true"] { background: var(--on); border-color: var(--on); color: #000; font-weight: 600; }
+.toolbar .hint { color: var(--faint); margin-left: auto; }
+
+.concept { margin-bottom: 44px; }
+.label { display: flex; align-items: baseline; gap: 10px; margin: 0 0 4px; font-size: 13px; font-weight: 600; }
+.label b { display: inline-grid; place-items: center; width: 22px; height: 22px; border: 1px solid var(--line2); font-size: 11px; }
+.sub { margin: 0 0 12px; color: var(--dim); max-width: 900px; }
+.stage { display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap; }
+.stage iframe { border: 1px solid var(--line); width: 382px; height: 600px; background: var(--bg); flex: none; }
+.side { display: grid; gap: 10px; }
+.side canvas { display: block; width: 480px; aspect-ratio: 16/9; border: 1px solid var(--line); cursor: zoom-in; }
+.cap { color: var(--faint); font-size: 10px; }
+.meter { display: grid; gap: 4px; width: 480px; }
+.m-row { display: grid; grid-template-columns: 8ch 1fr 9ch; align-items: center; gap: 10px; font-size: 11px; color: var(--dim); }
+.m-bar { position: relative; height: 8px; border: 1px solid var(--line); }
+.m-bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--ok); }
+.m-bar s { position: absolute; top: -3px; bottom: -3px; border-left: 1px dashed var(--fg); }
+.m-row.over { color: var(--bad); }
+.m-row.over .m-bar i { background: var(--bad); }
+.m-row b { text-align: right; font-weight: 600; color: var(--fg); }
+.m-row.over b { color: var(--bad); }
+.takeaway { margin: 12px 0 0; color: var(--dim); max-width: 960px; }
+.takeaway em { color: var(--fg); font-style: normal; }
+</style>
+</head>
+<body>
+<h1>folder tabs: anchoring the closed tab (design preview, sample data)</h1>
+<p class="intro">Chosen layout: folder tabs, effects and upscale pills as today (596px with one video). Below: ways to give the closed tab a frame so it no longer floats. Switch "tab" to color to see each style the other way round.</p>
+
+<div class="toolbar">
+  <span class="group"><span class="lbl">tab</span><span class="seg" data-ctl="tab"><button type="button" data-v="upscale" aria-pressed="true">upscale</button><button type="button" data-v="color" aria-pressed="false">color</button></span></span>
+  <span class="group"><span class="lbl">page</span><span class="seg" data-ctl="page"><button type="button" data-v="one" aria-pressed="true">one video</button><button type="button" data-v="busy" aria-pressed="false">busy page</button></span></span>
+  <span class="group"><span class="lbl">numbers</span><span class="seg" data-ctl="scale"><button type="button" data-v="vlc" aria-pressed="true">vlc</button><button type="button" data-v="pct" aria-pressed="false">±100</button></span></span>
+  <span class="hint">hold on a picture to see it without color changes</span>
+</div>
+
+<main id="designs"></main>
+
+<template id="t-design">
+  <section class="concept">
+    <h2 class="label"><b></b><span class="name"></span></h2>
+    <p class="sub"></p>
+    <div class="stage">
+      <iframe></iframe>
+      <div class="side">
+        <canvas width="480" height="270"></canvas>
+        <span class="cap">video on the page</span>
+        <div class="meter">
+          <div class="m-row" data-t="upscale"><span>upscale</span><span class="m-bar"><i></i><s></s></span><b>—</b></div>
+          <div class="m-row" data-t="color"><span>color</span><span class="m-bar"><i></i><s></s></span><b>—</b></div>
+        </div>
+      </div>
+    </div>
+    <p class="takeaway"></p>
+  </section>
+</template>
+
+<script src="color-demo.js"></script>
+<script>
+const DESIGNS = [
+  { id: 't0', place: 'folder', name: 'as chosen (closed tab has no frame)', sub: 'For comparison: the closed tab is text on the page background.', take: '' },
+  { id: 't1', place: 'folder+t1', name: 'outline', sub: 'The closed tab keeps a thin frame in the panel line colour; its bottom edge is the panel\'s top line.',
+    take: '<em>Best at:</em> simplest; both tabs read as tabs. <em>Cost:</em> the open tab stands out less.' },
+  { id: 't2', place: 'folder+t2', name: 'behind', sub: 'The closed tab is framed, a little lower and darker, like a folder behind the open one.',
+    take: '<em>Best at:</em> the clearest "folder" look; the open tab is plainly in front. <em>Cost:</em> the two tabs are not the same height.' },
+  { id: 't3', place: 'folder+t3', name: 'shaded', sub: 'Framed, with a soft shadow at its foot as if the open panel overlaps it.',
+    take: '<em>Best at:</em> depth without moving anything. <em>Cost:</em> the shadow is subtle on dim screens.' },
+  { id: 't4', place: 'folder+t4', name: 'outline + mark', sub: 'Both framed; the open tab gets a white bar along its top edge.',
+    take: '<em>Best at:</em> which tab is open is obvious even at a glance. <em>Cost:</em> one more accent in the popup.' },
+  { id: 't5', place: 'folder+t5', name: 'tray', sub: 'Both tabs sit inside one framed strip that runs straight into the panel, so the tabs and the panel are one box.',
+    take: '<em>Best at:</em> nothing floats at all; reads as one container. <em>Cost:</em> the tabs get 4px slimmer to pay for the strip, so the popup stays at 596px.' },
+];
+const main = document.getElementById('designs');
+const tpl = document.getElementById('t-design');
+const state = { tab: 'upscale', page: 'one', scale: 'vlc' };
+const parts = {};
+DESIGNS.forEach((d, i) => {
+  const n = tpl.content.cloneNode(true);
+  n.querySelector('.label b').textContent = String.fromCharCode(65 + i);
+  n.querySelector('.name').textContent = d.name;
+  n.querySelector('.sub').textContent = d.sub;
+  n.querySelector('.takeaway').innerHTML = d.take;
+  const frame = n.querySelector('iframe');
+  frame.title = d.name;
+  const canvas = n.querySelector('canvas');
+  const meter = n.querySelector('.meter');
+  main.append(n);
+  parts[d.id] = { frame, preview: makePreview(canvas), meter };
+  frame.addEventListener('load', () => {
+    frame.contentWindow.postMessage({ type: 'scale', scale: state.scale }, '*');
+    frame.contentWindow.postMessage({ type: 'tab', tab: state.tab }, '*');
+  });
+});
+/* A hash-only change does not reload a frame, so a loaded frame is reloaded by hand. */
+function loadFrames() {
+  for (const d of DESIGNS) {
+    const f = parts[d.id].frame, hash = `#list,${state.page},${d.place}`;
+    if (f.contentWindow?.location.href.startsWith('http')) { f.contentWindow.location.hash = hash; f.contentWindow.location.reload(); }
+    else f.src = `color-frame.html${hash}`;
+  }
+}
+loadFrames();
+
+const LIMIT = 600, SCALE_MAX = 700;
+addEventListener('message', (e) => {
+  const d = e.data, p = Object.values(parts).find((x) => x.frame.contentWindow === e.source);
+  if (!p) return;
+  if (d.type === 'color') p.preview.update(d.vals);
+  if (d.type === 'size') {
+    p.frame.style.height = `${Math.min(LIMIT, d.h) + 2}px`;
+    p.frame.style.width = `${d.w + 2}px`;
+    for (const row of p.meter.querySelectorAll('.m-row')) {
+      const h = d.tabs[row.dataset.t];
+      row.classList.toggle('over', h > LIMIT);
+      row.querySelector('i').style.width = `${Math.min(100, (h / SCALE_MAX) * 100)}%`;
+      row.querySelector('s').style.left = `${(LIMIT / SCALE_MAX) * 100}%`;
+      row.querySelector('b').textContent = `${h} / ${LIMIT}`;
+    }
+  }
+});
+
+for (const seg of document.querySelectorAll('[data-ctl]')) {
+  for (const b of seg.querySelectorAll('button')) {
+    b.addEventListener('click', () => {
+      const ctl = seg.dataset.ctl;
+      state[ctl] = b.dataset.v;
+      for (const o of seg.querySelectorAll('button')) o.setAttribute('aria-pressed', String(o === b));
+      if (ctl === 'page') loadFrames();
+      else for (const d of DESIGNS) parts[d.id].frame.contentWindow.postMessage(ctl === 'tab' ? { type: 'tab', tab: state.tab } : { type: 'scale', scale: state.scale }, '*');
+    });
+  }
+}
+</script>
+</body>
+</html>

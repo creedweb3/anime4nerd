@@ -1,0 +1,205 @@
+/*
+ * Color tab design, added on top of the real popup (src/popup.html + src/popup.css + dist/popup.js)
+ * by popup-live.html. Only new rules; everything else is the popup's own stylesheet.
+ */
+
+/* ---- folder tabs under the video card ----------------------------------------- */
+.c-tabs { display: grid; grid-template-columns: 1fr 1fr; margin-bottom: -1px; position: relative; z-index: 1; }
+.c-tab { border: 1px solid transparent; border-bottom-color: var(--line); background: transparent; color: var(--faint); font: inherit; font-size: 11px; padding: 5px 0 4px; cursor: pointer; transition: border-color 0.12s, color 0.12s; }
+.c-tab[aria-selected="true"] { background: var(--panel); border-color: var(--line); border-bottom-color: var(--panel); color: var(--on); font-weight: 600; }
+.c-tab:hover:not([aria-selected="true"]) { color: var(--fg); }
+.c-tab .dot { color: var(--ok); margin-left: 5px; font-size: 9px; vertical-align: 1px; }
+.t-verdict { margin-left: 6px; font-weight: 400; font-size: 9px; vertical-align: 1px; }
+.t-verdict.ok { color: var(--ok); } .t-verdict.warn { color: var(--warn); } .t-verdict.bad { color: var(--bad); } .t-verdict.dim { color: var(--dim); }
+body[data-tab="upscale"] .tab-color, body[data-tab="color"] .tab-upscale { display: none; }
+/* The performance head moves onto the upscale tab ("upscale ● smooth"). */
+.tab-upscale #perf > .panel-head { display: none; }
+
+/* ---- sliders --------------------------------------------------------------------- */
+.cs-list { display: grid; gap: 2px; }
+.cs { display: grid; grid-template-columns: 11ch 1fr max-content; align-items: center; gap: 8px; height: 22px; }
+/*
+ * The end of a row: a 13px column for ↺ and a 5ch column for the number (wide enough for "−180°"),
+ * so every ↺ lines up and every number lines up on its right edge, whatever its length.
+ */
+/* 6px on each side of ↺: the row gap (8px) less 2px on the left, 6px to the number column on the right */
+.cs-end { display: grid; grid-template-columns: 13px 4ch; column-gap: 6px; align-items: center; margin-left: -2px; font-size: 11px; } /* ch measured at the numbers' own size */
+/* numbers right-aligned in their column; ↺ has 6px to the slider and 6px to the number column */
+.cs-end .cs-val, .cs-end .cs-edit { grid-column: 2; justify-self: end; text-align: right; }
+/* ↺ resets only this setting; shown on changed rows */
+.cs-reset { grid-column: 1; width: 13px; height: 16px; display: grid; place-items: center; padding: 0; border: 0; background: transparent; color: var(--dim); cursor: pointer; visibility: hidden; }
+.cs.changed .cs-reset { visibility: visible; }
+.cs-reset:hover, .cs-reset:focus-visible { color: var(--on); }
+.cs-reset:focus-visible { outline: 1px solid var(--on); outline-offset: 1px; }
+.cs-name { color: var(--dim); font-size: 11px; }
+.cs.changed .cs-name { color: var(--fg); }
+.cs-val { position: relative; justify-self: end; color: var(--faint); font-size: 11px; font-weight: 400; text-align: right; font-variant-numeric: tabular-nums; cursor: text;
+  text-decoration: underline dotted var(--faint); text-underline-offset: 3px; }
+.cs-val:hover { color: var(--on); text-decoration-style: solid; text-decoration-color: var(--on); }
+.cs-val:focus-visible { outline: 1px solid var(--on); outline-offset: 1px; }
+.cs.changed .cs-val { color: var(--on); font-weight: 600; }
+.cs-track { position: relative; height: 22px; cursor: pointer; touch-action: none; }
+.cs-track::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid var(--line2); }
+.cs-zero { position: absolute; left: var(--z); top: 6px; height: 10px; border-left: 1px solid var(--faint); }
+.cs-fill { position: absolute; left: var(--a); width: var(--w); top: calc(50% - 1px); height: 3px; background: var(--on); }
+.cs-thumb { position: absolute; left: var(--p); top: 4px; width: 8px; height: 14px; margin-left: -4px; background: var(--bg); border: 1px solid var(--dim); }
+.cs.changed .cs-thumb { background: var(--on); border-color: var(--on); }
+.cs-track:hover .cs-thumb { border-color: var(--on); }
+.cs-track:focus-visible { outline: none; }
+.cs-track:focus-visible .cs-thumb { outline: 1px solid var(--on); outline-offset: 1px; }
+.cs-ruler { display: none; }
+/* Typing a value: same place, size and weight as the number; a thin line under the text only. */
+.cs-edit { justify-self: end; display: inline-flex; align-items: baseline; }
+.cs-unit { color: var(--on); font-size: 11px; font-weight: 600; }
+.cs-input { padding: 0; border: 0; border-bottom: 1px solid var(--dim); background: transparent; color: var(--on); caret-color: var(--on); font: inherit; font-size: 11px; font-weight: 600; line-height: 16px; text-align: right; outline: none; font-variant-numeric: tabular-nums; }
+.cs-input::selection { background: var(--line2); color: var(--on); }
+
+/* ---- "colors without upscale" ------------------------------------------------------ */
+.ap-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; cursor: pointer; }
+.ap-text { display: flex; flex-direction: column; min-width: 0; }
+.ap-text b { color: var(--fg); font-size: 11px; font-weight: 600; }
+.ap-text small { color: var(--faint); font-size: 10px; }
+.ap-row .switch { padding: 0; margin: 0; }
+.ap-row .switch input { margin: 0; } /* the card switch's 2px top margin would sit it low here */
+.ap-row:hover .switch input { border-color: var(--on); }
+
+/* ---- profile menu in the color head ------------------------------------------------- */
+.pf { position: relative; }
+.pf-open { position: relative; border: 0; background: transparent; color: var(--faint); font: inherit; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; padding: 0 13px 0 0; cursor: pointer; }
+.pf-open b { color: var(--on); font-weight: 600; }
+.pf-open::after { content: ""; position: absolute; right: 0; top: 50%; margin-top: -1px; border: 3px solid transparent; border-top-color: currentColor; }
+.pf-open:hover, .pf-open[aria-expanded="true"] { color: var(--fg); }
+/* The list is popup.css's .mode-list / .mode-opt; only its place and width differ. */
+.pf-list { top: 100%; left: -6px; margin-top: 6px; min-width: 140px; max-width: 200px; max-height: 320px; overflow-y: auto; text-transform: none; letter-spacing: normal; outline: none; }
+.pf-list.two { display: grid; grid-auto-flow: column; grid-template-rows: repeat(var(--rows), auto); grid-template-columns: 1fr 1fr; column-gap: 9px; width: 330px; max-width: 330px;
+ }
+.pf-list.two .mode-opt[data-id="custom"] { grid-column: 1 / -1; }
+/*
+ * Lines: the left column's rows draw the line between the columns (the left column is never the
+ * shorter one, so it runs the full height), and "custom" sits under a line across both.
+ */
+.pf-list.two .mode-opt.c1::before { content: ""; position: absolute; top: -1px; bottom: -1px; right: -6px; border-right: 1px solid var(--line2); pointer-events: none; }
+.pf-list.two .mode-opt[data-id="custom"] { margin-top: 3px; }
+.pf-list.two .mode-opt[data-id="custom"]::before { content: ""; position: absolute; left: 0; right: 0; top: -3px; border-top: 1px solid var(--line2); pointer-events: none; }
+/* number · name · ⋯, each in its own column, so the marks line up from row to row */
+.pf-list .mode-opt { position: relative; display: grid; grid-template-columns: 2ch minmax(0, 1fr) 18px; align-items: center; column-gap: 6px; padding: 5px 4px 5px 6px; }
+.pf-list .mode-opt::after { content: none; } /* the number shows which one is current, not a ● */
+/* number · name · ⋯: the current profile's number is green and its name bold */
+.pf-num { grid-column: 1; grid-row: 1; color: var(--faint); font-size: 11px; text-align: right; font-variant-numeric: tabular-nums; }
+.pf-list .mode-opt[aria-selected="true"] .pf-num { color: var(--ok); font-weight: 600; }
+.pf-list .mode-opt.active .pf-num { color: var(--dim); }
+.pf-list .mode-opt[aria-selected="true"].active .pf-num { color: var(--ok); }
+.pf-list .mode-opt b { grid-column: 2; grid-row: 1; width: auto; min-width: 0; font-size: 12.5px; line-height: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-list .mode-opt[data-id="custom"] b { font-style: italic; }
+.pf-dots { grid-column: 3; grid-row: 1; position: relative; width: 18px; height: 18px; border: 0; background: transparent; color: var(--faint); padding: 0; cursor: pointer; }
+/* three 2px dots drawn in CSS, so they sit exactly on the row's middle (the ⋯ character sits low) */
+button.pf-dots::before { content: ""; position: absolute; left: 50%; top: 50%; width: 2px; height: 2px; margin: -1px 0 0 -1px; background: currentColor; box-shadow: -4px 0 currentColor, 4px 0 currentColor; }
+span.pf-dots { cursor: default; }
+.pf-dots:hover { color: var(--on); }
+.pf-more { top: 100%; left: auto; right: 0; margin-top: 2px; min-width: 0; z-index: 12; }
+.pf-more .mode-opt::after { content: none; }
+.pf-more .mode-opt.warn b { color: var(--bad); }
+.pf-list .pf-input { grid-column: 2; grid-row: 1; width: 100%; font-size: 12.5px; }
+.pf-more .mode-opt b { font-size: 12px; }
+/* While the list is open only the rest of the color panel steps back; a click outside only closes it. */
+.tab-color > :not(.panel-head), .pf-actions { transition: opacity 0.12s, filter 0.12s; }
+body.pf-listing .tab-color > :not(.panel-head), body.pf-listing .pf-actions { opacity: 0.4; filter: blur(1.5px); pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .tab-color > *, .pf-actions { transition: none; } }
+.pf-actions { display: inline-flex; gap: 4px; align-items: center; text-transform: none; letter-spacing: 0; }
+.pf-act { height: var(--act-h, 18px); border: 1px solid var(--line2); background: transparent; color: var(--dim); font: inherit; font-size: 10px; line-height: 1; padding: 0 6px; cursor: pointer; white-space: nowrap; }
+.pf-act:hover { color: var(--on); border-color: var(--on); }
+.pf-input { width: 11ch; padding: 0; border: 0; border-bottom: 1px solid var(--dim); background: transparent; color: var(--on); font: inherit; font-size: 11px; font-weight: 600; text-transform: none; letter-spacing: 0; outline: none; }
+.pf-input::placeholder { color: var(--faint); font-weight: 400; }
+.pf-input::selection { background: var(--line2); color: var(--on); }
+/* amber dot after the profile name: changed since it was saved */
+.pf-mod { font-style: normal; color: var(--warn); font-size: 8px; letter-spacing: 0; margin-left: 5px; vertical-align: 1px; }
+
+/* ---- colors on/off: a small switch at the right end of the color head ----------------- */
+.tab-color > .panel-head { align-items: center; --act-h: 18px; }
+.c-power { padding: 4px 0 4px 10px; margin: -4px 0; }
+/* as tall as the "update profile" / "save new" buttons beside it */
+.c-power input { width: 32px; height: var(--act-h); margin: 0; }
+.c-power input::after { top: 2px; left: 2px; width: calc(var(--act-h) - 6px); height: calc(var(--act-h) - 6px); }
+.c-power input:checked::after { left: calc(32px - var(--act-h) + 2px); }
+/* Off: everything under the head steps back and cannot be changed; the values stay. */
+.colors-off .tab-color > :not(.panel-head), .colors-off .tab-color .pf { opacity: 0.35; pointer-events: none; transition: opacity 0.12s; }
+.colors-off .tab-color .pf-actions { display: none; }
+
+/* ---- head row: profile name, buttons and switch never overlap ---------------------------- */
+.tab-color > .panel-head { gap: 8px; }
+.tab-color .pf { min-width: 0; flex: 0 1 auto; }
+.pf-open { display: flex; align-items: baseline; max-width: 100%; white-space: nowrap; }
+.pf-open .pf-lbl, .pf-open .pf-mod { flex: none; }
+.pf-open b { min-width: 0; overflow: hidden; text-overflow: ellipsis; } /* a long name gets "…" */
+.tab-color > .panel-head .c-power { flex: none; margin-left: auto; }
+
+/* ---- "unsaved changes" card, inside the color panel ---------------------------------------- */
+.tab-color { position: relative; }
+.pf-confirm { position: fixed; z-index: 30; display: grid; gap: 2px; padding: 10px 12px;
+  border: 1px solid rgba(227, 197, 138, 0.5); background: linear-gradient(135deg, rgba(227, 197, 138, 0.12), transparent 60%) var(--panel);
+  box-shadow: 0 10px 18px -8px #000; text-transform: none; letter-spacing: normal; }
+.pf-confirm b { color: var(--fg); font-size: 12px; font-weight: 600; }
+.pf-confirm b .pf-mod { margin: 0 6px 0 0; }
+.pf-confirm small { color: var(--faint); font-size: 10px; }
+/* three equal buttons across the card's full width, like the upscale pills */
+.pf-confirm-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+.pf-confirm-row .mp-btn { text-align: center; padding-left: 0; padding-right: 0; }
+/* While it shows, everything under the header steps back (dimmed, slightly blurred), as with the mode list; the header row stays as it is. A click anywhere outside the card only closes it. */
+body > * { transition: opacity 0.12s, filter 0.12s; }
+body.pf-asking > :not(.pf-confirm):not(.bar) { opacity: 0.4; filter: blur(1.5px); pointer-events: none; }
+
+/* ---- the line under the head: "● unsaved changes  update profile · save new · reset" ---------- */
+.tab-color > .pf-actions { display: flex; align-items: center; gap: 6px; margin: -1px 0 8px; }
+.tab-color > .pf-actions:empty { display: none; }
+.pf-note { margin-right: auto; color: var(--dim); font-size: 10px; white-space: nowrap; }
+.pf-note .pf-mod { margin: 0 5px 0 0; }
+.tab-color > .pf-actions .pf-input { width: 14ch; }
+/* the custom row's bullet: one digit wide and centered on it, so it sits where a "1"-"9" would */
+.pf-bul { display: inline-block; width: 1ch; font-style: normal; font-weight: 700; font-size: 1.4em; line-height: 0; text-align: center; vertical-align: -0.08em; } /* bolder; line-height 0 keeps the row height */
+
+/* ---- design ideas for "colors without upscale" (popup-live.html #ap=b..f) --------------------- */
+/* b: two pills, with a line saying what the choice does */
+.ap-seg { grid-template-columns: 1fr 1fr; }
+.ap-hint { margin-top: 4px; color: var(--faint); font-size: 10px; }
+/* c: a grey card; the switch carries the state */
+.ap-card { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; padding: 7px 10px; cursor: pointer;
+  border: 1px solid var(--line2); background: var(--bg); transition: border-color 0.12s; }
+/* Grey in both states: only the switch shows red/green. */
+.ap-card:hover { border-color: var(--dim); }
+.ap-card .switch { padding: 0; margin: 0; }
+.ap-card .switch input { margin: 0; }
+/* d: one line */
+.ap-one .ap-text { flex-direction: row; align-items: baseline; gap: 8px; }
+/* e: a custom check box and one line of text */
+.ap-check { display: flex; align-items: center; gap: 8px; margin-top: 10px; color: var(--dim); font-size: 11px; cursor: pointer; }
+.ap-check input { appearance: none; flex: none; width: 14px; height: 14px; margin: 0; border: 1px solid var(--line2); background: var(--bg); display: grid; place-items: center; cursor: pointer; }
+.ap-check input:checked { background: var(--on); border-color: var(--on); }
+.ap-check input:checked::after { content: "✓"; color: #000; font-size: 10px; font-weight: 700; line-height: 1; }
+.ap-check:hover input { border-color: var(--on); }
+.ap-check:has(input:checked) { color: var(--fg); }
+/* f: one line, a small two-part switch on the right */
+.ap-inline { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; }
+.ap-lbl { color: var(--faint); font-size: 9px; text-transform: uppercase; letter-spacing: 0.16em; }
+.ap-mini { display: inline-flex; border: 1px solid var(--line2); }
+.ap-mini button { border: 0; background: transparent; color: var(--dim); font: inherit; font-size: 11px; padding: 2px 10px; cursor: pointer; }
+.ap-mini button[aria-checked="true"] { background: var(--on); color: #000; font-weight: 600; }
+.ap-mini button:hover:not([aria-checked="true"]) { color: var(--on); }
+/* g: the sentence as the one label of a switch row */
+.ap-sentence span:first-child { color: var(--fg); font-size: 11px; }
+/* h: a full-width pill like the effects pills ("+ ..." off, "✓ ..." on) */
+.ap-pillrow { margin-top: 10px; grid-template-columns: 1fr; }
+.ap-pillrow .pill { text-align: left; }
+/* i3: a small screen icon on the left, crossed out while off */
+.ap-icon { justify-content: flex-start; }
+.ap-icon .ap-text { flex: 1; }
+.ap-ico { flex: none; color: var(--dim); transition: color 0.12s; } /* grey in both states; the cross says off */
+.ap-card.on .ap-x { display: none; }
+/* i4: the card as tight as a slider row */
+.ap-compact { padding: 3px 8px 3px 10px; }
+/* i5 (chosen): icon + sentence + a state line, the state a little larger than other small text */
+.ap-full { gap: 10px; padding: 7px 10px; }
+.ap-full .ap-text small { font-size: 11px; color: var(--dim); }
+.ap-full .ap-ico { align-self: center; }
+/* 4ch number column fits the usual values ("+20°", "110%", "1.00") exactly: 6px either side of ↺.
+   A rare 5-character value (hue past ±99°, gamma 10.00) reaches left, so ↺ moves aside for it. */
+.cs.long .cs-reset { transform: translateX(-4px); }

@@ -3,8 +3,8 @@ import type { RateAction } from './rate-prompt';
 export type Preset = 'A' | 'B' | 'C' | 'AA' | 'BB' | 'CA';
 
 /** 'auto' picks 4x only when the video is drawn at more than 2x its source size. */
-export type Upscale = 'auto' | '2x' | '4x' | '8x' | '16x' | '32x';
-const UPSCALES: Upscale[] = ['auto', '2x', '4x', '8x', '16x', '32x'];
+export type Upscale = 'auto' | '2x' | '4x' | '8x';
+const UPSCALES: Upscale[] = ['auto', '2x', '4x', '8x'];
 
 /** The factor a manual choice asks for; null for auto. */
 export function requestedScale(u: Upscale): number | null {
@@ -24,18 +24,40 @@ export function frameVerdict(renderedFps: number, sourceFps: number | null): Fra
   return kept >= 0.97 ? 'ok' : kept >= 0.9 ? 'warn' : 'bad';
 }
 
-/** " · 16× capped: GPU limit" when the renderer ran below the manual choice, else ''. */
-export function capNote(u: Upscale, actualScale: number): string {
+/**
+ * " · 8× capped: GPU load" when the renderer ran below the manual choice because the GPU could not
+ * keep up (load-cap.ts), " · 8× capped: GPU limit" when the output did not fit its texture limit, else ''.
+ */
+export function capNote(u: Upscale, actualScale: number, byLoad = false): string {
   const want = requestedScale(u);
-  return want !== null && actualScale < want ? ` · ${want}× capped: GPU limit` : '';
+  return want !== null && actualScale < want ? ` · ${want}× capped: ${byLoad ? 'GPU load' : 'GPU limit'}` : '';
 }
+
+/**
+ * What the extension works on: 'auto' is videos and detected manga readers, 'anime' is videos
+ * only, 'manga' is manga readers only. The Firefox build has no manga mode and reads it as 'auto'.
+ */
+export type Mode = 'auto' | 'anime' | 'manga';
+/**
+ * The mode a suggestion offers (Chrome build): the mode leaves this page's content alone (mode
+ * 'anime' on a manga reader, mode 'manga' on a page with a video), so the popup offers to switch
+ * and the toolbar icon gets a small per-tab badge.
+ */
+export type Suggest = 'manga' | 'anime';
+export const MODES: Mode[] = ['auto', 'anime', 'manga'];
 
 /** Global rendering settings (apply to every enabled source). */
 export interface Settings {
+  mode: Mode;
   preset: Preset;
   darkenLines: boolean;
   thinLines: boolean;
   upscale: Upscale;
+}
+
+/** Everything that changes the shader chain; a renderer is rebuilt when this changes. */
+export function chainKey(s: Settings): string {
+  return `${s.preset}|${s.darkenLines}|${s.thinLines}`;
 }
 
 export const PRESETS: { value: Preset; label: string; description: string }[] = [
@@ -53,10 +75,12 @@ const SOURCES_KEY = 'anime4k-sources';
 export function normalize(raw: unknown): Settings {
   const t = (raw && typeof raw === 'object' ? raw : {}) as Partial<Settings>;
   return {
+    mode: MODES.includes(t.mode as Mode) ? (t.mode as Mode) : 'auto',
     preset: PRESETS.some((p) => p.value === t.preset) ? (t.preset as Preset) : 'A',
     darkenLines: t.darkenLines === true,
     thinLines: t.thinLines === true,
-    upscale: UPSCALES.includes(t.upscale as Upscale) ? (t.upscale as Upscale) : 'auto',
+    // 16x and 32x were removed (impractical): an old choice of either becomes the largest left.
+    upscale: UPSCALES.includes(t.upscale as Upscale) ? (t.upscale as Upscale) : ['16x', '32x'].includes(t.upscale as string) ? '8x' : 'auto',
   };
 }
 
@@ -125,6 +149,20 @@ export function setSource(key: string, enabled: boolean): Promise<void> {
   return writeChain;
 }
 
+// Clicking the upscale option that is already chosen (e.g. 4x while it is capped) asks every
+// video to drop its GPU-load cap and run that scale again. A changing value, so storage reports it.
+const LIFT_CAP_KEY = 'anime4k-lift-cap';
+
+export function liftLoadCap(): Promise<void> {
+  return chrome.storage.local.set({ [LIFT_CAP_KEY]: Date.now() });
+}
+
+export function onLoadCapLifted(cb: () => void): void {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes[LIFT_CAP_KEY]) cb();
+  });
+}
+
 export function onSourcesChanged(cb: (s: Sources) => void): void {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes[SOURCES_KEY]) {
@@ -147,8 +185,10 @@ export interface VideoInfo {
   playing: boolean;
   sourceFps: number | null; // measured from requestVideoFrameCallback, also while off
   enabled: boolean;
+  colorOnly?: boolean; // not upscaled, but drawing the color controls alone (color.ts)
   status: Status;
   message: string;
+  loadCapped?: boolean; // running below the wanted scale because the GPU could not keep up (load-cap.ts)
   stats: {
     gpuMs: number | null; samples: number[]; cpuMs: number; fps: number; passes: number;
     textureBytes: number; outputWidth: number; outputHeight: number; timerSupported: boolean;
@@ -161,9 +201,22 @@ export interface VideoInfo {
 export type Message =
   | { type: 'a4k-list' }
   | { type: 'a4k-page-meta' }
+  // content (a player frame) -> background: the tab's page metadata and host, for the fullscreen menu's card
+  | { type: 'a4k-top-meta' }
   | { type: 'a4k-highlight'; id: string | null }
   | { type: 'a4k-changed' }
   // content -> background: upscaled time and finished episodes since the last report (rate-prompt.ts)
   | { type: 'a4k-watch'; seconds: number; episodes: number }
   // popup -> background: answer to the rating card
-  | { type: 'a4k-rate'; action: RateAction; level: number };
+  | { type: 'a4k-rate'; action: RateAction; level: number }
+  // content -> background (manga mode): fetch an image the page will not let us read
+  | { type: 'a4k-fetch-image'; url: string }
+  // content -> background: this frame has a manga reader in mode 'anime' ('manga'), a video in
+  // mode 'manga' ('anime'), a reader in mode 'manga' ('reader': the mode fits the tab, so a video
+  // in another frame is not offered), or none of these any more (null); see Suggest
+  | { type: 'a4k-suggest'; kind: Suggest | 'reader' | null }
+  | { type: 'a4k-frames-gone' }
+  // popup -> content (manga mode): pages found / upscaled / failed in this frame
+  | { type: 'a4k-manga-status' }
+  // popup -> content (manga mode): scroll the reader to a page, counted from 0
+  | { type: 'a4k-manga-goto'; index: number };

@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Anime4Nerd: color popup mock</title>
+<!-- The real popup stylesheet (working tree), so this mock follows the popup as it changes. -->
+<link rel="stylesheet" href="../src/popup.css" />
+<style>
+/* ---- tabs under the video card ------------------------------------------------ */
+.c-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
+.c-tab { border: 1px solid var(--line); background: var(--panel); color: var(--dim); font: inherit; font-size: 11px; padding: 4px 0; cursor: pointer; }
+.c-tab[aria-selected="true"] { background: var(--on); border-color: var(--on); color: #000; font-weight: 600; }
+.c-tab:hover:not([aria-selected="true"]) { border-color: var(--line2); color: var(--fg); }
+.c-tab .dot { color: var(--ok); margin-left: 5px; font-size: 9px; vertical-align: 1px; }
+.c-tab[aria-selected="true"] .dot { color: #2f7a3c; }
+body[data-tab="upscale"] .tab-color, body[data-tab="color"] .tab-upscale { display: none; }
+/* 16× and 32× are gone from this mock: four upscale pills */
+#upscale { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+/* folder tabs: the open tab is joined to the panel under it */
+.c-tabs.folder { gap: 0; margin-bottom: -1px; position: relative; z-index: 1; }
+.c-tabs.folder .c-tab { background: transparent; border-color: transparent; border-bottom-color: var(--line); color: var(--faint); padding: 5px 0 4px; }
+.c-tabs.folder .c-tab[aria-selected="true"] { background: var(--panel); border-color: var(--line); border-bottom-color: var(--panel); color: var(--on); font-weight: 600; }
+.c-tabs.folder .c-tab:hover:not([aria-selected="true"]) { color: var(--fg); border-color: transparent; border-bottom-color: var(--line); }
+.c-tabs.folder .c-tab[aria-selected="true"] .dot { color: var(--ok); }
+/* Ways to anchor the closed tab, so it does not float (body.trim-tN) */
+.c-tabs.folder .c-tab:not([aria-selected="true"]) { transition: border-color 0.12s, color 0.12s; }
+/* t1 outline: the closed tab keeps a frame */
+.trim-t1 .c-tabs.folder .c-tab:not([aria-selected="true"]) { border-color: var(--line); }
+.trim-t1 .c-tabs.folder .c-tab:not([aria-selected="true"]):hover { border-color: var(--line2); border-bottom-color: var(--line); }
+/* t2 behind: the closed tab is a little lower and darker, a folder behind the open one */
+.trim-t2 .c-tabs.folder { align-items: end; }
+.trim-t2 .c-tabs.folder .c-tab:not([aria-selected="true"]) { border-color: var(--line); background: #0d0d0d; padding: 3px 0 3px; margin-left: -1px; }
+.trim-t2 .c-tabs.folder .c-tab:not([aria-selected="true"]):hover { border-bottom-color: var(--line); }
+/* t3 shaded: framed, with a shadow from the open panel falling on it */
+.trim-t3 .c-tabs.folder .c-tab:not([aria-selected="true"]) { border-color: var(--line); background: var(--panel); box-shadow: inset 0 -10px 12px -10px #000; }
+.trim-t3 .c-tabs.folder .c-tab:not([aria-selected="true"]):hover { border-bottom-color: var(--line); }
+/* t4 framed row with a mark on the open tab */
+.trim-t4 .c-tabs.folder .c-tab:not([aria-selected="true"]) { border-color: var(--line); }
+.trim-t4 .c-tabs.folder .c-tab:not([aria-selected="true"]):hover { border-bottom-color: var(--line); }
+.trim-t4 .c-tabs.folder .c-tab[aria-selected="true"] { box-shadow: inset 0 2px 0 var(--on); }
+/* t5 tray: both tabs sit in one framed strip that runs into the panel */
+.trim-t5 .c-tabs.folder { padding: 3px 3px 0; margin-top: -1px; border: 1px solid var(--line); border-bottom: 0; background: var(--bg); }
+.trim-t5 .c-tabs.folder .c-tab { padding: 3px 0 2px; } /* the strip's own 4px comes off the tabs, so the popup keeps its height */
+.trim-t5 .c-tabs.folder .c-tab:not([aria-selected="true"]) { border-color: transparent; border-bottom-color: var(--line); }
+.trim-t5 .c-tabs.folder + .tab-upscale > .panel:first-child, .trim-t5 .tab-color { border-top-color: var(--line); }
+.t-verdict { margin-left: 8px; color: var(--ok); font-weight: 400; font-size: 10px; }
+body.folder #perf > .panel-head { display: none; }
+body.folder .tab-upscale > .panel:first-child, body.folder .tab-color { border-top-color: var(--line); }
+/* trims */
+.trim-perf3 #perf .kv div:nth-child(n+4) { display: none; }
+.trim-tiles .grid .tile { flex-direction: row; align-items: baseline; gap: 6px; padding: 3px 8px; }
+.m-heads, .m-row { display: grid; grid-template-columns: 2fr 4fr; gap: 12px; }
+.m-row #effects { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.m-row #effects .pill { text-align: center; padding-left: 0; padding-right: 0; }
+.m-row #effects .pill::before { content: none; } /* no "+ " here: it cut "darken" short; on/off shows as the filled pill */
+/* tabs in a panel's head: the head's own small caps, the open one bright */
+.h-tabs { display: flex; gap: 14px; }
+.h-tab { border: 0; background: none; padding: 0; font: inherit; font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); cursor: pointer; }
+.h-tab:hover { color: var(--fg); }
+.h-tab[aria-selected="true"] { color: var(--on); }
+.h-tab[aria-selected="true"]::before { content: "▸ "; }
+.h-tab .dot { color: var(--ok); margin-left: 4px; }
+/* tabs as header chips */
+.chip-tab { font: inherit; font-size: 10px; cursor: pointer; }
+.chip-tab:hover { color: var(--fg); border-color: var(--line2); }
+.chip-tab[aria-selected="true"] { color: var(--on); border-color: var(--on); }
+.chip-tab .dot { color: var(--ok); margin-left: 4px; }
+
+.c-state { text-transform: none; letter-spacing: 0; font-size: 10px; display: flex; align-items: center; gap: 8px; }
+.c-state .dot { color: var(--ok); }
+.c-reset { border: 1px solid var(--line2); background: transparent; color: var(--dim); font: inherit; font-size: 10px; line-height: 1.4; padding: 0 6px; cursor: pointer; }
+.c-reset:hover { color: var(--on); border-color: var(--on); }
+
+/* ---- sliders: shared parts ------------------------------------------------------ */
+.cs-list { display: grid; gap: 2px; }
+.cs-name { color: var(--dim); font-size: 11px; }
+.cs.changed .cs-name { color: var(--fg); }
+.cs-val { color: var(--faint); font-size: 11px; font-weight: 400; text-align: right; font-variant-numeric: tabular-nums; }
+.cs.changed .cs-val { color: var(--on); font-weight: 600; }
+.cs-track { position: relative; height: 22px; cursor: pointer; touch-action: none; }
+.cs-track::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid var(--line2); }
+.cs-zero { position: absolute; left: var(--z); top: 6px; height: 10px; border-left: 1px solid var(--faint); }
+.cs-fill { position: absolute; left: var(--a); width: var(--w); top: calc(50% - 1px); height: 3px; background: var(--on); }
+.cs-thumb { position: absolute; left: var(--p); top: 4px; width: 8px; height: 14px; margin-left: -4px; background: var(--bg); border: 1px solid var(--dim); }
+.cs.changed .cs-thumb { background: var(--on); border-color: var(--on); }
+.cs-track:hover .cs-thumb { border-color: var(--on); }
+.cs-track:focus-visible { outline: none; }
+.cs-track:focus-visible .cs-thumb { outline: 1px solid var(--on); outline-offset: 1px; }
+
+/* ways to show that a number can be typed into (body.ti-*), without a box */
+.cs-row .cs-val { position: relative; justify-self: end; }
+/* underline: a dotted line under the number, solid on hover */
+.ti-underline .cs-val { text-decoration: underline dotted var(--faint); text-underline-offset: 3px; }
+.ti-underline .cs-val:hover { text-decoration-style: solid; text-decoration-color: var(--on); }
+/* pencil: a small pencil left of the number while the row is hovered or focused */
+.ti-pencil .cs-val::before { content: "✎"; position: absolute; right: calc(100% + 4px); color: var(--faint); font-weight: 400; opacity: 0; transition: opacity 0.12s; }
+.ti-pencil .cs-row:hover .cs-val::before, .ti-pencil .cs-val:focus-visible::before { opacity: 1; }
+.ti-pencil .cs-val:hover::before { color: var(--on); }
+/* caret: a thin text caret after the number on hover, blinking */
+.ti-caret .cs-val::after { content: ""; position: absolute; right: -4px; top: 3px; bottom: 3px; border-left: 1px solid var(--on); opacity: 0; }
+.ti-caret .cs-val:hover::after, .ti-caret .cs-val:focus-visible::after { animation: ti-blink 1s steps(1) infinite; }
+@keyframes ti-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+/* glow: the number lifts on hover with a soft panel behind it, like a tile */
+.ti-glow .cs-val { padding: 0 4px; margin-right: -4px; transition: background 0.12s, color 0.12s; }
+.ti-glow .cs-val:hover, .ti-glow .cs-val:focus-visible { background: #1f1f1f; color: var(--on); outline: none; }
+/* label: a faint "type" word appears under the number on hover */
+.ti-label .cs-val::after { content: "type"; position: absolute; left: 50%; top: 100%; transform: translateX(-50%); margin-top: -3px; color: var(--faint); font-size: 8px; font-weight: 400; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0; transition: opacity 0.12s; pointer-events: none; }
+.ti-label .cs-row:hover .cs-val::after, .ti-label .cs-val:focus-visible::after { opacity: 1; }
+.ti-label .cs-val:hover { color: var(--on); }
+/* while typing: the field keeps the number's place; only a line under it (no box) */
+
+/* ---- profiles ------------------------------------------------------------------ */
+.ap-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; cursor: pointer; }
+.ap-text { display: flex; flex-direction: column; min-width: 0; }
+.ap-text b { color: var(--fg); font-size: 11px; font-weight: 600; }
+.ap-text small { color: var(--faint); font-size: 10px; }
+.ap-row .switch { padding: 0; margin: 0; }
+.ap-row:hover .switch input { border-color: var(--on); }
+.has-profiles .c-state { display: none; } /* the profile name says it; "neutral" resets */
+.pf { position: relative; }
+/* The head button: the panel head's small caps, "PROFILE · NIGHT", with the mode chip's caret */
+.pf-open { position: relative; border: 0; background: transparent; color: var(--faint); font: inherit; font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; padding: 0 13px 0 0; cursor: pointer; }
+.pf-open b { color: var(--on); font-weight: 600; }
+.pf-open::after { content: ""; position: absolute; right: 0; top: 50%; margin-top: -1px; border: 3px solid transparent; border-top-color: currentColor; }
+.pf-open:hover, .pf-open[aria-expanded="true"] { color: var(--fg); }
+/* The list: popup.css's .mode-list and .mode-opt (custom list, ● on the current one), wider names */
+.pf-list { top: 100%; left: -6px; margin-top: 6px; max-width: 200px; min-width: 140px; text-transform: none; letter-spacing: normal; outline: none; }
+.pf-list .mode-opt { position: relative; }
+.pf-list .mode-opt b { width: auto; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-list .mode-opt[data-id="custom"] b { font-style: italic; }
+.pf-dots { border: 0; background: transparent; color: var(--faint); font: inherit; font-size: 11px; line-height: 1; padding: 0 2px; cursor: pointer; }
+.pf-dots:hover { color: var(--on); }
+.pf-more { top: 100%; left: auto; right: 0; margin-top: 2px; min-width: 0; z-index: 12; }
+.pf-more .mode-opt::after { content: none; }
+.pf-more .mode-opt.warn b { color: var(--bad); }
+.pf-list .pf-input { width: 8ch; flex: none; }
+/* While the list is open, the rest of the color panel steps back (dimmed, slightly blurred); the popup around it stays as it is */
+body.has-profiles .tab-color > :not(.panel-head), body.has-profiles .pf-actions { transition: opacity 0.12s, filter 0.12s; }
+body.pf-listing .tab-color > :not(.panel-head), body.pf-listing .pf-actions { opacity: 0.4; filter: blur(1.5px); pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { body.has-profiles * { transition: none !important; } }
+/* save / update, right of the head */
+.pf-actions { display: inline-flex; gap: 4px; align-items: center; text-transform: none; letter-spacing: 0; }
+.pf-act { border: 1px solid var(--line2); background: transparent; color: var(--dim); font: inherit; font-size: 10px; line-height: 1.4; padding: 0 6px; cursor: pointer; white-space: nowrap; }
+.pf-act:hover { color: var(--on); border-color: var(--on); }
+.pf-input { width: 11ch; padding: 0; border: 0; border-bottom: 1px solid var(--dim); background: transparent; color: var(--on); font: inherit; font-size: 11px; font-weight: 600; text-transform: none; letter-spacing: 0; outline: none; }
+.pf-input::placeholder { color: var(--faint); font-weight: 400; }
+.pf-input::selection { background: var(--line2); color: var(--on); }
+
+/* number formats */
+.cs-ruler { display: none; }
+.fmt-ruler .cs-row { height: 32px; align-items: start; padding-top: 2px; }
+.fmt-ruler .cs-row .cs-name, .fmt-ruler .cs-row .cs-val { line-height: 22px; }
+.fmt-ruler .cs-ruler { display: block; position: absolute; left: 0; right: 0; top: 20px; height: 10px; pointer-events: none; }
+.cs-ruler em { position: absolute; font-style: normal; font-size: 8px; line-height: 10px; color: var(--faint); white-space: nowrap; }
+.cs-ruler .r-min { left: 0; }
+.cs-ruler .r-mid { left: var(--z); transform: translateX(-50%); }
+.cs-ruler .r-max { right: 0; }
+.fmt-short .cs:not(.changed) .cs-val { color: var(--line2); }
+.fmt-x .cs-row, .fmt-pct .cs-row { grid-template-columns: 10ch 1fr 7ch; }
+.fmt-edit .cs-row { grid-template-columns: 10ch 1fr 7ch; }
+.fmt-edit .cs-val { justify-self: end; min-width: 6ch; padding: 0 4px; border: 1px solid var(--line); cursor: text; line-height: 18px; }
+.fmt-edit .cs-val:hover, .fmt-edit .cs-val:focus-visible { border-color: var(--line2); color: var(--fg); outline: none; }
+.cs-val { cursor: text; }
+.cs-row .cs-val:hover { color: var(--on); }
+.cs-val:focus-visible { outline: 1px solid var(--on); outline-offset: 1px; }
+/*
+ * While typing: the number stays where it was, same size and weight, with a caret and a thin
+ * line under the text only. The field is as wide as what is typed (field-sizing), and the
+ * selection is a dim grey, not the popup's white.
+ */
+.cs-edit { justify-self: end; display: inline-flex; align-items: baseline; }
+.cs-unit { color: var(--on); font-size: 11px; font-weight: 600; }
+.cs-input { field-sizing: content; min-width: 2ch; max-width: 8ch; padding: 0; border: 0; border-bottom: 1px solid var(--dim); background: transparent; color: var(--on); caret-color: var(--on); font: inherit; font-size: 11px; font-weight: 600; line-height: 16px; text-align: right; outline: none; font-variant-numeric: tabular-nums; }
+.cs-input::selection { background: var(--line2); color: var(--on); }
+
+/* A · rows: name · track · value */
+.cs-row { display: grid; grid-template-columns: 10ch 1fr 6ch; align-items: center; gap: 8px; height: 22px; }
+
+/* B · two columns: name and value over the track */
+.cs-list.two { grid-template-columns: 1fr 1fr; column-gap: 16px; row-gap: 4px; }
+.cs-stack { display: grid; grid-template-columns: 1fr auto; }
+.cs-stack .cs-val { grid-row: 1; grid-column: 2; }
+.cs-stack .cs-track { grid-row: 2; grid-column: 1 / -1; height: 18px; }
+.cs-stack .cs-zero { top: 4px; }
+.cs-stack .cs-thumb { top: 2px; }
+
+/* C · pick one: six value tiles, one slider for the picked tile */
+.pick-grid .tile small { color: var(--faint); font-variant-numeric: tabular-nums; }
+.pick-grid .tile.changed small { color: var(--on); }
+.pick-grid .tile.changed b::after { content: " ●"; color: var(--ok); font-size: 8px; vertical-align: 2px; }
+.pick-one { margin-top: 8px; }
+.pick-one .cs-row { grid-template-columns: 1fr 6ch; }
+.pick-one .cs-name { display: none; }
+
+/* D · faders: six vertical sliders side by side */
+.cs-list.faders { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0; }
+.cs-vertical { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.cs-vertical .cs-val { order: -1; text-align: center; font-size: 10px; }
+.cs-vertical .cs-name { font-size: 9px; }
+.cs-vertical .cs-track { width: 24px; height: 96px; }
+.cs-vertical .cs-track::before { left: 50%; right: auto; top: 0; bottom: 0; border-top: 0; border-left: 1px solid var(--line2); }
+.cs-vertical .cs-zero { left: 6px; top: auto; bottom: var(--z); width: 12px; height: 0; border-left: 0; border-top: 1px solid var(--faint); }
+.cs-vertical .cs-fill { left: calc(50% - 1px); top: auto; bottom: var(--a); width: 3px; height: var(--w); }
+.cs-vertical .cs-thumb { left: 50%; top: auto; bottom: var(--p); width: 14px; height: 8px; margin: 0 0 -4px -7px; }
+
+/* E · boxes: the performance panel's boxes; drag sideways on one to change it */
+.cs-list.boxes { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.cs-box .cs-track { display: block; height: auto; min-height: 40px; padding: 3px 8px 6px; border: 1px solid var(--line); cursor: ew-resize; }
+.cs-box .cs-track:hover, .cs-box .cs-track:focus-visible { border-color: var(--line2); }
+.cs-box.changed .cs-track { border-color: var(--dim); }
+.cs-box .cs-name { display: block; color: var(--faint); font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; }
+.cs-box .cs-val { display: block; text-align: left; font-size: 14px; font-weight: 600; color: var(--dim); line-height: 1.4; }
+.cs-box .cs-track::before { left: 8px; right: 8px; top: auto; bottom: 4px; }
+.cs-box .cs-zero, .cs-box .cs-fill, .cs-box .cs-thumb { margin-left: 0; }
+.cs-box .cs-zero { left: calc(8px + (100% - 16px) * var(--zf)); top: auto; bottom: 2px; height: 5px; }
+.cs-box .cs-fill { left: calc(8px + (100% - 16px) * var(--af)); width: calc((100% - 16px) * var(--wf)); top: auto; bottom: 3px; height: 3px; }
+.cs-box .cs-thumb { display: none; }
+.cs-box-hint { margin-top: 6px; color: var(--faint); font-size: 10px; }
+</style>
+</head>
+<body data-tab="color">
+<header class="bar">
+  <span class="chip mode"><button type="button" id="mode" tabindex="-1">auto</button></span>
+  <span class="chip">a</span>
+  <span class="chip grow on">gpu 4.1 ms</span>
+  <span class="chip">05:42</span>
+  <span class="chip bug" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M5.5 4.5a2.5 2.5 0 0 1 5 0"/><rect x="4.5" y="5" width="7" height="8" rx="3.5"/><path d="M8 7.5V13M2 9h2.5M11.5 9H14M2.5 5l2 1.5M13.5 5l-2 1.5M2.5 13l2-1.5M13.5 13l-2-1.5"/></svg></span>
+</header>
+<div id="root"></div>
+
+<template id="t-rate">
+  <section class="rate-card lv2">
+    <button type="button" class="rate-x" aria-label="Hide">✕</button>
+    <div class="rate-top">you've upscaled<span class="rate-badge">level 2</span></div>
+    <div class="rate-big">100 hours</div>
+    <div class="rate-row">
+      <div class="rate-lines"><span>that's 240 episodes</span><br /><span>a rating helps others find it</span></div>
+      <div class="rate-actions"><a class="rate-go">★ rate it</a></div>
+    </div>
+  </section>
+</template>
+<template id="t-playing">
+  <section class="panel">
+    <div class="panel-head"><span>playing now</span><span></span></div>
+    <div class="sources">
+      <div class="source on">
+        <div class="line"><div class="title">Sample Anime</div><label class="switch"><input type="checkbox" checked aria-label="Upscale this video" /></label></div>
+        <div class="episode"><span class="tag">ep 12</span><span class="epname">1920×1080 → 3840×2160</span></div>
+        <div class="state ok">● active</div>
+      </div>
+    </div>
+  </section>
+</template>
+<template id="t-second">
+  <div class="source compact"><div class="line"><div class="title">Trailer on the same page</div><label class="switch"><input type="checkbox" aria-label="Upscale this video" /></label></div></div>
+</template>
+<template id="t-upscale">
+  <section class="panel" id="perf">
+    <div class="panel-head"><span>performance</span><span class="verdict ok">● smooth</span></div>
+    <div class="kv">
+      <div><span>GPU</span><b class="ok">38%</b></div>
+      <div><span>Per frame</span><b>4.1 ms</b></div>
+      <div><span>Output</span><b>23.9 fps</b></div>
+      <div><span>Avg · peak</span><b>4.0 · 6.2</b></div>
+      <div><span>Frame limit</span><b>41.7 ms</b></div>
+      <div><span>Late frames</span><b>0</b></div>
+    </div>
+    <div class="bars"></div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><span>preset</span><span>A · sharp</span></div>
+    <div class="grid">
+      <button type="button" class="tile" aria-checked="true"><b>Mode A</b><small>sharp</small></button>
+      <button type="button" class="tile"><b>Mode B</b><small>soft</small></button>
+      <button type="button" class="tile"><b>Mode C</b><small>denoise</small></button>
+      <button type="button" class="tile"><b>A+A</b><small>sharper, heavy</small></button>
+      <button type="button" class="tile"><b>B+B</b><small>softer, heavy</small></button>
+      <button type="button" class="tile"><b>C+A</b><small>denoise+sharp</small></button>
+    </div>
+    <div class="sub-head">effects</div>
+    <div class="pills" id="effects">
+      <button type="button" class="pill">darken lines</button>
+      <button type="button" class="pill">thin lines</button>
+    </div>
+    <div class="sub-head">upscale</div>
+    <div class="pills" id="upscale">
+      <button type="button" class="pill" role="radio" aria-checked="true">auto</button>
+      <button type="button" class="pill" role="radio">2×</button>
+      <button type="button" class="pill" role="radio">4×</button>
+      <button type="button" class="pill" role="radio">8×</button>
+    </div>
+  </section>
+</template>
+
+<script src="color-demo.js"></script>
+<script src="color-profiles.js"></script>
+<script>
+const [design = 'list', page = 'one', place = 'row', fmt = '', sample = '', typeHint = 'underline', prof = ''] = location.hash.slice(1).split(',');
+let profiles = null;
+if (typeHint) document.body.classList.add(`ti-${typeHint}`);
+const root = document.getElementById('root');
+const tpl = (id) => document.getElementById(id).content.cloneNode(true);
+let vals = neutralValues();
+const sliders = {};
+const onInput = (k, t) => { vals = { ...vals, [k]: t }; changed(); };
+
+/* ---- the five color-tab layouts --------------------------------------------- */
+function buildList(list) {
+  for (const k of COLOR_KEYS) { sliders[k] = makeSlider(k, onInput, 'row'); list.append(sliders[k].el); }
+}
+function buildGrid(list) {
+  list.classList.add('two');
+  for (const k of COLOR_KEYS) { sliders[k] = makeSlider(k, onInput, 'stack'); list.append(sliders[k].el); }
+}
+function buildFaders(list) {
+  list.classList.add('faders');
+  for (const k of COLOR_KEYS) { sliders[k] = makeSlider(k, onInput, 'vertical'); list.append(sliders[k].el); }
+}
+function buildBoxes(list) {
+  list.classList.add('boxes');
+  for (const k of COLOR_KEYS) { sliders[k] = makeSlider(k, onInput, 'box'); list.append(sliders[k].el); }
+  list.insertAdjacentHTML('afterend', '<div class="cs-box-hint">drag sideways on a box · double-click resets</div>');
+}
+let picked = 'brightness';
+function buildPick(list) {
+  const grid = document.createElement('div');
+  grid.className = 'grid pick-grid';
+  const one = document.createElement('div');
+  one.className = 'pick-one';
+  for (const k of COLOR_KEYS) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'tile';
+    b.dataset.k = k;
+    b.innerHTML = `<b>${k}</b><small></small>`;
+    b.addEventListener('click', () => { picked = k; paintPick(); });
+    grid.append(b);
+    sliders[k] = makeSlider(k, onInput, 'row');
+    one.append(sliders[k].el);
+  }
+  list.replaceWith(grid, one);
+}
+function paintPick() {
+  for (const b of document.querySelectorAll('.pick-grid .tile')) {
+    const k = b.dataset.k;
+    b.setAttribute('aria-checked', String(k === picked));
+    b.classList.toggle('changed', Math.abs(vals[k]) > 0.004);
+    b.querySelector('small').textContent = sliders[k].el.querySelector('.cs-val').textContent;
+    sliders[k].el.hidden = k !== picked;
+  }
+}
+
+/* ---- popup ------------------------------------------------------------------ */
+if (page === 'busy') root.append(tpl('t-rate'));
+root.append(tpl('t-playing'));
+if (page === 'busy') root.querySelector('.sources').append(tpl('t-second'));
+/*
+ * Where the two tabs sit:
+ *   row  - their own row under the video card (costs a row of height)
+ *   head - in the head of the first panel under the card, in place of its title (no extra height)
+ *   bar  - two chips in the header, in place of the preset letter chip (no extra height)
+ */
+const tabHtml = (cls) => `<span class="${cls === 'h-tab' ? 'h-tabs' : 'c-tabs-in'}" role="tablist"><button type="button" class="${cls}" role="tab" data-t="upscale">upscale</button><button type="button" class="${cls}" role="tab" data-t="color">color<span class="dot" data-dot hidden>●</span></button></span>`;
+const up = document.createElement('div');
+up.className = 'tab-upscale';
+up.append(tpl('t-upscale'));
+const col = document.createElement('section');
+col.className = 'panel tab-color';
+col.innerHTML = '<div class="panel-head"><span>color</span><span class="c-state"></span></div><div class="cs-list"></div>';
+/*
+ * place = base[+trim...]. Bases: row, folder, head, bar. Trims make the upscale tab shorter:
+ *   merge - effects and upscale pills share one row (one-word labels, 16× and 32× gone)
+ *   perf3 - the performance panel keeps one row of boxes (GPU, per frame, output)
+ *   tiles - preset tiles on one line each ("A  sharp")
+ * folder - tabs on their own row, joined to the panel under them like folder tabs; the
+ *          performance panel's head goes, its verdict rides on the upscale tab.
+ */
+const [base, ...trims] = place.split('+');
+const trim = new Set(trims);
+if (base === 'row' || base === 'folder') {
+  const tabs = document.createElement('div');
+  tabs.className = `c-tabs${base === 'folder' ? ' folder' : ''}`;
+  tabs.innerHTML = tabHtml('c-tab');
+  tabs.firstChild.replaceWith(...tabs.firstChild.childNodes);
+  root.append(tabs);
+  if (base === 'folder') {
+    document.body.classList.add('folder');
+    tabs.querySelector('[data-t="upscale"]').insertAdjacentHTML('beforeend', '<span class="t-verdict">● smooth</span>');
+  }
+} else if (place === 'head') {
+  up.querySelector('#perf .panel-head > span').outerHTML = tabHtml('h-tab');
+  col.querySelector('.panel-head > span').outerHTML = tabHtml('h-tab');
+} else {
+  const letter = document.querySelector('.bar .chip:nth-child(2)');
+  letter.outerHTML = tabHtml('chip chip-tab');
+  document.querySelector('.c-tabs-in').style.display = 'contents';
+}
+for (const t of trim) document.body.classList.add(`trim-${t}`);
+if (trim.has('merge')) {
+  const preset = up.querySelectorAll('.panel')[1];
+  for (const el of preset.querySelectorAll('.sub-head, .pills')) el.remove();
+  preset.insertAdjacentHTML('beforeend', `<div class="m-heads"><span class="sub-head">effects</span><span class="sub-head">upscale</span></div>
+    <div class="m-row"><div class="pills" id="effects"><button type="button" class="pill" title="darken lines">darken</button><button type="button" class="pill" title="thin lines">thin</button></div>
+    <div class="pills" id="upscale"><button type="button" class="pill" role="radio" aria-checked="true">auto</button><button type="button" class="pill" role="radio">2×</button><button type="button" class="pill" role="radio">4×</button><button type="button" class="pill" role="radio">8×</button></div></div>`);
+}
+root.append(up, col);
+({ list: buildList, grid: buildGrid, pick: buildPick, fader: buildFaders, box: buildBoxes })[design](col.querySelector('.cs-list'));
+
+function selectTab(t) {
+  document.body.dataset.tab = t;
+  for (const o of document.querySelectorAll('[role="tab"]')) o.setAttribute('aria-selected', String(o.dataset.t === t));
+  fit();
+}
+for (const b of document.querySelectorAll('[role="tab"]')) b.addEventListener('click', () => selectTab(b.dataset.t));
+for (const bars of document.querySelectorAll('.bars')) {
+  for (let i = 0; i < 60; i++) { const b = document.createElement('i'); b.style.height = `${30 + Math.random() * 40}%`; bars.append(b); }
+}
+
+/* "N changed · reset" in the color head, and a dot on the color tab. */
+function changed() {
+  const n = changedCount(vals);
+  const st = document.querySelector('.c-state');
+  if (!st) return;
+  st.innerHTML = n ? `<span><span class="dot">●</span> ${n} changed</span><button type="button" class="c-reset">reset</button>` : (prof ? '' : '<span>neutral</span>'); // with profiles, the picked profile already says it
+  st.querySelector('.c-reset')?.addEventListener('click', resetAll);
+  for (const d of document.querySelectorAll('[data-dot]')) d.hidden = !n;
+  if (design === 'pick') paintPick();
+  if (design === 'box') {
+    for (const k of COLOR_KEYS) {
+      const tr = sliders[k].el.querySelector('.cs-track'), s = tr.style;
+      for (const [v, f] of [['--z', '--zf'], ['--a', '--af'], ['--w', '--wf']]) s.setProperty(f, parseFloat(s.getPropertyValue(v)) / 100);
+    }
+  }
+  profiles?.onChange();
+  parent.postMessage({ type: 'color', design, vals }, '*');
+  if (n !== lastCount) { lastCount = n; fit(); } // measuring the popup is slow; only when its height can change
+}
+let lastCount = -1;
+function resetAll() {
+  for (const k of COLOR_KEYS) sliders[k].set(0, false);
+  vals = neutralValues();
+  changed();
+}
+
+/*
+ * As popup.ts does: the scrollbar lane is added only while the popup scrolls.
+ * Also reports how tall each tab makes the popup (its content, before the 600px cap).
+ */
+function fit() {
+  setTimeout(() => {
+    const b = document.body, cur = b.dataset.tab, h = {};
+    for (const t of ['upscale', 'color']) { b.dataset.tab = t; h[t] = b.scrollHeight; }
+    b.dataset.tab = cur;
+    document.documentElement.classList.toggle('scrolls', b.scrollHeight > b.clientHeight);
+    parent.postMessage({ type: 'size', design, page, h: b.offsetHeight, w: b.offsetWidth, tabs: h }, '*');
+  });
+}
+addEventListener('message', (e) => {
+  if (e.data?.type === 'scale') { for (const k of COLOR_KEYS) sliders[k].setScale(e.data.scale); changed(); }
+  if (e.data?.type === 'tab') selectTab(e.data.tab);
+});
+/* Number format from the page (numbers demo): fmt-* class for the ruler and typed-value styles. */
+if (fmt) {
+  document.body.classList.add(`fmt-${fmt}`);
+  for (const k of COLOR_KEYS) sliders[k].setScale(fmt);
+}
+/* Sample values, so every format has numbers to show. */
+if (sample) {
+  const SAMPLE = { hue: -8, brightness: 1.1, contrast: 1.25, saturation: 1.4, gamma: 0.85, grain: 2 };
+  for (const k of COLOR_KEYS) sliders[k].set(fromVlc(k, SAMPLE[k]), false);
+  vals = Object.fromEntries(COLOR_KEYS.map((k) => [k, sliders[k].value]));
+}
+/*
+ * Profiles (profiles demo): saved color settings, and the "apply" choice for videos that are not
+ * upscaled. Both sit in the color panel.
+ */
+if (prof) {
+  const api = {
+    getVlc: () => Object.fromEntries(COLOR_KEYS.map((k) => [k, Math.round(toVlc(k, vals[k]) / UNIT[k]) * UNIT[k]])),
+    applyVlc(v) {
+      for (const k of COLOR_KEYS) sliders[k].set(fromVlc(k, v[k]), false);
+      vals = Object.fromEntries(COLOR_KEYS.map((k) => [k, sliders[k].value]));
+      changed();
+    },
+    fit,
+  };
+  profiles = initProfiles(col, api);
+  document.body.classList.add('has-profiles');
+  // Off: colors only while the video is upscaled. On: also on videos that are not upscaled.
+  col.insertAdjacentHTML('beforeend', `<label class="ap-row">
+      <span class="ap-text"><b>colors without upscale</b><small>keep these colors on videos that are not upscaled</small></span>
+      <span class="switch"><input type="checkbox" aria-label="Keep colors on videos that are not upscaled" /></span>
+    </label>`);
+}
+selectTab('color');
+changed();
+</script>
+</body>
+</html>

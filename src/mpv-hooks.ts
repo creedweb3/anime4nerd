@@ -39,7 +39,7 @@ export function parseHookPasses(source: string): HookPass[] {
         case 'HEIGHT': cur.height = val.split(/\s+/); break;
         case 'WHEN': cur.when = val.split(/\s+/); break;
         case 'COMPONENTS': cur.components = parseInt(val, 10) || 4; break;
-        default: break; // OFFSET, COMPUTE etc. are not used by the Anime4K files we ship
+        default: break; // other directives are not used by the Anime4K files we ship
       }
       continue;
     }
@@ -94,10 +94,8 @@ export function buildFragmentSource(pass: HookPass, hookedName: string): string 
       + `#define ${n}_tex(pos) texture(${n}_raw, (pos))\n`
       + `#define ${n}_texOff(off) ${n}_tex(${n}_pos + ${n}_pt * vec2(off))\n`;
   }
-  if (pass.binds.includes('HOOKED')) {
-    for (const suf of ['raw', 'size', 'pt', 'pos', 'tex', 'texOff']) {
-      src += `#define HOOKED_${suf} ${hookedName}_${suf}\n`;
-    }
+  for (const suf of ['raw', 'size', 'pt', 'pos', 'tex', 'texOff']) {
+    src += `#define HOOKED_${suf} ${hookedName}_${suf}\n`;
   }
   src += `#line 1\n${pass.body}\nvoid main() { fragColor = hook(); }\n`;
   return src;
