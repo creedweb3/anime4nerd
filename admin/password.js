@@ -39,8 +39,12 @@ export async function hashPassword(password, { iterations = ITERATIONS } = {}) {
   return `pbkdf2-sha256$${iterations}$${b64url(salt)}$${b64url(await derive(password, salt, iterations))}`;
 }
 
+// True when a stored hash has the expected shape. Spaces or a line break around it (easy to paste
+// into the Cloudflare dashboard by accident) are ignored.
+export const isPasswordHash = (stored) => FORMAT.test((stored ?? '').trim());
+
 export async function verifyPassword(password, stored) {
-  const m = FORMAT.exec(stored ?? '');
+  const m = FORMAT.exec((stored ?? '').trim());
   if (!m) return false;
   const iterations = Number(m[1]);
   if (iterations < 1000 || iterations > MAX_ITERATIONS) return false;

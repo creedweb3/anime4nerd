@@ -22,7 +22,7 @@
 // nosniff, and the page puts them on screen as text, never as HTML.
 
 import { PER_KIND_PER_DAY, Rejected, SHOTS_PER_DAY, ipBucket, readCapped, sha256Hex, verifyTurnstile } from '../functions/api/send.js';
-import { b64url, sameBytes, verifyPassword } from './password.js';
+import { b64url, isPasswordHash, sameBytes, verifyPassword } from './password.js';
 
 export const SESSION_COOKIE = '__Host-a4n_admin';
 const SESSION_SECONDS = 12 * 60 * 60;
@@ -161,7 +161,8 @@ async function login(request, env, url, fetchFn) {
   if (!(await verifyPassword(password, env.ADMIN_PASSWORD_HASH))) {
     await kvCall(() => kv.put(visitorKey, String(mine + 1), { expirationTtl: LOCK_SECONDS }));
     await kvCall(() => kv.put(dayKey, String(everyone + 1), { expirationTtl: 2 * 24 * 60 * 60 }));
-    log(401, 'wrong_password');
+    // A malformed secret makes every password wrong: say so in the logs, not to the visitor.
+    log(401, isPasswordHash(env.ADMIN_PASSWORD_HASH) ? 'wrong_password' : 'bad_password_hash_secret');
     return json(401, { ok: false, error: 'wrong', left: Math.max(0, FAILS_PER_VISITOR - mine - 1) });
   }
   if (mine) await kvCall(() => kv.delete(visitorKey));

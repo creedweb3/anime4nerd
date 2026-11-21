@@ -3,9 +3,10 @@
 // It asks for the password twice (nothing is shown while you type) and prints one line,
 // "pbkdf2-sha256$…". Save that line as the ADMIN_PASSWORD_HASH secret in Cloudflare Pages
 // (see docs/FEEDBACK_SETUP.md). The password itself is never printed or saved.
+//   node scripts/admin-password.mjs --check   tests a password against a hash line you saved.
 
 import { createInterface } from 'node:readline';
-import { hashPassword } from '../admin/password.js';
+import { hashPassword, isPasswordHash, verifyPassword } from '../admin/password.js';
 
 const MIN_LENGTH = 16;
 
@@ -19,6 +20,16 @@ async function ask(question) {
   const { value = '' } = await lines.next();
   process.stdout.write('\n');
   return value;
+}
+
+// --check: tests a password against a saved hash line, locally, without using sign-in tries.
+if (process.argv.includes('--check')) {
+  const hash = await ask('Saved hash line (pbkdf2-sha256$…): ');
+  const password = await ask('Password: ');
+  rl.close();
+  if (!isPasswordHash(hash)) console.log('That is not a complete hash line. Copy it again, all of it.');
+  else console.log((await verifyPassword(password, hash)) ? 'Match: this password signs in with this hash.' : 'No match: the password differs from the one this hash was made from.');
+  process.exit(0);
 }
 
 const first = await ask('Admin password: ');

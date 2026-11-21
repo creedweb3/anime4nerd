@@ -76,6 +76,22 @@ test('password hash verifies the right password only', async () => {
   assert.equal(await verifyPassword(PASSWORD, 'garbage'), false);
 });
 
+test('a stored hash with stray spaces or a line break still works', async () => {
+  const stored = await hashPassword(PASSWORD, { iterations: 1000 });
+  assert.equal(await verifyPassword(PASSWORD, ` ${stored}
+`), true);
+  const e = { ...(await env()), ADMIN_PASSWORD_HASH: `${stored}
+` };
+  assert.equal((await login(e)).status, 204);
+});
+
+test('a malformed hash secret is logged as such', async () => {
+  const e = { ...(await env()), ADMIN_PASSWORD_HASH: 'pbkdf2-sha256$oops' };
+  logged.length = 0;
+  assert.equal((await login(e)).status, 401);
+  assert.ok(logged.some((l) => l.includes('bad_password_hash_secret')));
+});
+
 test('two hashes of one password differ (random salt)', async () => {
   assert.notEqual(await hashPassword(PASSWORD, { iterations: 1000 }), await hashPassword(PASSWORD, { iterations: 1000 }));
 });
