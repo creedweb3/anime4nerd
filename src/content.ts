@@ -644,7 +644,7 @@ class VideoUpscaler {
       this.lowered.prepend(canvas);
     } else {
       this.lowered = null;
-      if (!pageLevel(parent) && getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
+      if (!pageLevel(parent) && !outOfFlow(this.video) && getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
       this.video.insertAdjacentElement('afterend', canvas);
     }
     this.layout();
@@ -930,7 +930,10 @@ class VideoUpscaler {
       ? c.parentElement !== host || host.firstElementChild !== c || !host.contains(v)
       : c.previousElementSibling !== v;
     if (misplaced) { this.mountCanvas(c); return; }
-    const box = host ?? parent; // the canvas's containing block
+    // The canvas's containing block. Beside an out-of-flow video whose parent was left unpositioned
+    // (see mountCanvas), it is the video's own: both are absolutely placed siblings.
+    const box = host ?? (!pageLevel(parent) && getComputedStyle(parent).position === 'static'
+      ? v.offsetParent ?? document.body : parent);
     const vr = v.getBoundingClientRect();
     const pr = box.getBoundingClientRect();
     const cs = getComputedStyle(v);
@@ -944,7 +947,7 @@ class VideoUpscaler {
     const [posX, posY] = cs.objectPosition.split(' ');
     const ox = objectOffset(posX, bw - pw);
     const oy = objectOffset(posY, bh - ph);
-    if (!host && pageLevel(parent) && getComputedStyle(parent).position === 'static') {
+    if (!host && pageLevel(box) && getComputedStyle(box).position === 'static') {
       // No positioned parent (see mountCanvas): the canvas is placed in page coordinates.
       c.style.left = `${vr.left + window.scrollX + boxL + ox}px`;
       c.style.top = `${vr.top + window.scrollY + boxT + oy}px`;
@@ -1114,6 +1117,16 @@ function positionedAncestor(el: Element): Element | null {
  */
 function pageLevel(el: Element): boolean {
   return el === document.body || el === document.documentElement;
+}
+
+/**
+ * An absolutely or fixed positioned video takes its size and place from an outer container
+ * (Vime's player: width 100% through an unpositioned inline wrapper). Making its parent
+ * position: relative would re-anchor it there and can collapse it to 0x0.
+ */
+function outOfFlow(v: HTMLVideoElement): boolean {
+  const p = getComputedStyle(v).position;
+  return p === 'absolute' || p === 'fixed';
 }
 
 /** CSS size of the picture inside a bw x bh content box for the given object-fit. */

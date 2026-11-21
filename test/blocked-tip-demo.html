@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Anime4Nerd: blocked video tip</title>
+<!--
+  Styles for the "try another server or source" tip under a blocked video's reason.
+  Each frame is the real popup (popup-live.html, #blocked=1); only the variant's CSS is added.
+-->
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 24px; background: #050505; color: #8d8d8d; font: 12px ui-monospace, Consolas, monospace; }
+  .grid { display: flex; flex-wrap: wrap; gap: 24px; }
+  figure { margin: 0; }
+  figcaption { margin-bottom: 8px; color: #e4e4e4; letter-spacing: 0.12em; text-transform: uppercase; font-size: 10px; }
+  /* The popup needs a 600px frame (shorter caps its body); only its top, the video card, shows. */
+  .crop { width: 380px; height: 205px; overflow: hidden; }
+  iframe { display: block; width: 380px; height: 600px; border: 0; }
+</style>
+</head>
+<body>
+<div class="grid" id="grid"></div>
+<script>
+// Variant CSS goes on top of popup.css inside each frame.
+const VARIANTS = {
+  chip: '', // chosen: what popup.css has now
+  label: `
+    .source .hint { display: flex; align-items: baseline; gap: 8px; margin-top: 6px; color: var(--fg); opacity: 0.85; }
+    .source .hint::before { content: "tip"; flex: none; border: 0; padding: 0; color: var(--warn); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; }`,
+  inset: `
+    .source .hint { display: flex; align-items: baseline; gap: 8px; margin-top: 8px; padding: 6px 8px; background: rgba(227, 197, 138, 0.06); color: var(--fg); }
+    .source .hint::before { content: "tip"; flex: none; border: 0; padding: 0; color: var(--warn); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; }`,
+  arrow: `
+    .source .hint { display: block; margin-top: 3px; color: var(--warn); opacity: 0.85; }
+    .source .hint::before { content: "\\21B3  "; white-space: pre; border: 0; padding: 0; font-size: inherit; }`,
+};
+
+const grid = document.getElementById('grid');
+for (const [name, css] of Object.entries(VARIANTS)) {
+  const fig = document.createElement('figure');
+  const cap = document.createElement('figcaption');
+  cap.textContent = name;
+  const f = document.createElement('iframe');
+  f.src = `popup-live#blocked=1&v=${name}`;
+  // popup-live adds popup.css after load: append the variant once the card exists, last in <head>.
+  f.addEventListener('load', () => {
+    const add = () => {
+      const d = f.contentDocument;
+      if (!d?.querySelector('.source .hint')) { setTimeout(add, 100); return; }
+      const s = d.createElement('style');
+      s.textContent = css;
+      d.head.append(s);
+    };
+    add();
+  });
+  const crop = document.createElement('div');
+  crop.className = 'crop';
+  crop.append(f);
+  fig.append(cap, crop);
+  grid.append(fig);
+}
+</script>
+</body>
+</html>

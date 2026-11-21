@@ -58,14 +58,17 @@
   const samples = [];
   let tick = 0;
   function video() {
-    const enabled = !!store.local['anime4k-sources']?.['player.example::blob:'];
+    const enabled = !!q.get('blocked') || !!store.local['anime4k-sources']?.['player.example::blob:'];
     tick += 1;
     for (let i = 0; i < 6; i++) samples.push(3.6 + Math.sin((tick * 6 + i) / 7) * 0.5 + Math.random() * 0.6);
     while (samples.length > 120) samples.shift();
     return {
       id: 'player.example#1', key: 'player.example::blob:', frameHost: 'player.example', mediaHost: 'blob:',
       width: 1920, height: 1080, playing: true, sourceFps: 23.976, enabled,
-      status: enabled ? 'Active' : 'Off', message: '',
+      // blocked=1: a cross-origin video the site does not let the extension read.
+      ...(q.get('blocked') && enabled
+        ? { status: 'Unavailable', message: 'This video source does not allow browser upscaling (cross-origin without CORS). Normal playback is available.' }
+        : { status: enabled ? 'Active' : 'Off', message: '' }),
       stats: enabled ? { gpuMs: samples[samples.length - 1], samples: samples.slice(), cpuMs: 0.4, fps: 23.976, passes: 9, textureBytes: 96 * 1048576, outputWidth: 3840, outputHeight: 2160, timerSupported: true, sourceFps: 23.976 } : null,
       media: null,
     };

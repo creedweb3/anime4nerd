@@ -335,7 +335,7 @@ function budgetFor(v: VideoInfo): number | null {
 // --- card: built once per video id, then patched in place ------------------------
 interface Card {
   el: HTMLElement; key: string; cb: HTMLInputElement;
-  title: HTMLElement; tag: HTMLElement; epName: HTMLElement; meta: HTMLElement; host: HTMLElement; res: HTMLElement; why: HTMLElement;
+  title: HTMLElement; tag: HTMLElement; epName: HTMLElement; meta: HTMLElement; host: HTMLElement; res: HTMLElement; why: HTMLElement; hint: HTMLElement;
   long: { title: string; cut: boolean } | null; // does this title fit on one line: measured once per title
 }
 const cards = new Map<string, Card>();
@@ -348,12 +348,13 @@ function buildCard(v: VideoInfo): Card {
   el.innerHTML = `
     <div class="line"><div class="title"></div><label class="switch"><input type="checkbox" /></label></div>
     <div class="episode"><span class="tag"></span><span class="epname"></span></div>
-    <div class="meta"><span class="host"></span><span class="res"></span><span class="why"></span></div>`;
+    <div class="meta"><span class="host"></span><span class="res"></span><span class="why"></span></div>
+    <div class="hint" hidden></div>`;
   const q = <T extends HTMLElement>(s: string) => el.querySelector(s) as T;
   const card: Card = {
     el, key: v.key, cb: q<HTMLInputElement>('input'),
     title: q('.title'), tag: q('.tag'), epName: q('.epname'), meta: q('.meta'), host: q('.host'), res: q('.res'), why: q('.why'),
-    long: null,
+    hint: q('.hint'), long: null,
   };
   const flip = (on: boolean) => {
     if (mode() === 'manga') return; // videos are paused: the switch is disabled
@@ -451,6 +452,10 @@ function patchCard(c: Card, v: VideoInfo, open: boolean) {
   setText(c.why, impossible ? shortReason(v.message) : '');
   c.host.hidden = c.res.hidden = impossible;
   c.why.hidden = !impossible;
+  // A site that blocks its video often offers other servers (players) for the same episode.
+  const blocked = impossible && /cross-origin|CORS/i.test(v.message);
+  setText(c.hint, blocked ? 'try another server or source' : ''); // its "tip" label is CSS (.hint::before)
+  c.hint.hidden = !blocked;
 
   if (open) {
     setTip(c.el, '');
