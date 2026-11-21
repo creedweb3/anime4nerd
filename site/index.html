@@ -47,64 +47,16 @@
       <div class="tbar" aria-hidden="true"><span class="dots"><i></i><i></i><i></i></span><span class="url">your-favourite-stream.example/watch?ep=3</span><span class="x">⋯</span><span class="x me" id="me"><img src="assets/icon.png" alt="" width="18" height="18"></span></div>
       <svg class="hcur" id="hcur" viewBox="0 0 22 22" aria-hidden="true"><path d="M3 2 L3 18 L7.5 13.8 L10.5 20 L13.2 18.8 L10.3 12.8 L16.5 12.6 Z" fill="#eceded" stroke="#08090a" stroke-width="1.4" stroke-linejoin="round"/></svg>
       <div class="row" id="row">
-        <div class="pp" id="pp" aria-label="A working copy of the Anime4Nerd popup">
-          <div class="bar"><span class="chip">anime4k</span><span class="chip on" id="hint">on · a</span><span class="chip grow on" id="gpuchip">gpu 15.1 ms</span><span class="chip" id="clock">21:40</span></div>
-          <section class="panel" id="p-src">
-            <div class="panel-head"><span>playing now</span><span>1</span></div>
-            <div class="source on" id="source" role="button" tabindex="0" aria-pressed="true">
-              <div class="line">
-                <span class="title">Starlight Academy</span>
-                <label class="switch" title="Upscale this video"><input type="checkbox" id="sw" checked aria-label="Upscale this video"></label>
-              </div>
-              <div><span class="tag">S1 E3</span><span>The Night Before the Festival</span></div>
-              <div class="meta">stream.example · <span id="res">1080p → 3840×2160 (2×)</span></div>
-              <div class="hr"></div>
-              <div class="state" id="state">● Upscaling</div>
-            </div>
-          </section>
-          <section class="panel" id="perf">
-            <div class="panel-head"><span>performance</span><span class="verdict ok" id="verdict">● keeping up</span></div>
-            <div class="kv">
-              <div><span>GPU</span><b id="k-load" class="ok">36%</b></div>
-              <div><span>Per frame</span><b id="k-ms">15.1 ms</b></div>
-              <div><span>Output</span><b id="k-fps">24 fps</b></div>
-              <div><span>Avg · peak</span><b id="k-avg">15 · 22</b></div>
-              <div><span>Frame limit</span><b id="k-limit">42 ms</b></div>
-              <div><span>Late frames</span><b id="k-late">0 / 2 s</b></div>
-            </div>
-            <div class="bars" id="bars"><s id="limit"></s></div>
-            <div class="meta" id="legend">last 2 s · dashed = limit · red = late</div>
-          </section>
-          <section class="panel" id="p-pre">
-            <div class="panel-head"><span>preset</span><span id="presetName">mode a</span></div>
-            <div class="grid" id="pp-presets" role="radiogroup" aria-label="Preset">
-              <button type="button" class="tile" role="radio" data-id="A" aria-checked="true"><b>Mode A</b><small>sharp</small></button>
-              <button type="button" class="tile" role="radio" data-id="B" aria-checked="false"><b>Mode B</b><small>soft</small></button>
-              <button type="button" class="tile" role="radio" data-id="C" aria-checked="false"><b>Mode C</b><small>denoise</small></button>
-              <button type="button" class="tile" role="radio" data-id="AA" aria-checked="false"><b>A+A</b><small>sharper, heavy</small></button>
-              <button type="button" class="tile" role="radio" data-id="BB" aria-checked="false"><b>B+B</b><small>softer, heavy</small></button>
-              <button type="button" class="tile" role="radio" data-id="CA" aria-checked="false"><b>C+A</b><small>denoise+sharp</small></button>
-            </div>
-            <div class="pills" id="pills">
-              <button type="button" class="pill" data-field="darken" aria-checked="false">darken lines</button>
-              <button type="button" class="pill" data-field="thin" aria-checked="true">thin lines</button>
-            </div>
-            <div class="pills" id="ups" role="radiogroup" aria-label="Upscale">
-              <span class="pills-label">upscale</span>
-              <button type="button" class="pill" role="radio" data-ups="auto" aria-checked="true">auto</button>
-              <button type="button" class="pill" role="radio" data-ups="2x" aria-checked="false">2×</button>
-              <button type="button" class="pill" role="radio" data-ups="4x" aria-checked="false">4×</button>
-              <button type="button" class="pill" role="radio" data-ups="8x" aria-checked="false">8×</button>
-            </div>
-          </section>
-        </div>
+        <div class="popbox" id="pp" data-h="585"><iframe src="popup/" title="The Anime4Nerd popup, working on a demo video"></iframe></div>
 
         <div class="notes" id="notes" aria-hidden="true" hidden>
-          <span class="co" data-for="p-src">What's playing<small id="n-src">upscaling · click to switch off</small></span>
-          <span class="co" data-for="perf">Live GPU time (Chrome)<small id="n-perf">15.1 ms of a 41.7 ms budget</small></span>
-          <span class="co" data-for="pp-presets">Six presets<small id="n-pre">mode a · sharp</small></span>
-          <span class="co" data-for="pills">Line options<small id="n-pill">thin lines on</small></span>
-          <span class="co" data-for="ups">Upscale factor<small id="n-ups">auto · 2×</small></span>
+          <span class="co" data-sel="#modeChip">Mode<small>auto · anime · manga</small></span>
+          <span class="co" data-sel="#sources">What's playing<small>its switch turns it on or off</small></span>
+          <span class="co" data-sel="#c-tabs">Folder tabs<small>upscale · color</small></span>
+          <span class="co" data-sel="#perf">Live GPU time<small>Chrome, Edge, Brave</small></span>
+          <span class="co" data-sel="#presets">Six presets<small>the Anime4K chains</small></span>
+          <span class="co" data-sel="#upscale">Upscale factor<small>auto · 2× · 4× · 8×</small></span>
+          <span class="co" data-sel="#cs-list">Ten color controls<small>in VLC's units</small></span>
         </div>
       </div>
     </div>
@@ -125,7 +77,7 @@
         <figure class="scene" aria-hidden="true"><div class="phead"><span><b>switch it on</b></span><span>the frame</span></div>
         <div class="stage"><div class="in s3">
         <div class="vid"><img src="assets/frame-before.png" alt=""><img class="aft" src="assets/frame-after.png" alt=""><span class="scan"></span><span class="rs">1080p → 2160p</span></div>
-        <div class="card3"><b>Starlight Academy</b><span data-aim="1" class="sw3"><i></i></span><em class="off">● Off · click to upscale</em><em class="onn">● Upscaling</em></div>
+        <div class="card3"><b>Starlight Academy</b><span data-aim="1" class="sw3"><i></i></span><span class="ep3"><i>S1 E3</i>The Night Before the Festival</span><em class="off">stream.example · 1080p</em><em class="onn">stream.example · 1080p → 3840×2160 (2×)</em></div>
         <svg class="cur" viewBox="0 0 22 22" aria-hidden="true"><path d="M3 2 L3 18 L7.5 13.8 L10.5 20 L13.2 18.8 L10.3 12.8 L16.5 12.6 Z" fill="#eceded" stroke="#08090a" stroke-width="1.4" stroke-linejoin="round"/></svg>
         </div></div>
         </figure>
@@ -188,7 +140,7 @@
         <div class="stage"><div class="in s5">
         <div class="pre">
         <div class="pan"><div class="phead"><span>preset</span><span>budget 41.7 ms</span></div>
-        <div class="grid"><span class="t"><b>Mode A</b><small>sharp</small></span><span class="t"><b>Mode B</b><small>soft</small></span><span class="t"><b>Mode C</b><small>denoise</small></span><span data-aim="1" class="t"><b>A+A</b><small>sharper</small></span><span class="t"><b>B+B</b><small>softer</small></span><span class="t"><b>C+A</b><small>denoise+sharp</small></span><span class="sel"></span></div>
+        <div class="grid"><span class="t"><b>Mode A</b><small>sharp</small></span><span class="t"><b>Mode B</b><small>soft</small></span><span class="t"><b>Mode C</b><small>denoise</small></span><span data-aim="1" class="t"><b>A+A</b><small>sharper, heavy</small></span><span class="t"><b>B+B</b><small>softer, heavy</small></span><span class="t"><b>C+A</b><small>denoise+sharp</small></span><span class="sel"></span></div>
         </div>
         <div class="pan"><div class="ms"><span>per frame</span><b><span class="a">15.1 ms</span><span class="aa">23.7 ms</span></b><span class="ok">● keeping up</span></div><div class="track"><i></i><s></s></div></div>
         </div>
@@ -228,6 +180,7 @@
         <div class="sw2"><span class="b8">720p → 2560×1440 (2×)</span><span class="a8">720p → 5120×2880 (4×)</span></div>
         <div class="sw2 ok"><span class="b8">gpu 8.2 ms / 42 ms · keeping up</span><span class="a8">gpu 16.4 ms / 42 ms · keeping up</span></div>
         <div class="bars8"><i style="height:40%"></i><i style="height:46%"></i><i style="height:38%"></i><i style="height:44%"></i><i style="height:50%"></i><i style="height:41%"></i><i style="height:39%"></i><i style="height:47%"></i><i style="height:42%"></i><i style="height:45%"></i><i style="height:40%"></i><i style="height:48%"></i><i style="height:43%"></i><i style="height:39%"></i><i style="height:46%"></i><i style="height:41%"></i><i style="height:44%"></i><i style="height:40%"></i><i style="height:47%"></i><i style="height:42%"></i><s></s></div>
+        <div class="ft8"><i class="on">upscale</i><i>color</i></div>
         <span class="lb">upscale</span>
         <div class="ups8"><i>auto</i><i class="u2">2×</i><i data-aim="2" class="u4">4×</i><i>8×</i></div>
         </div>
@@ -256,9 +209,62 @@
       </div>
   </section>
 
+  <section id="color" class="sec">
+      <div class="rail">
+        <div class="phead"><span>ep 05 · color controls</span><span>new in 1.3.0</span></div>
+        <h2>Grade the picture.</h2>
+        <p class="intro">Ten controls in VLC's units, so a value you know from VLC means the same here. They sit in the popup's color tab and in the fullscreen ☰ menu, and can also apply to videos that are not upscaled.</p>
+        <ul class="ctl" aria-label="The ten controls">
+          <li>brightness</li><li>contrast</li><li>saturation</li><li>gamma</li><li>hue</li><li>vibrance</li><li>temperature</li><li>tint</li><li>deband</li><li>grain</li>
+        </ul>
+      </div>
+      <div class="body">
+        <div class="duo">
+          <div class="popbox" id="color-pop" data-h="545"><iframe src="popup/?color=1#tab=color" title="The popup's color tab, working" loading="lazy"></iframe></div>
+          <div class="duo-side">
+            <figure class="cpic" id="color-pic">
+              <div class="phead"><span>preview</span><span>approximate</span></div>
+              <div class="cpic-img"><img src="assets/frame-after.png" alt="An anime frame that follows the popup's color values" width="800" height="450" loading="lazy"><span class="warm" aria-hidden="true"></span></div>
+            </figure>
+            <div class="panel">
+              <div class="phead"><span>profiles</span></div>
+              <h3>Five looks, plus your own</h3>
+              <p>Pick slice of life, sunlit, shonen, moody or vintage, or move the sliders and save the result under your own name. Try it: the popup here is the real one.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+  </section>
+
+  <section id="manga" class="sec">
+      <div class="rail">
+        <div class="phead"><span>ep 06 · manga mode</span><span>new in 1.3.0</span></div>
+        <h2>Sharper pages, too.</h2>
+        <p class="intro">Manga readers get the same treatment. Each page of a chapter is upscaled once, on your GPU, and swapped in place. Press <kbd>Alt</kbd>+<kbd>M</kbd> to see the originals again.</p>
+      </div>
+      <div class="body">
+        <div class="duo">
+          <div class="popbox" id="manga-pop" data-h="550"><iframe src="popup/?pages=60" title="The popup on a manga chapter, working" loading="lazy"></iframe></div>
+          <div class="duo-side">
+            <div class="panel">
+              <div class="phead"><span>mode</span></div>
+              <h3>auto, anime or manga</h3>
+              <p>The mode in the popup's top bar decides what Anime4Nerd works on: video and manga, video only, or pages only. When a page holds the other kind, the popup suggests a switch.</p>
+            </div>
+            <div class="panel">
+              <div class="phead"><span>page map</span></div>
+              <h3>Every page at a glance</h3>
+              <p>The popup shows which pages are done, which are in progress and which wait, with the time per page.</p>
+              <div class="foot"><span class="chip">chrome</span><span class="chip">edge</span><span class="chip">brave</span><span class="chip">firefox</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+  </section>
+
   <section id="install" class="sec long">
       <div class="rail">
-        <div class="phead"><span>ep 05 · install</span></div>
+        <div class="phead"><span>ep 07 · install</span></div>
         <h2>Get Anime4Nerd.</h2>
         <p class="intro">Add it, pin it from the puzzle menu once, and it is one click away on any video.</p>
         <figure class="scene" aria-hidden="true"><div class="phead"><span><b>pin it, then open it</b></span><span>toolbar</span></div>
@@ -268,7 +274,7 @@
         <div class="it"><img src="assets/icon.png" alt=""><span>Anime4Nerd</span><span data-aim="2" class="pin"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 3h6l-1 5 3 3H5l3-3zM10 11v6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></span></div>
         <div class="it dim"><span class="ph"></span><span>another extension</span></div>
         </div>
-        <div class="mp"><div class="r"><i>anime4k</i><i>on · a</i><i class="f">gpu 15.1 ms</i></div><div class="src"><b>Starlight Academy <span class="sw"></span></b><em>● Upscaling</em></div><div class="kv"><span>36%</span><span>15.1 ms</span><span>24 fps</span></div><div class="tl"><i class="sel">A</i><i>B</i><i>C</i><i>A+A</i><i>B+B</i><i>C+A</i></div></div>
+        <div class="mp real"><iframe src="popup/" title="" tabindex="-1" loading="lazy"></iframe></div>
         <svg class="cur" viewBox="0 0 22 22" aria-hidden="true"><path d="M3 2 L3 18 L7.5 13.8 L10.5 20 L13.2 18.8 L10.3 12.8 L16.5 12.6 Z" fill="#eceded" stroke="#08090a" stroke-width="1.4" stroke-linejoin="round"/></svg>
         </div></div>
         </figure>
@@ -302,7 +308,7 @@
 
   <section id="questions" class="sec">
       <div class="rail">
-        <div class="phead"><span>ep 06 · questions</span></div>
+        <div class="phead"><span>ep 08 · questions</span></div>
         <h2>Questions.</h2>
         <p class="intro">Short answers to what people ask most.</p>
         <figure class="scene" aria-hidden="true"><div class="phead"><span><b>only some sites</b></span><span>site access</span></div>
@@ -331,13 +337,13 @@
 
   <section id="changes" class="sec doc long">
       <div class="rail">
-        <div class="phead"><span>ep 07 · version history</span></div>
+        <div class="phead"><span>ep 09 · version history</span></div>
         <h2>What's new.</h2>
         <p class="intro">After an update the toolbar icon shows a NEW badge, and the popup links here.</p>
         <figure class="scene" aria-hidden="true"><div class="phead"><span><b>after an update</b></span><span>new badge</span></div>
         <div class="stage"><div class="in s2">
         <div class="tb"><span class="dots"><i></i><i></i><i></i></span><span class="url">your-favourite-stream.example/watch?ep=2</span><span class="x">⋯</span><span data-aim="1" class="x me"><img src="assets/icon.png" alt=""><span class="badge">NEW</span></span></div>
-        <div class="mp"><div data-aim="2" class="note"><span><b>●</b> updated to 1.3.0</span><span>what's new →</span></div><div class="src"><b>Starlight Academy <span class="sw"></span></b><em>● Upscaling</em></div><div class="kv"><span>36%</span><span>15.1 ms</span><span>24 fps</span></div><div class="tl"><i class="sel">A</i><i>B</i><i>C</i><i>A+A</i><i>B+B</i><i>C+A</i></div></div>
+        <div class="mp real"><iframe src="popup/?new=1" title="" tabindex="-1" loading="lazy"></iframe><span data-aim="2" data-at="#whatsnew" class="nw"></span></div>
         <svg class="cur" viewBox="0 0 22 22" aria-hidden="true"><path d="M3 2 L3 18 L7.5 13.8 L10.5 20 L13.2 18.8 L10.3 12.8 L16.5 12.6 Z" fill="#eceded" stroke="#08090a" stroke-width="1.4" stroke-linejoin="round"/></svg>
         </div></div>
         </figure>
@@ -345,7 +351,7 @@
       <div class="body">
         <div class="timeline">
           <article class="rel latest">
-            <div class="rel-head"><h3>1.3.0</h3><span class="new">latest</span><span class="date">November 2026</span></div>
+            <div class="rel-head"><h3>1.3.0</h3><span class="new">latest</span><time class="date" datetime="2026-11-21">21 Nov 2026</time></div>
             <ul>
             <li><strong>Manga mode.</strong> Upscales the pages of manga readers, once per chapter, on Chrome, Edge, Brave and Firefox. Alt+M shows the originals. A mode setting (auto, anime, manga) decides what it works on, and the popup suggests a switch when a page holds the other kind.</li>
             <li><strong>Color controls.</strong> Ten controls in VLC's units (brightness, contrast, saturation, gamma, hue, vibrance, temperature, tint, deband, grain), five ready-made looks and your own saved profiles, in the popup and the fullscreen menu. They can also apply to videos that are not upscaled.</li>
@@ -356,14 +362,14 @@
             </ul>
           </article>
           <article class="rel">
-            <div class="rel-head"><h3>1.2.5</h3><span class="date">November 2026</span></div>
+            <div class="rel-head"><h3>1.2.5</h3><time class="date" datetime="2026-11-12">12 Nov 2026</time></div>
             <ul>
             <li><strong>Firefox: desktop only.</strong> The Firefox build is now offered for desktop Firefox 140 or newer only, not Firefox for Android, where it was never tested.</li>
             <li><strong>Same version everywhere:</strong> Chrome, Edge, Brave and Firefox all get 1.2.5. Nothing else changed.</li>
             </ul>
           </article>
           <article class="rel">
-            <div class="rel-head"><h3>1.2.4</h3><span class="date">November 2026</span></div>
+            <div class="rel-head"><h3>1.2.4</h3><time class="date" datetime="2026-11-12">12 Nov 2026</time></div>
             <ul>
             <li><strong>Report a problem from the popup.</strong> A bug icon at the end of the top bar opens a short form with your version and browser filled in. It sends only what you write and the screenshots you pick, and only when you press send.</li>
             <li><strong>A short goodbye form.</strong> If you remove the extension, the browser opens an optional page asking what didn't work. Nothing is sent unless you fill it in.</li>
@@ -371,7 +377,7 @@
             </ul>
           </article>
           <article class="rel">
-            <div class="rel-head"><h3>1.2.3</h3><span class="date">November 2026</span></div>
+            <div class="rel-head"><h3>1.2.3</h3><time class="date" datetime="2026-11-12">12 Nov 2026</time></div>
             <ul>
             <li><strong>Player controls stay on top.</strong> The seek bar, settings menus and subtitles of a player are no longer hidden under the upscaled picture, on any player.</li>
             <li><strong>Built-in subtitles come back.</strong> Sites that use the browser's own subtitle tracks get them redrawn above the upscaled picture, in the site's style, and lifted above the control bar while it shows.</li>
@@ -380,19 +386,19 @@
             </ul>
           </article>
           <article class="rel">
-            <div class="rel-head"><h3>1.2.2</h3><span class="date">November 2026</span></div>
+            <div class="rel-head"><h3>1.2.2</h3><time class="date" datetime="2026-11-08">8 Nov 2026</time></div>
             <ul>
             <li><strong>A clearer name in the store:</strong> Anime4Nerd: Anime Upscaler &amp; Video Enhancer (Anime4K). Nothing else changed.</li>
             </ul>
           </article>
           <article class="rel">
-            <div class="rel-head"><h3>1.2.1</h3><span class="date">November 2026</span></div>
+            <div class="rel-head"><h3>1.2.1</h3><time class="date" datetime="2026-11-08">8 Nov 2026</time></div>
             <ul>
             <li><strong>A rating card</strong> (Chrome, Edge, Brave). After a few episodes the popup shows how much you've upscaled and asks, once per milestone, if you'd rate it. Close it and it waits for the next one; say you already rated and it never comes back. The counts stay on your device.</li>
             </ul>
           </article>
           <article class="rel">
-            <div class="rel-head"><h3>1.2.0</h3><span class="date">November 2026</span></div>
+            <div class="rel-head"><h3>1.2.0</h3><time class="date" datetime="2026-11-08">8 Nov 2026</time></div>
             <ul>
             <li><strong>Firefox support.</strong> The same extension now builds for Firefox 140 and newer, with every preset, the fullscreen menu and the per-site switch. On an RTX 2060 it runs as fast as in Chrome.</li>
             <li><strong>Video files opened directly</strong> (a <code>.webm</code> or <code>.mp4</code> as the whole page) no longer go black in Firefox.</li>
@@ -400,14 +406,14 @@
             </ul>
           </article>
           <article class="rel">
-            <div class="rel-head"><h3>1.1.1</h3><span class="date">October 2026</span></div>
+            <div class="rel-head"><h3>1.1.1</h3><time class="date" datetime="2026-10-26">26 Oct 2026</time></div>
             <ul>
             <li><strong>The fullscreen menu shows up on more players:</strong> sites that fullscreen the video itself, embedded players whose page fullscreens the whole frame, F11, and players built with shadow DOM. Upscaling keeps running in all of them.</li>
             <li><strong>No more leftover errors after an update.</strong> The old copy of the extension on open pages now steps aside silently.</li>
             </ul>
           </article>
           <article class="rel">
-            <div class="rel-head"><h3>1.1.0</h3><span class="date">October 2026</span></div>
+            <div class="rel-head"><h3>1.1.0</h3><time class="date" datetime="2026-10-26">26 Oct 2026</time></div>
             <ul>
             <li><strong>Upscale beyond 2×.</strong> Pick auto, 2×, 4×, 8×, 16× or 32×. Auto uses 4× when a small video fills a big screen, like 720p in fullscreen on a 1440p or 4K display. Higher choices run at the largest factor your GPU can hold, and the popup says when it capped.</li>
             <li><strong>A menu inside fullscreen.</strong> Move the mouse and a ☰ button appears in the corner of the player: switch it on or off, change preset, line effects and upscale factor, and watch the GPU graph without leaving fullscreen.</li>
@@ -417,7 +423,7 @@
             </ul>
           </article>
           <article class="rel">
-            <div class="rel-head"><h3>1.0.1</h3><span class="date">October 2026</span></div>
+            <div class="rel-head"><h3>1.0.1</h3><time class="date" datetime="2026-10-20">20 Oct 2026</time></div>
             <ul>
             <li><strong>Works on DVD-era anime.</strong> Older shows mastered from DVD often use non-square pixels, and on those the upscaled picture stayed frozen or blank. They now upscale like everything else.</li>
             <li><strong>Rotated and odd-sized videos</strong> are handled correctly.</li>
@@ -430,7 +436,7 @@
             </ul>
           </article>
           <article class="rel">
-            <div class="rel-head"><h3>1.0.0</h3><span class="date">October 2026</span></div>
+            <div class="rel-head"><h3>1.0.0</h3><time class="date" datetime="2026-10-18">18 Oct 2026</time></div>
             <ul>
             <li>First release: real-time 2× Anime4K upscaling for any web video, six presets, optional line darkening and thinning, per-site on/off.</li>
             </ul>
@@ -441,7 +447,7 @@
 
   <section id="privacy" class="sec doc">
       <div class="rail">
-        <div class="phead"><span>ep 08 · privacy</span></div>
+        <div class="phead"><span>ep 10 · privacy</span></div>
         <h2>Privacy.</h2>
       </div>
       <div class="body">
@@ -504,138 +510,102 @@
     label(opts[0], 'option b · chrome, brave, edge');
     label(opts[1], 'option c · manual');
   })();
-  // Hero: a working copy of the popup. Figures are the measured RTX 2060 costs from the presets table.
+  // The real popup: each .popbox frames popup/ (the extension's own popup.html, popup.css and
+  // popup.js on a fake chrome.*, see site/popup/stub.js). The frame reports the popup's size;
+  // the box takes it, and shrinks the popup to fit a narrow screen.
+  (function () {
+    var boxes = [].slice.call(document.querySelectorAll('.popbox'));
+    var fit = function (box) {
+      var w = Number(box.dataset.w || 380), h = Number(box.dataset.h || 560);
+      var p = box.parentElement, cs = getComputedStyle(p);
+      var room = p.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 2; // 2: the box's border
+      box.style.setProperty('--w', w + 'px');
+      box.style.setProperty('--h', h + 'px');
+      box.style.setProperty('--k', String(Math.min(1, room / w)));
+      box.dispatchEvent(new Event('popsize'));
+    };
+    window.addEventListener('message', function (e) {
+      if (e.origin !== location.origin || !e.data) return;
+      boxes.forEach(function (box) {
+        if (e.source !== box.querySelector('iframe').contentWindow) return;
+        if (e.data.type === 'size') { box.dataset.w = e.data.w; box.dataset.h = e.data.h; fit(box); }
+        if (e.data.type === 'color') box.dispatchEvent(new CustomEvent('popcolor', { detail: e.data }));
+      });
+    });
+    window.addEventListener('resize', function () { boxes.forEach(fit); });
+    boxes.forEach(fit);
+  })();
+
+  // Hero: labels beside the popup bracket its parts (only those on screen in the current tab);
+  // a click inside a part lights its label.
   (function () {
     var $ = function (id) { return document.getElementById(id); };
-    var pp = $('pp');
-    if (!pp) return;
+    var box = $('pp'), row = $('row'), notes = $('notes'), sheet = $('sheet'), me = $('me');
+    if (!box) return;
+    var frame = box.querySelector('iframe'), cos = notes.querySelectorAll('.co'), unhit = 0;
     var still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    var LIMIT = 41.7;
-    var PRESETS = { A: ['Mode A', 'sharp', 15.1], B: ['Mode B', 'soft', 15.0], C: ['Mode C', 'denoise', 13.2], AA: ['A+A', 'sharper, heavy', 23.7], BB: ['B+B', 'softer, heavy', 24.0], CA: ['C+A', 'denoise+sharp', 15.8] };
-    var st = { on: true, preset: 'A', darken: false, thin: true, ups: 'auto' };
-    var grid = $('pp-presets'), tiles = grid.querySelectorAll('.tile'), pills = pp.querySelectorAll('#pills .pill'), ups = pp.querySelectorAll('#ups .pill');
-    // A 1080p source in a normal-size player: auto stays at 2x, and 8x and up cap at 4x (8K output),
-    // just as the extension does. 4x roughly doubles the frame cost (measured 2.0x on 720p).
-    var want = function () { return st.ups === 'auto' ? 2 : parseInt(st.ups, 10); };
-    var scale = function () { return Math.min(want(), 4); };
-    // thin lines is on by default and already counted in the preset figures
-    var cost = function () { return (PRESETS[st.preset][2] + (st.darken ? .4 : 0) + (st.thin ? 0 : -.9)) * (scale() === 4 ? 2 : 1); };
-    var lateNow = function () { return samples.filter(function (v) { return v > LIMIT; }).length; };
-    var render = function () {
-      var p = PRESETS[st.preset], ms = cost();
-      $('source').classList.toggle('on', st.on);
-      $('source').setAttribute('aria-pressed', String(st.on));
-      $('sw').checked = st.on;
-      $('state').textContent = st.on ? '● Upscaling' : '● Off · click to upscale';
-      var s = scale();
-      $('res').textContent = st.on ? '1080p → ' + 1920 * s + '×' + 1080 * s + ' (' + s + '×)' + (want() > s ? ' · ' + want() + '× capped: GPU limit' : '') : '1080p';
-      $('hint').textContent = st.on ? 'on · ' + st.preset.toLowerCase() : 'off';
-      $('hint').classList.toggle('on', st.on);
-      $('gpuchip').textContent = st.on ? 'gpu ' + ms.toFixed(1) + ' ms' : 'gpu —';
-      $('gpuchip').classList.toggle('on', st.on);
-      // Same verdict rules as the popup: over the limit drops frames, above 80% is near it.
-      var lv = ms > LIMIT ? 'bad' : ms > LIMIT * .8 ? 'warn' : 'ok';
-      $('verdict').textContent = st.on ? (lv === 'bad' ? '● dropping frames' : lv === 'warn' ? '● near limit' : '● keeping up') : '● off';
-      $('verdict').className = 'verdict' + (st.on ? ' ' + lv : '');
-      $('k-load').textContent = st.on ? Math.round(ms / LIMIT * 100) + '%' : '—';
-      $('k-load').className = st.on ? lv : '';
-      $('k-ms').textContent = st.on ? ms.toFixed(1) + ' ms' : '—';
-      $('k-fps').textContent = st.on ? '24 fps' : '—';
-      $('k-avg').textContent = st.on ? Math.round(ms) + ' · ' + Math.round(ms * 1.45) : '—';
-      $('k-late').textContent = st.on ? lateNow() + ' / 2 s' : '—';
-      $('presetName').textContent = p[0].toLowerCase();
-      tiles.forEach(function (b) { b.setAttribute('aria-checked', String(b.dataset.id === st.preset)); });
-      pills.forEach(function (b) { b.setAttribute('aria-checked', String(st[b.dataset.field])); });
-      ups.forEach(function (b) { b.setAttribute('aria-checked', String(b.dataset.ups === st.ups)); });
-      notes.classList.toggle('off', !st.on);
-      // Off: the popup clears every reading, the frame limit and the bars included.
-      $('k-limit').textContent = st.on ? '42 ms' : '—';
-      $('limit').style.display = st.on ? '' : 'none';
-      $('legend').textContent = st.on ? 'last 2 s · dashed = limit · red = late' : 'turn the video on to start measuring';
-      if (!st.on) clearBars();
-    };
-    var clearBars = function () {};
-
-    // Labels: a bracket spans each part of the popup; the part just used turns its label green.
-    var notes = $('notes'), row = $('row'), cos = notes.querySelectorAll('.co'), unhit = 0;
-    notes.hidden = false;
+    var doc = function () { try { return frame.contentDocument; } catch (e) { return null; } };
     var place = function () {
-      var rr = row.getBoundingClientRect(), pr = pp.getBoundingClientRect();
+      var d = doc();
+      if (!d || !d.body) return;
+      var rr = row.getBoundingClientRect(), br = box.getBoundingClientRect();
+      var k = Number(getComputedStyle(box).getPropertyValue('--k')) || 1;
       cos.forEach(function (co) {
-        var tr = $(co.dataset.for).getBoundingClientRect();
-        co.style.top = (tr.top - rr.top + tr.height / 2) + 'px';
-        co.style.right = (rr.right - pr.left + 30) + 'px';
-        co.style.setProperty('--bh', tr.height + 'px');
+        var el = d.querySelector(co.dataset.sel), r = el && el.getBoundingClientRect();
+        var shown = !!r && r.height > 0 && r.bottom > 0 && r.top < d.body.clientHeight;
+        co.style.visibility = shown ? '' : 'hidden';
+        if (!shown) return;
+        co.style.top = (br.top - rr.top + 1 + (r.top + r.height / 2) * k) + 'px';
+        co.style.right = (rr.right - br.left + 30) + 'px';
+        co.style.setProperty('--bh', (r.height * k) + 'px');
       });
     };
-    var used = function (part) {
-      $('n-src').textContent = st.on ? 'upscaling · click to switch off' : 'off · click to switch on';
-      $('n-perf').textContent = st.on ? cost().toFixed(1) + ' ms of a 41.7 ms budget' : 'idle · nothing to measure';
-      $('n-pre').textContent = PRESETS[st.preset][0].toLowerCase() + ' · ' + PRESETS[st.preset][1];
-      var opts = [st.darken ? 'darken' : '', st.thin ? 'thin' : ''].filter(Boolean);
-      $('n-pill').textContent = opts.length ? opts.join(' + ') + ' lines on' : 'no line options';
-      $('n-ups').textContent = want() > scale() ? want() + '× asked · ' + scale() + '× fits' : (st.ups === 'auto' ? 'auto · ' : '') + scale() + '× · ' + 1920 * scale() + '×' + 1080 * scale();
-      cos.forEach(function (co) { co.classList.toggle('hit', co.dataset.for === part); });
-      clearTimeout(unhit);
-      unhit = setTimeout(function () { cos.forEach(function (co) { co.classList.remove('hit'); }); }, 450);
+    var hook = function () {
+      var d = doc();
+      if (!d) return;
+      d.addEventListener('click', function (e) {
+        cos.forEach(function (co) { var el = d.querySelector(co.dataset.sel); co.classList.toggle('hit', !!el && el.contains(e.target)); });
+        clearTimeout(unhit);
+        unhit = setTimeout(function () { cos.forEach(function (co) { co.classList.remove('hit'); }); }, 450);
+        setTimeout(place, 30);
+      }, true);
+      d.addEventListener('scroll', place, true);
+      place();
     };
-
-    var setOn = function (on) { st.on = on; render(); used('p-src'); };
-    $('source').addEventListener('click', function (e) { if (!e.target.closest('.switch')) setOn(!st.on); });
-    $('source').addEventListener('keydown', function (e) { if (e.target === $('source') && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setOn(!st.on); } });
-    $('sw').addEventListener('change', function () { setOn($('sw').checked); });
-    grid.addEventListener('click', function (e) {
-      var b = e.target.closest('.tile'); if (!b) return;
-      st.preset = b.dataset.id; st.on = true; render(); used('pp-presets');
-    });
-    pills.forEach(function (b) {
-      b.addEventListener('click', function () { st[b.dataset.field] = !st[b.dataset.field]; render(); used('pills'); });
-    });
-    ups.forEach(function (b) {
-      b.addEventListener('click', function () { st.ups = b.dataset.ups; st.on = true; render(); used('ups'); place(); });
-    });
-
-    // Live bars: one sample every 125 ms around the current cost, red above the limit.
-    var bars = $('bars'), samples = [];
-    for (var i = 0; i < 40; i++) { bars.appendChild(document.createElement('i')); samples.push(0); }
-    var kids = bars.querySelectorAll('i');
-    var paint = function () {
-      for (var j = 0; j < kids.length; j++) {
-        var v = samples[j];
-        kids[j].style.height = v ? Math.min(100, v / (LIMIT * 1.25) * 100) + '%' : '1px';
-        kids[j].className = v ? (v > LIMIT ? 'over' : '') : 'empty';
-      }
-    };
-    var feed = function () {
-      samples.shift(); samples.push(st.on ? cost() * (0.88 + Math.random() * 0.3) : 0); paint();
-      if (st.on) $('k-late').textContent = lateNow() + ' / 2 s';
-    };
-    // Off clears the history at once, as the real popup does.
-    clearBars = function () { for (var j = 0; j < samples.length; j++) samples[j] = 0; paint(); };
-    var tickClock = function () { var d = new Date(); $('clock').textContent = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
-    render(); tickClock(); for (var w = 0; w < 40; w++) feed();
-    // Only animate while the popup is on screen.
-    var feeding = 0;
-    new IntersectionObserver(function (entries) {
-      clearInterval(feeding);
-      if (entries[0].isIntersecting && !still) feeding = setInterval(feed, 125);
-    }).observe(pp);
-    setInterval(tickClock, 15000);
+    notes.hidden = false;
+    frame.addEventListener('load', hook);
+    if (doc() && doc().readyState === 'complete' && doc().URL !== 'about:blank') hook();
+    box.addEventListener('popsize', place);
     window.addEventListener('resize', place);
-    if (document.fonts) document.fonts.ready.then(place);
-    place();
 
     // Entrance: the pointer clicks the toolbar icon and the popup drops from it, then the labels
     // appear. The pointer's tip is aimed at the icon's centre (2.7, 1.8 is the tip of the 20px pointer).
-    var sheet = $('sheet'), me = $('me');
     if (!still) {
       var at = function (el) { var x = 0, y = 0; for (; el && el !== sheet; el = el.offsetParent) { x += el.offsetLeft; y += el.offsetTop; } return [x, y]; };
       var m = at(me);
       sheet.style.setProperty('--to', 'translate(' + (m[0] + me.offsetWidth / 2 - 2.7) + 'px, ' + (m[1] + me.offsetHeight / 2 - 1.8) + 'px)');
       sheet.style.setProperty('--from', 'translate(' + (m[0] - 220) + 'px, ' + (m[1] + 170) + 'px)');
       sheet.classList.add('enter');
-      pp.addEventListener('animationend', place);
+      box.addEventListener('animationend', place);
     }
+  })();
+
+  // Color section: the picture beside the popup follows its color values. CSS filters only
+  // approximate the extension's shader (brightness, contrast, saturation with vibrance, hue, and a
+  // warm or cool tint for temperature).
+  (function () {
+    var box = document.getElementById('color-pop'), pic = document.getElementById('color-pic');
+    if (!box || !pic) return;
+    var img = pic.querySelector('img'), warm = pic.querySelector('.warm');
+    box.addEventListener('popcolor', function (e) {
+      var on = e.detail.on, v = e.detail.v || {};
+      var n = function (k, d) { return on && typeof v[k] === 'number' ? v[k] : d; };
+      var sat = n('saturation', 1) * (1 + (n('vibrance', 1) - 1) * 0.5);
+      img.style.filter = 'brightness(' + n('brightness', 1) + ') contrast(' + n('contrast', 1) + ') saturate(' + sat + ') hue-rotate(' + n('hue', 0) + 'deg)';
+      var t = n('temperature', 0);
+      warm.style.background = t >= 0 ? 'rgb(255, 150, 40)' : 'rgb(40, 130, 255)';
+      warm.style.opacity = String(Math.min(1, Math.abs(t) / 100) * 0.6);
+    });
   })();
 
   // How it works: one pass is active at a time while the strip fills from box 1 to the active box,
@@ -690,6 +660,22 @@
       });
     };
     scenes.forEach(function (s) { aim(s.querySelector('.in')); });
+    // A target inside a scene's real popup (data-at): once the frame has drawn it, put the marker over
+    // it (the frame is shrunk by the box's --k) and aim again.
+    document.querySelectorAll('.scene [data-at]').forEach(function (t) {
+      var f = t.parentElement.querySelector('iframe'), tries = 0;
+      var put = function () {
+        var el = null;
+        try { el = f.contentDocument && f.contentDocument.querySelector(t.dataset.at); } catch (e) { return; }
+        var r = el && !el.hidden && el.getBoundingClientRect();
+        if (!r || !r.width) { if (++tries < 20) setTimeout(put, 250); return; }
+        var k = parseFloat(getComputedStyle(t.parentElement).getPropertyValue('--k')) || 1;
+        t.style.left = r.left * k + 'px'; t.style.top = r.top * k + 'px';
+        t.style.width = r.width * k + 'px'; t.style.height = r.height * k + 'px';
+        aim(t.closest('.in'));
+      };
+      f.addEventListener('load', put);
+    });
     if (document.fonts) document.fonts.ready.then(function () { scenes.forEach(function (s) { aim(s.querySelector('.in')); }); });
     var fit = function () { scenes.forEach(function (s) { var st = s.querySelector('.stage'); st.firstElementChild.style.setProperty('--s', String(st.clientWidth / 380)); }); };
     var io = new IntersectionObserver(function (entries) { entries.forEach(function (e) { e.target.classList.toggle('run', e.isIntersecting); }); });

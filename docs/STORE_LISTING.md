@@ -36,25 +36,23 @@ Not affiliated with bloc97 or any streaming site. Anime4K is MIT licensed.
 Screenshot credits: the before/after image uses "A snapshot from the 2012 demo release from the Morevna Project" by Morevna Project (morevnaproject.org), licensed CC BY 3.0 (creativecommons.org/licenses/by/3.0). Cropped and upscaled for comparison. No endorsement implied.
 
 **Permission justifications (store form):**
-- `storage`: saves the chosen preset, which sites are switched on, and local usage counts (upscaled time and episodes) that decide when the popup shows a "rate it" card. Stays on the device; nothing is sent.
+- `storage`: saves the chosen preset, color settings and profiles, which sites and manga readers are switched on, whether the user has a report ticket on our website (yes or no), and local usage counts (upscaled time and episodes) that decide when the popup shows a "rate it" card. Stays on the device; nothing is sent.
 - `scripting`: adds the upscaler to tabs that were already open at install, so no reload is needed.
 - `webNavigation`: lists the frames of the current tab, because video players are usually embedded in iframes.
-- `webRequest` (manga mode): read-only listeners that note which IP address answered a page load and the extension's own downloads of manga page images, so a page cannot use those downloads to reach local or private network addresses. Nothing is blocked or changed, and nothing is sent.
-- Host permission `<all_urls>`: video players are embedded from many different domains (the page and the player's host differ), so the extension must be able to find a `<video>` in any frame. It reads frames only from videos the user switches on and sends nothing anywhere.
+- `webRequest`: Manga mode only. Read-only listeners (no blocking, no changes) note which IP address answered a page load and the extension's own downloads of manga page images. Manga readers often serve page images from other hosts without CORS, so the extension downloads them itself; the address check makes sure a page cannot use those downloads to reach local or private network addresses. Nothing is sent anywhere.
+- Host permission `<all_urls>`: video players and manga readers are embedded from many different domains (the page and the player's host differ), so the extension must be able to find a video or reader pages in any frame. It reads frames only from videos and readers the user switches on and sends nothing about the user anywhere.
 - Single purpose: upscale anime video and manga pages on pages the user enables.
 
-**Screenshots (ready, 1280×800, in `docs/store/`, upload in this order; the store allows 5):**
-1. `anime4nerd-1-hero.png`: headline + the popup, with the upscale row (regenerated for 1.1.0).
+**Screenshots (1280×800, in `docs/store/`, uploaded for 1.3.0 in this order; the store allows 5):**
+1. `anime4nerd-1-hero.png`: headline + the real 1.3.0 popup (upscale tab).
 2. `anime4nerd-2-compare.png`: before/after wipe (A+A + darken lines) on a Morevna Project frame (CC BY 3.0, credited on the image).
-3. `anime4nerd-6-fullscreen.png`: the fullscreen ☰ menu and upscale factors (new in 1.1.0).
-4. `anime4nerd-3-presets.png`: the six presets explained.
-5. `anime4nerd-5-privacy.png`: privacy summary.
+3. `anime4nerd-3-manga.png`: manga mode, the real popup on a 30-page chapter with its page map.
+4. `anime4nerd-4-color.png`: color controls, the real popup's color tab.
+5. `anime4nerd-5-privacy.png`: privacy summary (nothing about you is sent; manga mode only downloads reader images).
 
-`anime4nerd-4-performance.png` (the GPU meter explained) is retired from the upload: the hero and
-fullscreen shots both show the meter. The 1.1.0 images are rendered from `docs/store/shots.html`
-with headless Edge (command in the file).
-
-The popup shows a fictional title ("Starlight Academy") on purpose: no real show names or frames.
+Hero, manga and color show the real popup: `docs/store/shots.html` frames `test/popup-live.html?store=1`
+(fictional names, no real shows). Render them over http from the repo root at 1280×800 (see the comment
+at the top of `shots.html`); the earlier presets, performance and fullscreen images were retired in 1.3.0.
 
 **Promo tile 440×280:** `docs/store/anime4nerd-promo-440x280.png` (regenerated for 1.1 from `shots.html?s=promo`, "2×–8×").
 

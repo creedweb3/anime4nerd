@@ -1,6 +1,7 @@
 // Checks site/build.mjs output: every inline script is allowed by its hash in that page's CSP,
 // no page allows inline scripts in general, only the form pages may load Turnstile, the site key
-// is filled in, and a Cloudflare Pages build without a real key fails. Run: node --test test/site-build.mjs
+// is filled in, the popup frame is the built popup under its own policy, and a Cloudflare Pages
+// build without a real key fails. Run (after npm run build): node --test test/site-build.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -55,6 +56,24 @@ test('every page CSP allows exactly its own inline scripts', () => {
   // A ticket link shows the tickets page, under the tickets page's own policy.
   assert.equal(readFileSync(join(out, '_redirects'), 'utf8'), '/r/*  /tickets  200\n');
   assert.equal(map['/r/*'], map['/tickets']);
+  // Only the home page frames anything of its own: the real popup at /popup/.
+  for (const path of Object.keys(PAGES)) {
+    assert.equal(/frame-src[^;]*'self'/.test(map[path]), path === '/', `${path}: frame-src 'self'`);
+  }
+  // The popup frame: the built extension popup, current, with no inline scripts, frameable by this site only.
+  const dist = join(import.meta.dirname, '..', 'dist');
+  for (const f of ['popup.js', 'popup.css']) {
+    assert.ok(readFileSync(join(out, 'popup', f)).equals(readFileSync(join(dist, f))), `popup/${f} differs from dist/${f}`);
+  }
+  const frame = readFileSync(join(out, 'popup', 'index.html'), 'utf8');
+  assert.ok(!/<script>/.test(frame), 'popup/index.html has an inline script');
+  assert.match(frame, /<script src="stub\.js"><\/script>\s*<script src="popup\.js"><\/script>/);
+  for (const path of ['/popup', '/popup/*']) {
+    const csp = map[path];
+    assert.ok(csp, `no CSP for ${path}`);
+    assert.match(csp, /script-src 'self';/);
+    assert.match(csp, /frame-ancestors 'self'/);
+  }
   assert.match(text, /Permissions-Policy: camera=\(\)/);
   assert.match(text, /X-Content-Type-Options: nosniff/);
 });

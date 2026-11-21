@@ -26,6 +26,7 @@
   const q = new URLSearchParams(`${location.search.slice(1)}&${location.hash.slice(1)}`);
   const PROFILES = Number(q.get('profiles')) || 0;
   const PAGES = Number(q.get('pages')) || 0;
+  const STORE = q.get('store') === '1';
   if (PROFILES) {
     const v = { brightness: 1, contrast: 1.05, saturation: 1.1, gamma: 1, vibrance: 1, temperature: 0, tint: 0, deband: 0, grain: 0 };
     const name = (i) => (q.get('names') === 'long' ? `WMWMWMWMWMW${String(i + 1).padStart(3, '0')}` : `look ${i + 1}`); // long: PROFILE_NAME_MAX wide letters
@@ -78,13 +79,16 @@
     const loaded = Math.min(PAGES, 120);
     const marks = Array.from({ length: loaded }, (_, i) => (i < 40 ? 'done' : i < 42 ? 'now' : 'todo'));
     return {
-      on: true, kind: 'images', meta: { series: 'Vagabond', volume: null, chapter: '12', chapterTitle: null },
+      on: true, kind: 'images', meta: { series: STORE ? 'Moonlit Ronin' : 'Vagabond', volume: null, chapter: '12', chapterTitle: null },
       marks, first: 0, loading: 0, total: PAGES, reasons: ['demo'], current: 40, done: 40, failed: 0, lastError: null,
       grey: true, size: { w: 1100, h: 1600 }, perPageMs: 180, pageMs: 420, imageHost: 'reader.example', protocol: 5,
       host: 'reader.example', renders: 40,
     };
   }
-  const META = { title: 'Frieren: Beyond Journey’s End', season: 1, episode: 12, episodeName: 'A Real Hero', subtitle: null, source: 'demo' };
+  // store=1: fictional names, for the store screenshots (docs/store/shots.html): no real shows.
+  const META = STORE
+    ? { title: 'Starlight Academy', season: 1, episode: 3, episodeName: 'The Night Before the Festival', subtitle: null, source: 'demo' }
+    : { title: 'Frieren: Beyond Journey’s End', season: 1, episode: 12, episodeName: 'A Real Hero', subtitle: null, source: 'demo' };
   window.chrome = {
     runtime: {
       getManifest: () => ({ version: '1.3.0' }),

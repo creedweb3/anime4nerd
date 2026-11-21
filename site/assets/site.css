@@ -95,89 +95,29 @@ section { padding-block: clamp(56px, 7vw, 96px); border-top: 1px solid var(--lin
 /* entrance, once per load: pointer to the icon, click, popup drops, labels appear */
 .sheet.enter .hcur { animation: hcur 2.6s var(--ease) .2s both; }
 .sheet.enter .me { animation: hpress .24s var(--ease) 1.62s; }
-.sheet.enter .pp { transform-origin: 92% 0; animation: hdrop .5s var(--ease) 1.75s both; }
+.sheet.enter .popbox { transform-origin: 92% 0; animation: hdrop .5s var(--ease) 1.75s both; }
 .sheet.enter .notes { animation: hfade .45s var(--ease) 2.25s both; }
 @keyframes hcur { 0% { opacity: 0; transform: var(--from); } 15% { opacity: 1; } 50%, 54% { transform: var(--to); } 57% { transform: var(--to) scale(.82); } 61%, 80% { opacity: 1; transform: var(--to); } 100% { opacity: 0; transform: var(--to); } }
 @keyframes hpress { 50% { transform: scale(.86); } }
 @keyframes hdrop { from { opacity: 0; transform: translateY(-10px) scaleY(.94); } to { opacity: 1; transform: none; } }
 @keyframes hfade { from { opacity: 0; } }
 
-/* ---------- the popup, rebuilt in HTML so every control works ---------- */
-.pp { width: 352px; flex: none; padding: 6px 8px; background: var(--bg); border: 1px solid var(--line2); font: 12px/1.5 var(--mono); color: var(--fg); position: relative; z-index: 1; }
-.pp .bar { display: flex; gap: 4px; margin-bottom: 6px; }
-.pp .chip { font-size: 10px; padding: 3px 8px; }
-.pp .chip.grow { flex: 1; }
-.pp .chip.on { color: var(--on); border-color: var(--line2); }
-.pp .panel { border: 1px solid var(--line); background: var(--panel); padding: 10px; margin-bottom: 6px; }
-.pp .panel:last-child { margin-bottom: 0; }
-.pp .panel-head { display: flex; justify-content: space-between; color: var(--faint); font-size: 9px; text-transform: uppercase; letter-spacing: .16em; margin-bottom: 6px; }
-.pp .source { border: 1px solid rgba(var(--r), .5); padding: 10px 12px; display: flex; flex-direction: column; gap: 5px; cursor: pointer; user-select: none; background: linear-gradient(135deg, rgba(var(--r), .14), rgba(var(--r), .02) 60%, transparent) var(--bg); transition: background .12s, border-color .12s, filter .12s; }
-.pp .source.on { border-color: rgba(var(--g), .6); background: linear-gradient(135deg, rgba(var(--g), .16), rgba(var(--g), .02) 60%, transparent) var(--bg); }
-.pp .source:hover { filter: brightness(1.08); }
-.pp .source:active { filter: brightness(1.18); }
-.pp .line { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
-.pp .title { font-size: 14px; font-weight: 600; line-height: 1.3; }
-.pp .tag { display: inline-block; border: 1px solid rgba(var(--r), .4); padding: 1px 6px; font-size: 10px; color: rgba(var(--r), .85); margin-right: 4px; vertical-align: 2px; }
-.pp .source.on .tag { border-color: rgba(var(--g), .5); color: rgb(var(--g)); }
-.pp .meta { color: var(--faint); font-size: 11px; }
-.pp .hr { border-top: 1px solid var(--line); margin: 2px 0; }
-.pp .state { color: rgba(var(--r), .9); }
-.pp .source.on .state { color: var(--ok); }
-.pp .switch { flex: none; display: flex; align-items: center; padding: 8px 0 8px 12px; margin: -8px 0; cursor: pointer; }
-.pp .switch input { appearance: none; width: 36px; height: 20px; border: 1px solid rgba(var(--r), .45); background: var(--bg); position: relative; cursor: pointer; margin: 2px 0 0; }
-.pp .switch input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; background: rgba(var(--r), .75); transition: left .08s, background .08s; }
-.pp .switch input:checked { border-color: rgba(var(--g), .6); }
-.pp .switch input:checked::after { left: 18px; background: rgb(var(--g)); }
-.pp .switch:hover input { border-color: var(--on); }
-.pp .verdict { text-transform: none; letter-spacing: 0; font-size: 11px; color: var(--dim); }
-.pp .verdict.ok { color: var(--ok); }
-.pp .verdict.warn, .pp .kv b.warn { color: #e3c58a; }
-.pp .verdict.bad, .pp .kv b.bad { color: var(--bad); }
-.pp .kv { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.pp .kv div { border: 1px solid var(--line); padding: 3px 8px; min-height: 40px; }
-.pp .kv span { display: block; color: var(--faint); font-size: 9px; text-transform: uppercase; letter-spacing: .1em; }
-.pp .kv b { display: block; font-size: 14px; font-weight: 600; white-space: nowrap; line-height: 1.4; }
-.pp .kv b.ok { color: var(--ok); }
-.pp .bars { position: relative; display: flex; align-items: flex-end; gap: 1px; height: 20px; border-bottom: 1px solid var(--line); margin-top: 6px; }
-.pp .bars i { flex: 1; background: var(--bar); min-height: 1px; }
-.pp .bars i.empty { background: var(--bar-dim); }
-.pp .bars i.over { background: var(--bad); }
-.pp .bars s { position: absolute; left: 0; right: 0; bottom: 80%; border-top: 1px dashed var(--faint); }
-.pp #perf .meta { margin-top: 4px; }
-.pp .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-.pp .tile { border: 1px solid var(--line); background: var(--bg); color: var(--dim); font: inherit; cursor: pointer; text-align: left; padding: 5px 8px; display: flex; flex-direction: column; min-width: 0; }
-.pp .tile:hover { border-color: var(--line2); }
-.pp .tile b { color: var(--fg); font-size: 12px; font-weight: 600; }
-.pp .tile small { font-size: 10px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pp .tile[aria-checked="true"] { background: #1a1a1a; border-color: var(--on); }
-.pp .tile[aria-checked="true"] b::before { content: "▸ "; color: var(--on); }
-.pp .pills { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
-.pp .pill { border: 1px solid var(--line2); background: transparent; color: var(--dim); font: inherit; font-size: 11px; padding: 4px 10px; cursor: pointer; }
-.pp .pill::before { content: "+ "; }
-.pp .pill:hover { color: var(--on); }
-.pp .pill[aria-checked="true"] { background: var(--on); color: #000; border-color: var(--on); }
-.pp .pill[aria-checked="true"]::before { content: "✓ "; }
-/* the upscale row is a choice of one, so no +/✓ marks */
-.pp .pill[role="radio"]::before, .pp .pill[role="radio"][aria-checked="true"]::before { content: none; }
-.pp .pills-label { color: var(--faint); font-size: 11px; align-self: center; margin-right: auto; }
-#ups { gap: 4px; }
-#ups .pill { padding: 4px 7px; }
+/* ---------- the real popup in a frame (popup/): the box takes the size the popup reports and
+   shrinks it to fit (--k, set by the page script) ---------- */
+.popbox { --w: 380px; --h: 585px; --k: 1; position: relative; z-index: 1; flex: none; width: calc(var(--w) * var(--k) + 2px); height: calc(var(--h) * var(--k) + 2px); border: 1px solid var(--line2); background: var(--bg); overflow: hidden; }
+.popbox iframe { position: absolute; left: 0; top: 0; display: block; width: var(--w); height: var(--h); border: 0; transform: scale(var(--k)); transform-origin: 0 0; color-scheme: dark; }
 
 /* labels: a bracket spans each part of the popup; the part you click turns its label green */
 .notes { position: absolute; inset: 0; pointer-events: none; }
 /* a click lights its label at once (no transition in); it fades back quickly afterwards */
 .co { position: absolute; transform: translateY(-50%); text-align: right; font-size: 12px; font-weight: 600; color: var(--fg); white-space: nowrap; transition: color .3s var(--ease); }
 .co small { display: block; font-weight: 400; color: var(--faint); font-size: 10px; letter-spacing: .04em; transition: color .3s var(--ease); }
-/* brackets carry the switch state: dim green while upscaling, dim red when off */
 .co::after { content: ""; position: absolute; left: calc(100% + 16px); top: 50%; width: 8px; height: var(--bh); transform: translateY(-50%); border: 1px solid rgba(var(--g), .4); border-right: 0; transition: border-color .3s var(--ease); }
 .co::before { content: ""; position: absolute; left: calc(100% + 6px); top: 50%; width: 10px; border-top: 1px solid rgba(var(--g), .4); transition: border-color .3s var(--ease); }
-.notes.off .co::after, .notes.off .co::before { border-color: rgba(var(--r), .4); }
 .co.hit, .co.hit small, .co.hit::after, .co.hit::before { transition: none; }
 .co.hit { color: var(--on); }
 .co.hit small { color: var(--ok); }
 .co.hit::after, .co.hit::before { border-color: var(--ok); }
-.notes.off .co.hit small { color: var(--bad); }
-.notes.off .co.hit::after, .notes.off .co.hit::before { border-color: var(--bad); }
 
 /* readout in the popup's kv style */
 .readout { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: clamp(56px, 7vw, 90px); }
@@ -371,6 +311,19 @@ details p { margin: 8px 0 0; color: var(--dim); }
   .btn:hover::after { opacity: 1; transform: none; }
 }
 
+/* color and manga: the real popup beside a column of panels (a picture on top for color) */
+.duo { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 18px; align-items: start; }
+.duo-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.duo-side > .panel { border: 1px solid var(--line); background: var(--panel); padding: 20px 22px; position: relative; }
+.ctl { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.ctl li { border: 1px solid var(--line); background: var(--panel); color: var(--dim); padding: 3px 9px; font-size: 11px; }
+.cpic { margin: 0; border: 1px solid var(--line); background: var(--panel); }
+.cpic > .phead { padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.cpic-img { position: relative; aspect-ratio: 16 / 9; overflow: hidden; background: #000; }
+.cpic-img img { display: block; width: 100%; height: 100%; object-fit: cover; transition: filter .15s; }
+.cpic-img .warm { position: absolute; inset: 0; opacity: 0; mix-blend-mode: soft-light; pointer-events: none; transition: opacity .15s; }
+@media (max-width: 1100px) { .duo { grid-template-columns: minmax(0, 1fr); } .duo > .popbox { justify-self: center; } }
+
 footer { padding-block: 32px 48px; border-top: 1px solid var(--line); font-size: 11px; color: var(--faint); display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 footer a { color: var(--dim); }
 
@@ -390,7 +343,6 @@ footer a { color: var(--dim); }
   .sec > .rail .scene { max-width: 420px; }
 }
 @media (max-width: 640px) {
-  .pp { width: 100%; }
   .sheet { padding-inline: 10px; }
   .cta .btn { width: 100%; justify-content: center; }
   .get { display: flex; }
@@ -420,21 +372,10 @@ footer a { color: var(--dim); }
   .meter { min-width: 48px; }
 }
 /* Small phones: the hero popup's header keeps one line (the "click anything" hint matters more
-   than its "the popup · live" caption), and the upscale label gets its own row so all six factors
-   fit side by side. */
+   than its "the popup · live" caption). */
 @media (max-width: 480px) {
   .sheet > .phead { white-space: nowrap; }
   .sheet > .phead > span:first-child { display: none; }
-  #ups .pills-label { flex-basis: 100%; margin: 0; }
-  #ups .pill { flex: 1 1 0; padding-inline: 0; text-align: center; }
-}
-/* Smallest phones (320px): tighten the popup's stat boxes and top chips so nothing spills past it. */
-@media (max-width: 340px) {
-  .pp { padding-inline: 6px; }
-  .pp .bar .chip { padding-inline: 5px; }
-  .pp .kv { gap: 4px; }
-  .pp .kv div { padding-inline: 5px; min-width: 0; }
-  .pp .kv b { font-size: 12px; }
 }
 /* Tickets (assets/tickets.js): the top-bar chip with its unread count, and the thank-you box. */
 .nav .chip.tickets { position: relative; }
