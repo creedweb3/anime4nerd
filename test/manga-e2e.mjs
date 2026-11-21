@@ -1573,7 +1573,9 @@ try {
   }
   check('not possible: "● Not possible" in the heading, a few plain words in the bad colour on the info line, the full message in the tooltip',
     impossible.map((x) => x.why).join(' | ') === 'this site blocks access to its video | too large for this GPU | the GPU is not available | anime4k initialization timed out'
-    && impossible.every((x) => x.tip && x.tips && x.verdict === '● Not possible' && x.colour === 'rgb(227, 154, 154)' && x.whyColour === 'rgb(227, 154, 154)' && x.h === FULL_CARD && x.tag === 'S1 E12' && x.name === '' && x.meta === x.why),
+    // A site that blocks its video also gets the "try another server or source" tip row (one row taller).
+    && impossible.every((x) => x.tip && x.tips && x.verdict === '● Not possible' && x.colour === 'rgb(227, 154, 154)' && x.whyColour === 'rgb(227, 154, 154)'
+      && (x.why === 'this site blocks access to its video' ? x.h > FULL_CARD && x.h <= FULL_CARD + 40 : x.h === FULL_CARD) && x.tag === 'S1 E12' && x.name === '' && x.meta === x.why),
     JSON.stringify(impossible));
   await restub(pv, { frames: { 0: [{ ...VIDEO, status: 'Unavailable', message: CORS, stats: null }] }, meta: META });
   if (shots) await pv.screenshot({ path: path.join(shots, 'not-possible.png'), clip: { x: 0, y: 0, width: 380, height: Math.min(impossible[0].height, 600) } });

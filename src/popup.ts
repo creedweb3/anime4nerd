@@ -471,7 +471,11 @@ function patchCard(c: Card, v: VideoInfo, open: boolean) {
     setTip(c.title, (layout === 'two-line' ? c.title.scrollHeight > c.title.clientHeight + 1 : isCut(c.title)) ? title : '');
     setCutTip(c.tag);
     setCutTip(c.epName, layout ? [layout === 'two-line' ? frames : '', capTip].filter(Boolean).join(' · ') : '');
-    setTip(c.meta, impossible ? v.message : [isCut(c.host) ? host : '', frames, layout ? '' : capTip].filter(Boolean).join(' · '));
+    // Whether the host is cut depends on the final layout (fonts, the scrollbar, the card opening),
+    // which can settle after this patch: decide now, and again on the next frame.
+    const metaTip = () => setTip(c.meta, impossible ? v.message : [isCut(c.host) ? host : '', frames, layout ? '' : capTip].filter(Boolean).join(' · '));
+    metaTip();
+    requestAnimationFrame(metaTip);
   } else {
     // Everything the rows would say, and the state the dot stands for.
     setTip(c.title, '');
