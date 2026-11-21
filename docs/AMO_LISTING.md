@@ -8,7 +8,7 @@ Companion to `docs/STORE_LISTING.md` (Chrome Web Store). Upload `Anime4Nerd fire
 **Add-on URL slug:** anime4nerd (the AMO link becomes https://addons.mozilla.org/firefox/addon/anime4nerd/ if the slug is free)
 
 **Summary (250 chars max):**
-Real-time 2x–8x Anime4K upscaling for any web video. Runs the original bloc97 shaders in WebGL2 on your GPU. No personal data collected automatically, no network requests; the video never leaves your browser.
+Real-time 2x–8x Anime4K upscaling for any web video. Runs the original bloc97 shaders in WebGL2 on your GPU. Nothing about you is sent; the video never leaves your browser. Also upscales manga reader pages.
 
 **Categories:** Photos, Music & Videos
 
@@ -21,11 +21,13 @@ Anime4Nerd runs the open-source Anime4K shaders on any web video, live, in your 
 What you get
 • Six presets: Mode A / B / C and their stronger A+A / B+B / C+A variants
 • Optional line effects: darken lines, thin lines
-• Upscale factor: auto (4× when a small video is shown large), or 2× up to 32×, capped to what your GPU can hold
+• Upscale factor: auto (4× when a small video is shown large), or 2× up to 8×, capped to what your GPU can hold
 • Fullscreen menu: change preset, line effects and upscale factor without leaving fullscreen, including embedded players and F11
 • Works on embedded players too (videos inside iframes are found automatically)
 • Live performance panel: output frame rate and output size, and whether it keeps up with the video
 • Per-site switch that is remembered, so the next episode is already upscaled
+• Manga mode: upscales the pages of manga readers once per chapter (Alt+M shows the originals)
+• Color controls: brightness, contrast, saturation, temperature and more, with ready-made looks and saved profiles
 • Settings sync between your own browsers through Firefox Sync, if you use it
 
 How it works
@@ -35,7 +37,7 @@ Performance
 Speed is about the same as in Chrome: on an RTX 2060, 1080p60 → 4K with Mode A runs at about 57 fps in Firefox (55 in Chrome). Firefox does not offer GPU timer queries to WebGL, so the popup shows "GPU timing not available in this browser" where Chrome shows GPU milliseconds per frame; it still tells you whether upscaling keeps up with the video.
 
 Privacy
-No personal data is collected automatically; no network requests, no accounts. It only finds videos on the page and does nothing until you switch one on, and the video stays on your machine. The popup's bug icon and the page shown after removal open optional forms on our website; they send only what you write (and any screenshots you attach), and only when you press send. Full policy: https://anime4nerd.pages.dev/privacy
+No personal data is collected, nothing about you is sent, no accounts; the only downloads are the page images a manga reader already shows (manga mode). It only finds videos on the page and does nothing until you switch one on, and the video stays on your machine. The popup's bug icon and the page shown after removal open optional forms on our website; they send only what you write (and any screenshots you attach), and only when you press send. Full policy: https://anime4nerd.pages.dev/privacy
 
 Requirements
 Firefox 140 or newer and a GPU with WebGL2. The video must be served with CORS (most players do this). DRM video (Widevine) cannot be read by any extension.

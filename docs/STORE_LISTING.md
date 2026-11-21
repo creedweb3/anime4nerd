@@ -14,18 +14,20 @@ An anime upscaler and video enhancer for the browser. Anime4Nerd runs the open-s
 What you get
 • Six presets: Mode A / B / C and their stronger A+A / B+B / C+A variants
 • Optional line effects: darken lines, thin lines
-• Upscale factor: auto (4× when a small video is shown large), or 2× up to 32×, capped to what your GPU can hold
+• Upscale factor: auto (4× when a small video is shown large), or 2× up to 8×, capped to what your GPU can hold
 • Fullscreen menu: change preset, line effects and upscale factor without leaving fullscreen, including embedded players and F11
 • Works on embedded players too (videos inside iframes are found automatically)
 • Live performance panel: GPU % per frame, ms, output fps, late frames, 2-second graph
 • Per-site switch that is remembered, so the next episode is already upscaled
-• Something wrong? The bug icon in the popup opens a short report form with your version filled in
+• Manga mode: upscales the pages of manga readers once per chapter (Alt+M shows the originals)
+• Color controls: brightness, contrast, saturation, temperature and more, with ready-made looks and saved profiles
+• Something wrong? The bug icon in the popup opens a short report form with your version filled in; replies come back on the website, no account needed
 
 How it works
 The original Anime4K GLSL shaders by bloc97 are loaded unchanged and run through WebGL2. Each video frame goes through the chosen chain of convolution passes and the result is drawn on a canvas over the player. The networks upscale exactly 2× per pass (1080p → 2160p); higher factors chain extra 2× passes.
 
 Privacy
-No personal data is collected automatically; no network requests, no accounts. It only finds videos on the page and does nothing until you switch one on, and the video stays on your machine. The popup's bug icon and the page shown after removal open optional forms on our website; they send only what you write (and any screenshots you attach), and only when you press send. Full policy: https://anime4nerd.pages.dev/privacy
+No personal data is collected, nothing about you is sent, no accounts; the only downloads are the page images a manga reader already shows (manga mode). It only finds videos on the page and does nothing until you switch one on, and the video stays on your machine. The popup's bug icon and the page shown after removal open optional forms on our website; they send only what you write (and any screenshots you attach), and only when you press send. Full policy: https://anime4nerd.pages.dev/privacy
 
 Requirements
 Chrome / Brave / Edge 116+, a GPU with WebGL2. The video must be served with CORS (most players do this). DRM video (Widevine) cannot be read by any extension.
@@ -37,8 +39,9 @@ Screenshot credits: the before/after image uses "A snapshot from the 2012 demo r
 - `storage`: saves the chosen preset, which sites are switched on, and local usage counts (upscaled time and episodes) that decide when the popup shows a "rate it" card. Stays on the device; nothing is sent.
 - `scripting`: adds the upscaler to tabs that were already open at install, so no reload is needed.
 - `webNavigation`: lists the frames of the current tab, because video players are usually embedded in iframes.
+- `webRequest` (manga mode): read-only listeners that note which IP address answered a page load and the extension's own downloads of manga page images, so a page cannot use those downloads to reach local or private network addresses. Nothing is blocked or changed, and nothing is sent.
 - Host permission `<all_urls>`: video players are embedded from many different domains (the page and the player's host differ), so the extension must be able to find a `<video>` in any frame. It reads frames only from videos the user switches on and sends nothing anywhere.
-- Single purpose: upscale video on pages the user enables.
+- Single purpose: upscale anime video and manga pages on pages the user enables.
 
 **Screenshots (ready, 1280×800, in `docs/store/`, upload in this order; the store allows 5):**
 1. `anime4nerd-1-hero.png`: headline + the popup, with the upscale row (regenerated for 1.1.0).
@@ -63,7 +66,7 @@ The popup shows a fictional title ("Starlight Academy") on purpose: no real show
 
 ## Privacy practices tab
 
-- Single purpose: Upscales web video in real time with the Anime4K shaders, on videos the user switches on.
+- Single purpose: Upscales web video and manga reader pages in real time with the Anime4K shaders, on videos and readers the user switches on.
 - Remote code: No, I am not using remote code. All JavaScript and shaders ship in the package.
 - Data usage: check none of the data types. The extension itself collects and transmits nothing.
   It only opens two website pages: https://anime4nerd.pages.dev/uninstalled?v=<version> after removal

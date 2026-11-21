@@ -97,10 +97,12 @@ The Anime4K networks are trained for exactly 2x, so larger factors chain extra
 
 - **auto** (default): 2x, or 4x when the video is shown at more than 2x its
   source size in device pixels (e.g. 720p fullscreen on a 1440p+ screen).
-- **2x, 4x, 8x, 16x, 32x**: manual. The renderer uses the largest factor at or
+- **2x, 4x, 8x**: manual. The renderer uses the largest factor at or
   below the choice whose output fits the GPU's texture limit, stays at or under
-  8K (7680×4320 pixels) and keeps all intermediate textures under 2 GB. The popup
-  then shows e.g. `(8×) · 32× capped: GPU limit`. In practice 8x is reachable
+  8K (7680×4320 pixels) and keeps all intermediate textures under 2 GB, and steps
+  down while the GPU cannot keep up. The popup then shows e.g.
+  `(4×) · 8× capped: GPU limit` or `GPU load`. A saved 16x or 32x (removed in
+  1.3.0) becomes 8x. In practice 8x is reachable
   for 480p and smaller sources; above 4x the extra detail is mostly downscaled
   away by the browser.
 
@@ -254,7 +256,7 @@ every state.
 
 - Extension code: MIT (`LICENSE`).
 - Anime4K shaders: MIT, bloc97 (`src/shaders/LICENSE`, `THIRD_PARTY_NOTICES.md`).
-- Privacy: `PRIVACY.md`. The extension sends no data. The popup's bug icon and the page shown after removal open optional forms on the website, which send only what you write, when you press send.
+- Privacy: `PRIVACY.md`. The extension sends no data about you; its only network requests are manga mode's downloads of the page images a manga reader shows. The popup's bug icon and the page shown after removal open optional forms on the website, which send only what you write, when you press send.
 - Security model and user safety guide: `SECURITY.md`.
 - Store listing draft: `docs/STORE_LISTING.md`; Firefox Add-ons listing and
   reviewer notes: `docs/AMO_LISTING.md`.

@@ -1,5 +1,44 @@
 # Changelog
 
+## 1.3.0 (2026-11-21)
+
+### Added
+- Manga mode, on Chrome, Edge, Brave and Firefox: detects manga readers and
+  upscales their pages once per chapter on the GPU. Alt+M shows the originals;
+  the popup shows a page bar, counts and a page map. A mode setting (auto,
+  anime, manga) decides what the extension works on, and the popup suggests a
+  switch when a page holds the other kind of content. Page images the page
+  does not let the extension read are downloaded by the extension itself from
+  the same addresses; local, private and cloud-metadata addresses are refused
+  on every redirect (new `webRequest` permission, read-only). Nothing about
+  you is sent.
+- Color controls: ten controls in VLC's units (brightness, contrast,
+  saturation, gamma, hue, grain) plus vibrance, temperature, tint and deband,
+  applied in the final pass. Five included looks plus saved profiles, in a
+  color tab in the popup and the fullscreen menu. Colors can also reach
+  videos that are not upscaled.
+- Popup redesign: custom dropdowns, tooltips and scrollbars, one status per
+  state, compact cards for extra videos, long titles and lists that fit.
+- Report tickets: a report sent from the website gets a ticket code, and the
+  developer can reply on the website's tickets page, where you can write
+  back. When the website holds a ticket, the popup's bug icon opens your
+  tickets. The extension stores only whether there is a ticket (yes or no)
+  and makes no request for it.
+- A tip for videos a site does not let the extension read: try another
+  server or source.
+
+### Changed
+- Frames are redrawn only where something changed (3-5x less GPU time on
+  still scenes), with bit-identical output.
+- GPU-load cap: when the GPU cannot keep up, the upscale steps down (never
+  below 2x) instead of dropping frames, and says so in the popup. 16x and 32x
+  are removed; a saved choice of either becomes 8x.
+
+### Fixed
+- Turning upscaling on in a Vime player (mkissa.to) blacked out the video and
+  left no way to turn it off.
+- The picture could stay hidden after a seek.
+
 ## 1.2.5 (2026-11-12)
 
 ### Changed

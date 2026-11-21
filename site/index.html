@@ -95,8 +95,6 @@
               <button type="button" class="pill" role="radio" data-ups="2x" aria-checked="false">2×</button>
               <button type="button" class="pill" role="radio" data-ups="4x" aria-checked="false">4×</button>
               <button type="button" class="pill" role="radio" data-ups="8x" aria-checked="false">8×</button>
-              <button type="button" class="pill" role="radio" data-ups="16x" aria-checked="false">16×</button>
-              <button type="button" class="pill" role="radio" data-ups="32x" aria-checked="false">32×</button>
             </div>
           </section>
         </div>
@@ -231,7 +229,7 @@
         <div class="sw2 ok"><span class="b8">gpu 8.2 ms / 42 ms · keeping up</span><span class="a8">gpu 16.4 ms / 42 ms · keeping up</span></div>
         <div class="bars8"><i style="height:40%"></i><i style="height:46%"></i><i style="height:38%"></i><i style="height:44%"></i><i style="height:50%"></i><i style="height:41%"></i><i style="height:39%"></i><i style="height:47%"></i><i style="height:42%"></i><i style="height:45%"></i><i style="height:40%"></i><i style="height:48%"></i><i style="height:43%"></i><i style="height:39%"></i><i style="height:46%"></i><i style="height:41%"></i><i style="height:44%"></i><i style="height:40%"></i><i style="height:47%"></i><i style="height:42%"></i><s></s></div>
         <span class="lb">upscale</span>
-        <div class="ups8"><i>auto</i><i class="u2">2×</i><i data-aim="2" class="u4">4×</i><i>8×</i><i>16×</i><i>32×</i></div>
+        <div class="ups8"><i>auto</i><i class="u2">2×</i><i data-aim="2" class="u4">4×</i><i>8×</i></div>
         </div>
         <svg class="cur" viewBox="0 0 22 22" aria-hidden="true"><path d="M3 2 L3 18 L7.5 13.8 L10.5 20 L13.2 18.8 L10.3 12.8 L16.5 12.6 Z" fill="#eceded" stroke="#08090a" stroke-width="1.4" stroke-linejoin="round"/></svg>
         </div></div>
@@ -250,7 +248,7 @@
         <tr><td>auto</td><td>2×, or 4× when a small video fills a big screen (720p fullscreen on 1440p or 4K)</td><td>as 2× or 4×</td></tr>
         <tr><td>2×</td><td>One upscale pass, as in every earlier version</td><td>baseline</td></tr>
         <tr><td>4×</td><td>A second, lighter upscale pass on top</td><td>about 2×</td></tr>
-        <tr><td>8× – 32×</td><td>More passes, capped to what your GPU can hold: 8K output and 2 GB of textures. The popup says when it capped.</td><td>high</td></tr>
+        <tr><td>8×</td><td>A third pass, capped to what your GPU can hold: 8K output and 2 GB of textures, and stepped down while the GPU can't keep up. The popup says when it capped.</td><td>high</td></tr>
         </tbody>
         </table>
         </div>
@@ -291,7 +289,7 @@
         <li><span>Choose <b>Load unpacked</b> and pick the unzipped folder.</span></li>
         <li><span>Play a video, open the extension, and switch the video on.</span></li>
         </ol>
-        <div class="foot"><span class="chip">release 1.2.5</span><span class="chip">mit</span><a class="chip" href="https://github.com/creedweb3/anime4nerd" rel="noopener">source on github →</a></div>
+        <div class="foot"><span class="chip">release 1.3.0</span><span class="chip">mit</span><a class="chip" href="https://github.com/creedweb3/anime4nerd" rel="noopener">source on github →</a></div>
         </div>
         <div class="panel">
         <div class="phead"><span>option c · firefox</span></div>
@@ -310,7 +308,7 @@
         <figure class="scene" aria-hidden="true"><div class="phead"><span><b>only some sites</b></span><span>site access</span></div>
         <div class="stage"><div class="in s6">
         <div class="ext">
-        <div class="hd"><img src="assets/icon.png" alt=""><b>Anime4Nerd</b><small>details · 1.2.5</small></div>
+        <div class="hd"><img src="assets/icon.png" alt=""><b>Anime4Nerd</b><small>details · 1.3.0</small></div>
         <div class="rw"><span>Site access</span><span data-aim="1" class="dd"><span class="v1">On all sites</span><span class="v2">On specific sites</span><span class="opts"><i>When you click it</i><i data-aim="2" class="spec">On specific sites</i><i class="all">On all sites</i></span></span></div>
         <div class="list"><span class="lbl">runs on</span><span class="all-sites">all sites</span><div class="sites"><i class="add">stream.example</i><i>+ add a site</i></div></div>
         </div>
@@ -324,7 +322,7 @@
         <details name="faq"><summary>Does it work on live action or regular shows?</summary><p>It runs on any video, but it is made for anime. The Anime4K networks are trained on hand-drawn animation: clean line art and flat colour. On live action, films and 3D-animated shows the result can look over-sharpened or painted, so the browser's normal scaling usually looks better there.</p></details>
         <details name="faq"><summary>Does it work on every site?</summary><p>It works on any site where the video is served with cross-origin access, which most players do. DRM-protected video (Widevine) cannot be read by any extension, so it plays normally.</p></details>
         <details name="faq"><summary>What do I need?</summary><p>Chrome, Brave or Edge 116 or newer (or Firefox 140 or newer) and a GPU with WebGL2. A mid-range GPU handles Mode A at 24 fps comfortably.</p></details>
-        <details name="faq"><summary>Can it upscale more than 2×?</summary><p>Yes. The Anime4K networks are trained for exactly 2×, so 4× and up chain extra 2× passes. Auto picks 4× when a small video fills a big screen, like 720p fullscreen on a 1440p or 4K display. You can also choose up to 32×; Anime4Nerd uses the largest factor your GPU can hold (8K output at most) and says when it capped. Above 4× the browser shrinks most of the extra detail back to your screen size.</p></details>
+        <details name="faq"><summary>Can it upscale more than 2×?</summary><p>Yes. The Anime4K networks are trained for exactly 2×, so 4× and up chain extra 2× passes. Auto picks 4× when a small video fills a big screen, like 720p fullscreen on a 1440p or 4K display. You can also choose up to 8×; Anime4Nerd uses the largest factor your GPU can hold (8K output at most), steps down while your GPU can't keep up, and says when it capped. Above 4× the browser shrinks most of the extra detail back to your screen size.</p></details>
         <details name="faq"><summary>Can I limit it to some sites?</summary><p>Yes. In <code>chrome://extensions</code>, open Anime4Nerd's details and set Site access to "On specific sites". In Firefox, use <code>about:addons</code> → Anime4Nerd → Permissions.</p></details>
         <div class="foot"><span>Something else?</span><a class="chip" href="https://github.com/creedweb3/anime4nerd/issues" rel="noopener">ask on github →</a></div>
         </div>
@@ -339,7 +337,7 @@
         <figure class="scene" aria-hidden="true"><div class="phead"><span><b>after an update</b></span><span>new badge</span></div>
         <div class="stage"><div class="in s2">
         <div class="tb"><span class="dots"><i></i><i></i><i></i></span><span class="url">your-favourite-stream.example/watch?ep=2</span><span class="x">⋯</span><span data-aim="1" class="x me"><img src="assets/icon.png" alt=""><span class="badge">NEW</span></span></div>
-        <div class="mp"><div data-aim="2" class="note"><span><b>●</b> updated to 1.2.5</span><span>what's new →</span></div><div class="src"><b>Starlight Academy <span class="sw"></span></b><em>● Upscaling</em></div><div class="kv"><span>36%</span><span>15.1 ms</span><span>24 fps</span></div><div class="tl"><i class="sel">A</i><i>B</i><i>C</i><i>A+A</i><i>B+B</i><i>C+A</i></div></div>
+        <div class="mp"><div data-aim="2" class="note"><span><b>●</b> updated to 1.3.0</span><span>what's new →</span></div><div class="src"><b>Starlight Academy <span class="sw"></span></b><em>● Upscaling</em></div><div class="kv"><span>36%</span><span>15.1 ms</span><span>24 fps</span></div><div class="tl"><i class="sel">A</i><i>B</i><i>C</i><i>A+A</i><i>B+B</i><i>C+A</i></div></div>
         <svg class="cur" viewBox="0 0 22 22" aria-hidden="true"><path d="M3 2 L3 18 L7.5 13.8 L10.5 20 L13.2 18.8 L10.3 12.8 L16.5 12.6 Z" fill="#eceded" stroke="#08090a" stroke-width="1.4" stroke-linejoin="round"/></svg>
         </div></div>
         </figure>
@@ -347,7 +345,18 @@
       <div class="body">
         <div class="timeline">
           <article class="rel latest">
-            <div class="rel-head"><h3>1.2.5</h3><span class="new">latest</span><span class="date">November 2026</span></div>
+            <div class="rel-head"><h3>1.3.0</h3><span class="new">latest</span><span class="date">November 2026</span></div>
+            <ul>
+            <li><strong>Manga mode.</strong> Upscales the pages of manga readers, once per chapter, on Chrome, Edge, Brave and Firefox. Alt+M shows the originals. A mode setting (auto, anime, manga) decides what it works on, and the popup suggests a switch when a page holds the other kind.</li>
+            <li><strong>Color controls.</strong> Ten controls in VLC's units (brightness, contrast, saturation, gamma, hue, vibrance, temperature, tint, deband, grain), five ready-made looks and your own saved profiles, in the popup and the fullscreen menu. They can also apply to videos that are not upscaled.</li>
+            <li><strong>A new popup.</strong> Redesigned from top to bottom: custom dropdowns and tooltips, one clear status per state, and long titles and lists that always fit.</li>
+            <li><strong>Lighter on your GPU.</strong> Only the parts of a frame that changed are redrawn (3–5× less GPU time on still scenes), and when your GPU can't keep up the upscale steps down instead of dropping frames. 16× and 32× are gone; 8× is the most.</li>
+            <li><strong>Replies to your reports.</strong> A report now gets a ticket: we can answer, you can write back, no account needed. The bug icon in the popup opens your tickets.</li>
+            <li><strong>Fixes.</strong> Videos in Vime players (like mkissa.to) no longer go black, and the switch turns them off again. The picture no longer stays hidden after a seek. Videos a site won't let us read get a tip to try another server.</li>
+            </ul>
+          </article>
+          <article class="rel">
+            <div class="rel-head"><h3>1.2.5</h3><span class="date">November 2026</span></div>
             <ul>
             <li><strong>Firefox: desktop only.</strong> The Firefox build is now offered for desktop Firefox 140 or newer only, not Firefox for Android, where it was never tested.</li>
             <li><strong>Same version everywhere:</strong> Chrome, Edge, Brave and Firefox all get 1.2.5. Nothing else changed.</li>
@@ -437,7 +446,7 @@
       </div>
       <div class="body">
         <div class="prose">
-        <p><strong>Anime4Nerd does not collect, store, or transmit any personal data.</strong> Video frames are processed on your GPU and discarded. Your settings stay in your browser's extension storage. The extension makes no network requests of its own. The bug icon in the popup and the page shown after removal open optional forms on this site, which send only what you write, when you press send.</p>
+        <p><strong>Anime4Nerd does not collect, store, or transmit any personal data.</strong> Video frames are processed on your GPU and discarded. Your settings stay in your browser's extension storage. The extension sends nothing about you; its only network requests are in manga mode, downloading the page images your manga reader already shows. The bug icon in the popup and the page shown after removal open optional forms on this site, which send only what you write, when you press send.</p>
         <p><a href="privacy">Read the full privacy policy</a></p>
         </div>
       </div>
@@ -463,7 +472,7 @@
 </main>
 
 <footer class="wrap">
-  <span>anime4nerd · v1.2.5 · mit</span>
+  <span>anime4nerd · v1.3.0 · mit</span>
   <span><a href="#changes">changes</a> · <a href="report">report a bug</a> · <a href="privacy">privacy</a> · <a href="#credits">credits</a> · <a href="https://github.com/creedweb3/anime4nerd" rel="noopener">github</a></span>
 </footer>
 

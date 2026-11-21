@@ -40,7 +40,7 @@
         <li><strong>Tickets</strong>: whether you have sent a report from this browser (yes or no, nothing else), so the popup's bug icon can open your tickets. The extension never sees or sends your ticket codes.</li>
       </ul>
       <h3>Data leaving your device</h3>
-      <p>The extension makes no network requests of its own. It has no analytics, telemetry, crash reporting, remote configuration, or accounts.</p>
+      <p>The extension sends nothing about you. It makes one kind of network request of its own: in manga mode, when a manga reader's page images cannot be read directly, it downloads those same images itself, from the same addresses and without cookies (local and private network addresses are refused). It has no analytics, telemetry, crash reporting, remote configuration, or accounts.</p>
       <p>It opens two pages of this website. When you remove it, your browser opens <a href="uninstalled">/uninstalled</a>, with only the version number you had in the link. When you click the bug icon in the popup, a new tab opens <a href="report">/report</a> with the version and browser. Opening either page is an ordinary visit: the pages load fonts from Google Fonts, and once you start using a form they load Cloudflare Turnstile.</p>
       <h3>Feedback and problem reports</h3>
       <ul>
@@ -72,7 +72,7 @@
 </main>
 
 <footer class="wrap">
-  <span>anime4nerd · v1.2.5 · mit</span>
+  <span>anime4nerd · v1.3.0 · mit</span>
   <span><a href="report">report a bug</a> · <a href="privacy">privacy</a> · <a href="./#credits">credits</a> · <a href="https://github.com/creedweb3/anime4nerd" rel="noopener">github</a></span>
 </footer>
 <script src="assets/tickets.js"></script>

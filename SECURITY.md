@@ -1,13 +1,14 @@
 # Security
 
 This document describes what Anime4Nerd can and cannot do, how it is protected,
-what was reviewed, and how to use it safely. Last reviewed: 2026-11-12 (v1.2.5).
+what was reviewed, and how to use it safely. Last reviewed: 2026-11-21 (v1.3.0).
 
 ## Threat model in one paragraph
 
 The extension's only job is to read video frames on sites you enable and draw an
-upscaled copy over the player. It has no server, no network code of its own, no
-accounts and no analytics. It only opens two pages of the website (after removal,
+upscaled copy over the player (and over manga reader pages, in manga mode). It has no
+server, no accounts and no analytics; its only network code is manga mode's download
+of page images the reader shows, guarded as described below. It only opens two pages of the website (after removal,
 and from the popup's bug icon); their optional forms post to a Cloudflare Pages
 Function (`functions/api/send.js`) only when the visitor presses send. The things
 that could go wrong are: a page you enabled tricking the extension into doing
@@ -17,9 +18,11 @@ tampered with. Each is addressed below.
 
 ## What the extension never does
 
-- Never sends data anywhere. There is no `fetch`, `XMLHttpRequest`, `WebSocket`,
-  `sendBeacon` or remote script in the code. You can verify with
-  `grep -rE "fetch\(|XMLHttpRequest|WebSocket|sendBeacon" src/`.
+- Never sends data about you anywhere. The only `fetch` calls are manga mode's
+  downloads of reader page images (`src/background.ts`, `src/manga.ts`): plain GETs
+  without cookies, with local, private and cloud-metadata addresses refused on every
+  redirect. There is no `XMLHttpRequest`, `WebSocket`, `sendBeacon` or remote script.
+  You can verify with `grep -rE "fetch\(|XMLHttpRequest|WebSocket|sendBeacon" src/`.
 - Never touches a video you did not switch on. The content script only looks for
   `<video>` elements; upscaling starts from your click in the popup. You can
   restrict the extension to chosen sites under extension settings → Site access.

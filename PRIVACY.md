@@ -23,7 +23,7 @@ At install your browser asks you to allow the extension on all websites. That is
 
 ## Data leaving your device
 
-The extension makes no network requests of its own. It has no analytics, no telemetry, no crash reporting, no remote configuration, and no accounts.
+The extension sends nothing about you. It makes one kind of network request of its own: in manga mode, when a manga reader's page images cannot be read directly, it downloads those same images itself, from the same addresses and without cookies (local and private network addresses are refused). It has no analytics, no telemetry, no crash reporting, no remote configuration, and no accounts.
 
 It opens two pages of our website, anime4nerd.pages.dev:
 
