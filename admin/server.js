@@ -51,8 +51,10 @@ const BASE_HEADERS = {
   'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
 };
 const COMMON_CSP = "img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
-const LOGIN_CSP = (n) => `default-src 'none'; script-src 'nonce-${n}' ${TURNSTILE}; style-src 'nonce-${n}'; frame-src ${TURNSTILE}; ${COMMON_CSP}`;
-const APP_CSP = (n) => `default-src 'none'; script-src 'nonce-${n}'; style-src 'nonce-${n}'; ${COMMON_CSP}`;
+// Fonts: the site's own JetBrains Mono from Google Fonts, as on every other page of the site.
+const FONTS = 'font-src https://fonts.gstatic.com';
+const LOGIN_CSP = (n) => `default-src 'none'; script-src 'nonce-${n}' ${TURNSTILE}; style-src 'nonce-${n}' https://fonts.googleapis.com; ${FONTS}; frame-src ${TURNSTILE}; ${COMMON_CSP}`;
+const APP_CSP = (n) => `default-src 'none'; script-src 'nonce-${n}'; style-src 'nonce-${n}' https://fonts.googleapis.com; ${FONTS}; ${COMMON_CSP}`;
 
 const headers = (extra = {}) => ({ ...BASE_HEADERS, ...extra });
 const notFound = () => new Response('Not found', { status: 404, headers: headers({ 'content-type': 'text/plain; charset=utf-8' }) });
