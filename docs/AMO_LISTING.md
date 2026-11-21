@@ -85,86 +85,42 @@ npm run pack:firefox
 tree with `autocrlf=true` has CRLF in copied text files such as `THIRD_PARTY_NOTICES.md`, which
 would make that file differ from a reviewer's build.
 
-**Notes to reviewer (paste into the AMO field):**
+**Notes to reviewer (paste into the AMO field; AMO allows at most 3000 characters):**
 
 ```text
-Anime4Nerd runs the Anime4K upscaling shaders over web <video> elements and manga reader page
-images with WebGL2. Its only network code downloads manga page images the user's reader already
-shows (see webRequest below). No remote code, no analytics and no accounts. The full source is attached and is
-also at https://github.com/creedweb3/anime4nerd (MIT).
+Anime4Nerd 1.3.0 runs bloc97's Anime4K shaders (MIT, unchanged) over web <video> and manga reader page images with WebGL2. No remote code, no analytics, no accounts. Source attached; also https://github.com/creedweb3/anime4nerd. Full reviewer notes: docs/AMO_LISTING.md in the source archive.
 
-Website pages it opens (no data is sent by the add-on itself):
-- After removal, runtime.setUninstallURL opens https://anime4nerd.pages.dev/uninstalled?v=<version>.
-- The popup's bug icon opens https://anime4nerd.pages.dev/report?v=<version>&b=firefox in a tab.
-Both pages have optional feedback forms that send only what the user types (and, on /report, up
-to 3 screenshots they attach) when they press send; that content may contain personal data the
-user chooses to include. Policy: https://anime4nerd.pages.dev/privacy
+BUILD (Node 24, npm 11; any OS)
+  npm ci
+  npm run build:firefox
+Output is dist-firefox/, identical file for file to the uploaded zip:
+  unzip "Anime4Nerd firefox.zip" -d uploaded && diff -r uploaded dist-firefox
+esbuild bundles and minifies src/*.ts; .glsl shaders are bundled as text into gpu.js. Firefox manifest changes are in firefoxManifest() in build.mjs.
 
-Build steps
-1. Node.js 24 (built with Node 24.15.0, npm 11.12.1). Any OS; no other tools needed.
-2. Unzip the source archive and, in its root folder, run:
-     npm ci
-     npm run build:firefox
-3. The add-on is written to dist-firefox/. Its files match the uploaded zip file for file:
-     unzip "Anime4Nerd firefox.zip" -d uploaded && diff -r uploaded dist-firefox
-   ("npm run pack:firefox" also writes the zip itself; on Linux/macOS it needs the zip command.)
+NEW IN 1.3.0
+- Manga mode: background.js downloads manga page images the reader already shows (readers often serve them cross-origin without CORS): http(s) only, no cookies, 25 MB cap, timeout, max 5 redirects followed by hand. Local, private and cloud-metadata addresses are refused by name and by the address that answered.
+- webRequest (new): read-only listeners (no blocking, no changes) read details.ip and the Location header for page/frame loads and the add-on's own image fetches, only for that address check. Kept in storage.session, never sent.
+- Color controls: applied in the shader's final pass; settings in storage.local.
 
-What the build does (build.mjs)
-- esbuild bundles and minifies src/*.ts. Firefox build: chrome.* is defined as browser.*, and
-  __FIREFOX__ is true (selects the Firefox render loop in src/content.ts).
-- The .glsl shaders are bundled as text into gpu.js. They are bloc97's Anime4K shaders,
-  copied unchanged into src/shaders/ from https://github.com/bloc97/Anime4K commit
-  7684e9586f8dcc738af08a1cdceb024cc184f426 (MIT; src/shaders/LICENSE, src/shaders/SOURCE.txt,
-  THIRD_PARTY_NOTICES.md). src/mpv-hooks.ts turns them into WebGL2 fragment shaders.
-- The manifest is manifest.json with Firefox changes (firefoxManifest() in build.mjs):
-  background.scripts instead of a service worker, gecko id anime4nerd@creedweb3.github.io,
-  strict_min_version 140.0 (desktop only), data_collection_permissions none, and an extension-page
-  CSP of "script-src 'self'": Firefox's default adds upgrade-insecure-requests, which would turn
-  manga page images on http readers into failing https requests (Chrome's default has no such
-  rule).
-- No runtime npm dependencies. Dev dependencies: esbuild, typescript, @types/chrome.
+INNERHTML (the validator's 5 warnings)
+- popup.js video card (src/popup.ts): constant template, no interpolation; page text is set later with textContent.
+- popup.js color tab (src/popup-color.ts): slider rows and the profile menu are built as strings. The only non-constant text is the user's own profile names/ids, always passed through esc() (escapes & < > "). Everything else is a fixed key, a number or a constant SVG.
+- content.js (src/fullscreen-color.ts): a fixed SVG icon.
+No string from a web page reaches innerHTML.
 
-Files in the package
-- background.js: on install/update, injects the content scripts into tabs already open, and
-  sets the uninstall page URL (runtime.setUninstallURL, version only). It accepts messages only
-  from the add-on's own pages and content scripts (sender.id is checked): the two "rate it" card
-  counters (clamped, stored locally), the manga mode badge hint, and manga page image requests.
-  An image request is fetched only over http(s), without cookies, size-capped (25 MB), with a
-  timeout and at most 5 redirects followed by hand; local, private and cloud metadata hosts are
-  refused by name and by the address that answered (webRequest details.ip), unless the asking
-  page is itself on such an address (self-hosted readers; metadata hosts are always refused).
-- content.js (+ content.css): runs in every frame, finds <video> elements, answers the
-  popup, and draws the upscaled canvas over videos the user switched on.
-- gpu.js: the WebGL2 renderer and the bundled shaders. Loaded with
-  import(browser.runtime.getURL('gpu.js')) from the content script, which is why it is listed
-  in web_accessible_resources. It is a file in the package, not remote code.
-- fullscreen-redirect.js: a ~30-line content script in the page's MAIN world. It only wraps
-  requestFullscreen so that a video being upscaled (marked data-a4k-on) fullscreens its parent
-  element instead, because nothing can be drawn over a bare fullscreen video. It uses no
-  extension APIs and sends nothing.
-- popup.html/js/css: the toolbar popup. Page-derived strings are set with textContent; the one
-  innerHTML use is a constant template without interpolation. Its bug icon is a plain link to
-  https://anime4nerd.pages.dev/report?v=<version>&b=firefox (target=_blank).
+WEBSITE PAGES (the add-on itself sends nothing)
+- runtime.setUninstallURL opens https://anime4nerd.pages.dev/uninstalled?v=<version>.
+- The popup's bug icon links to https://anime4nerd.pages.dev/report?v=<version>&b=firefox.
+Their optional forms send only what the user types (and screenshots they attach) when they press send.
 
-Permissions
-- storage: preset, line effects and upscale factor (storage.sync); the per-site on/off map and
-  a "what's new" flag and local usage counts for the "rate it" card (storage.local, never sent).
-- scripting: injection into already-open tabs on install/update (background.js only).
-- webNavigation: getAllFrames, to inject per frame and to let the popup query every frame,
-  because video players are usually in iframes; onCommitted, to file the address each page
-  was loaded from (manga mode's address check, below).
-- webRequest: read-only listeners (onBeforeRequest, onResponseStarted, onBeforeRedirect) that
-  read details.ip and the Location header, for page/frame loads and the background's own manga
-  image fetches. Used only to refuse images from local, private or cloud metadata addresses.
-- <all_urls>: players are embedded from arbitrary domains, so the content script must run in
-  every frame. It does nothing beyond finding <video> elements until the user switches a
-  video on.
+PERMISSIONS
+- storage: settings, per-site on/off, color profiles, local usage counts for a "rate it" card. Never sent.
+- scripting: injects content scripts into already-open tabs on install/update.
+- webNavigation: getAllFrames (players live in iframes); onCommitted for the address check.
+- <all_urls>: players and readers are embedded from any domain; nothing runs beyond finding videos until the user switches one on.
 
-Testing
-Open any page with a CORS-enabled <video> (for example a .webm or .mp4 file opened directly),
-click the toolbar button and switch the video on. test/firefox-smoke.mjs is the automated
-Firefox test (needs ffmpeg and Playwright's Firefox; see README.md). Manga mode: open a manga
-chapter page, open the popup and click the chapter card; test/firefox-manga-e2e.mjs automates it.
+TESTING
+Open a page with a CORS-enabled <video> (e.g. a .webm opened directly), click the toolbar button, switch the video on.
 ```
 
 ## Screenshots
