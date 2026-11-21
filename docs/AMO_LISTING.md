@@ -47,8 +47,8 @@ Not affiliated with bloc97 or any streaming site. Anime4K is MIT licensed. Sourc
 ## Store fields
 
 - Homepage: https://anime4nerd.pages.dev/
-- Support site: https://github.com/creedweb3/anime4nerd/issues
-- Support email: leave empty (issues on GitHub), or add one if wanted.
+- Support site: https://anime4nerd.pages.dev/report
+- Support email: leave empty (reports go through the support site), or add one if wanted.
 - License: MIT License
 - Privacy policy: paste the text of `PRIVACY.md` (AMO stores the policy text itself, not a link). The same policy is online at https://anime4nerd.pages.dev/privacy.
 - Data collection: the manifest declares `data_collection_permissions: { required: ["none"] }`, so AMO shows that the add-on collects no data. The add-on itself sends nothing: `runtime.setUninstallURL` opens https://anime4nerd.pages.dev/uninstalled?v=<version> after removal, and the popup's bug icon opens https://anime4nerd.pages.dev/report?v=<version>&b=firefox in a tab. Both are website forms that send only when the user presses send (see `PRIVACY.md`). Mention this in the notes to reviewer.
@@ -172,20 +172,20 @@ chapter page, open the popup and click the chapter card; test/firefox-manga-e2e.
 AMO takes 1280×800 screenshots (shown smaller). The Chrome set in `docs/store/` can be reused,
 in the same order as the Chrome listing:
 
-1. `anime4nerd-1-hero.png`
+1. `anime4nerd-firefox-1-hero.png`
 2. `anime4nerd-2-compare.png` (Morevna Project frame, CC BY 3.0, credited on the image)
-3. `anime4nerd-6-fullscreen.png`
-4. `anime4nerd-3-presets.png`
+3. `anime4nerd-firefox-3-manga.png`
+4. `anime4nerd-firefox-4-color.png`
 5. `anime4nerd-5-privacy.png`
 
-The hero and fullscreen shots show the Chrome GPU meter (ms per frame), which Firefox does not
-have. Either add a caption ("GPU timing is shown in Chrome; Firefox shows the frame rate")
-or render Firefox variants from `docs/store/shots.html`. Do not upload
+The `firefox-` shots run the Firefox build of the popup (`shots.html?s=hero&b=firefox`): no GPU
+timer, so the popup shows frame rate instead of GPU milliseconds, and the hero names Firefox.
+The compare and privacy slides are the same for both stores. Do not upload
 `anime4nerd-promo-440x280.png`: AMO has no promo tile.
 
-Screenshot captions (optional):
+Screenshot captions:
 1. The popup on a video, with presets and upscale factor.
 2. Before / after: browser scaling vs Anime4K A+A with darken lines.
-3. The fullscreen menu.
-4. The six presets.
+3. Manga mode: pages upscaled once per chapter, with a page map.
+4. Color controls: ready-made looks and your own profiles.
 5. Privacy: the video never leaves your browser.

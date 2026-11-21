@@ -27,6 +27,8 @@
   const PROFILES = Number(q.get('profiles')) || 0;
   const PAGES = Number(q.get('pages')) || 0;
   const STORE = q.get('store') === '1';
+  // build=firefox: Firefox gives WebGL no GPU timer queries, so the video reports frame rate only.
+  const FIREFOX = q.get('build') === 'firefox';
   if (PROFILES) {
     const v = { brightness: 1, contrast: 1.05, saturation: 1.1, gamma: 1, vibrance: 1, temperature: 0, tint: 0, deband: 0, grain: 0 };
     const name = (i) => (q.get('names') === 'long' ? `WMWMWMWMWMW${String(i + 1).padStart(3, '0')}` : `look ${i + 1}`); // long: PROFILE_NAME_MAX wide letters
@@ -70,7 +72,7 @@
       ...(q.get('blocked') && enabled
         ? { status: 'Unavailable', message: 'This video source does not allow browser upscaling (cross-origin without CORS). Normal playback is available.' }
         : { status: enabled ? 'Active' : 'Off', message: '' }),
-      stats: enabled ? { gpuMs: samples[samples.length - 1], samples: samples.slice(), cpuMs: 0.4, fps: 23.976, passes: 9, textureBytes: 96 * 1048576, outputWidth: 3840, outputHeight: 2160, timerSupported: true, sourceFps: 23.976 } : null,
+      stats: enabled ? { gpuMs: FIREFOX ? null : samples[samples.length - 1], samples: FIREFOX ? [] : samples.slice(), cpuMs: 0.4, fps: 23.976, passes: 9, textureBytes: 96 * 1048576, outputWidth: 3840, outputHeight: 2160, timerSupported: !FIREFOX, sourceFps: 23.976 } : null,
       media: null,
     };
   }

@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <title>Anime4Nerd store screenshots</title>
-<!-- Source for the 1280x800 Chrome Web Store screenshots. ?s=hero|manga|color|privacy|fullscreen|promo picks the slide.
+<!-- Source for the 1280x800 Chrome Web Store screenshots. ?s=hero|manga|color|privacy|fullscreen|promo picks the slide;
+     &b=firefox renders the Firefox (AMO) variant.
      hero, manga and color show the REAL popup (test/popup-live.html?store=1, which needs dist/popup.js:
      npm run build), so serve the repo root over http (launch config a4k-root, port 4182) and capture
      http://localhost:4182/docs/store/shots.html?s=hero at 1280x800 in a headless Chromium. -->
@@ -201,7 +202,24 @@
 
 <script>
   // Pick the slide, then fill the frame-time bars deterministically around each panel's cost.
-  var s = new URLSearchParams(location.search).get('s') || 'hero';
+  var q = new URLSearchParams(location.search), s = q.get('s') || 'hero';
+  // b=firefox: the Firefox (AMO) set. The popup frames run the Firefox build, which has no GPU
+  // timer, and the hero names Firefox.
+  if (q.get('b') === 'firefox') {
+    document.querySelectorAll('iframe.live').forEach(function (f) {
+      var u = f.getAttribute('src'), h = u.indexOf('#');
+      f.src = h < 0 ? u + '&build=firefox' : u.slice(0, h) + '&build=firefox' + u.slice(h);
+    });
+    // Firefox's popup has no GPU graph, so it is shorter: fit each frame to the height it reports.
+    addEventListener('message', function (e) {
+      if (!e.data || e.data.type !== 'size') return;
+      document.querySelectorAll('iframe.live').forEach(function (f) {
+        if (f.contentWindow === e.source) f.style.height = (e.data.h + 2) + 'px';
+      });
+    });
+    var foot = document.querySelector('#hero .foot');
+    foot.textContent = foot.textContent.replace('Chrome, Brave, Edge', 'Firefox');
+  }
   document.getElementById(s).classList.add('on');
   if (s === 'promo') document.documentElement.classList.add('promo');
   var LIMIT = 41.7, seed = 7;
