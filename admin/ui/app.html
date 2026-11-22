@@ -105,8 +105,10 @@ button { cursor: pointer; }
 .a-read > * { max-width: 1100px; }
 .a-read > .a-cols { max-width: none; }
 /* Ticket left (with a divider), conversation right and as tall as the window, kept in view. */
-.a-cols { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(0, 1.5fr); gap: 28px; align-items: start; }
-.a-info { display: grid; gap: 22px; align-content: start; min-width: 0; border-right: 1px solid var(--line); padding-right: 24px; }
+.a-cols { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(0, 1.5fr); gap: 28px; align-items: stretch; }
+/* As tall as the conversation; Archive and Delete sit at the bottom, level with Send. */
+.a-info { display: flex; flex-direction: column; gap: 22px; min-width: 0; border-right: 1px solid var(--line); padding-right: 24px; }
+.a-info > .a-actions { margin-top: auto; }
 .a-convo { position: sticky; top: 0; min-width: 0; }
 .a-convo .chat-frame { min-height: calc(100vh - 240px); grid-template-rows: auto 1fr auto; }
 .a-convo .chats { align-content: start; }
