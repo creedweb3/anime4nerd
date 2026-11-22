@@ -26,7 +26,7 @@ const CODE = new RegExp(`^A4N-${GROUP}-${GROUP}-${GROUP}$`);
 export const MAX_MSGS = 50; // per ticket, both sides together
 export const MAX_REPORTER_TEXT = 1000;
 export const MAX_ADMIN_TEXT = 2000;
-export const STATUSES = ['open', 'progress', 'done', 'wontfix'];
+export const STATUSES = ['open', 'progress', 'done', 'wontfix', 'cantfix'];
 
 export function newCode() {
   const bytes = crypto.getRandomValues(new Uint8Array(12));
@@ -121,6 +121,7 @@ export function publicView(code, answerRaw, mark, msgs, unseen) {
     at: typeof a.at === 'string' ? a.at.slice(0, 17) : '',
     v: typeof a.v === 'string' ? a.v.slice(0, 20) : '',
     b: a.b === 'chrome' || a.b === 'firefox' ? a.b : '',
+    ...(typeof a.subject === 'string' && a.subject ? { subject: a.subject.slice(0, 80) } : {}),
     note: typeof a.note === 'string' ? a.note.slice(0, 2000) : '',
     shots: Number.isInteger(a.shots) ? Math.min(Math.max(a.shots, 0), 3) : 0,
     status: mark.status,

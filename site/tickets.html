@@ -181,11 +181,12 @@
       if (text != null) n.textContent = text;
       return n;
     };
-    var STATUS = { open: ['open', 'var(--faint)'], progress: ['in progress', '#e3c58a'], done: ['fixed', 'var(--ok)'], wontfix: ["won't fix", 'var(--dim)'] };
-    var EVENT = { progress: ['marked working on it', '#e3c58a'], done: ['marked fixed', 'var(--ok)'], wontfix: ["marked won't fix", 'var(--dim)'] };
+    var STATUS = { open: ['open', 'var(--faint)'], progress: ['in progress', '#e3c58a'], done: ['fixed', 'var(--ok)'], wontfix: ["won't fix", 'var(--dim)'], cantfix: ["can't fix", 'var(--bad)'] };
+    var EVENT = { progress: ['marked working on it', '#e3c58a'], done: ['marked fixed', 'var(--ok)'], wontfix: ["marked won't fix", 'var(--dim)'], cantfix: ["marked can't fix", 'var(--bad)'] };
     var CLOSED = {
       done: ['var(--ok)', 'Fixed.', 'Still happening after the update? Write back and this opens again.', 'Still broken? Tell us what you see.'],
-      wontfix: ['var(--dim)', "Closed: won't fix.", 'The reason is in the last reply. You can still write back; it is read, but it stays closed.', 'Write back.'],
+      wontfix: ['var(--dim)', "Closed: won't fix.", 'The last reply explains why. Questions or thoughts on it? Write back, every message is read. Found a different problem? Send a new report so it gets its own ticket.', 'Questions about this? Write back.'],
+      cantfix: ['var(--bad)', "Closed: can't fix.", 'This one is outside what the extension can change; the last reply explains why. Questions about it? Write back, every message is read. Found a different problem? Send a new report so it gets its own ticket.', 'Questions about this? Write back.'],
       archived: ['var(--faint)', 'This conversation is closed.', 'Replies are off here. If something comes up again, send a new report: it gets its own code.', null],
     };
     var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -254,7 +255,7 @@
         b.type = 'button';
         b.setAttribute('aria-current', String(t.code === current));
         var word = t.unknown ? ['not found', 'var(--faint)'] : t.gone ? ['removed', 'var(--faint)'] : t.closed ? ['closed', 'var(--faint)'] : STATUS[t.status] || STATUS.open;
-        var title = t.unknown ? String(t.code) : t.gone ? 'report removed' : (t.type || 'bug') + ' · ' + (t.note || '');
+        var title = t.unknown ? String(t.code) : t.gone ? 'report removed' : (t.type || 'bug') + ' · ' + (t.subject || t.note || '');
         var mine = (t.msgs || []).length;
         var sub = t.unknown || t.gone ? 'ticket ' + String(t.code).slice(-4) : t.unseen ? '↩ new reply' : (mine + 1) + ' message' + (mine ? 's' : '') + ' · last ' + when(mine ? t.msgs[mine - 1].at : t.at);
         var s = el('span', 's', word[0]);
@@ -353,9 +354,9 @@
         g.append(r2);
         return box.append(g);
       }
-      var reached = { open: 1, progress: 2, done: 3, wontfix: 3 }[t.status] || 1;
+      var reached = { open: 1, progress: 2, done: 3, wontfix: 3, cantfix: 3 }[t.status] || 1;
       var track = el('div', 'track');
-      ['received', 'working on it', t.status === 'wontfix' ? "won't fix" : 'fixed'].forEach(function (s, i) { track.append(el('span', i < reached ? 'on' : '', s)); });
+      ['received', 'working on it', t.status === 'wontfix' ? "won't fix" : t.status === 'cantfix' ? "can't fix" : 'fixed'].forEach(function (s, i) { track.append(el('span', i < reached ? 'on' : '', s)); });
       var msgs = el('div', 'msgs');
       // Their report first, then the conversation; the current status sits where it last changed.
       var items = [{ at: t.at, node: message('u', t.note, t.at, t.shots) }];

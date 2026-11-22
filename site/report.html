@@ -52,6 +52,9 @@
   .tips p b { color: var(--fg); font-weight: 600; }
   textarea { display: block; width: 100%; height: 76px; padding: 9px 11px; background: var(--bg); border: 1px solid var(--line2); color: var(--fg); font: 13px/1.5 var(--mono); resize: vertical; }
   textarea:focus { outline: none; border-color: var(--on); }
+  #subject { display: block; width: 100%; box-sizing: border-box; padding: 9px 11px; background: var(--bg); border: 1px solid var(--line2); color: var(--fg); font: 600 13px/1.5 var(--mono); }
+  #subject::placeholder { color: var(--faint); font-weight: 400; }
+  #subject:focus { outline: none; border-color: var(--on); }
   /* Step 03: the button centred under its heading, the note centred under the button. */
   .send { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 24px; }
   .send .btn { min-width: 220px; justify-content: center; }
@@ -149,9 +152,11 @@
             <button type="button" data-r="browser" aria-pressed="false"><i>05 · browser</i><em>another browser or device</em></button>
             <button type="button" data-r="other" aria-pressed="false"><i>06 · other</i><em>something else</em></button>
           </div>
-          <label class="step" for="note"><i>02</i><b id="q2">What happened?</b><span><span id="n">0</span> / 1000</span></label>
+          <label class="step" for="subject"><i>02</i><b>Subject</b><span>optional · a few words</span></label>
+          <input id="subject" maxlength="80" autocomplete="off" placeholder="A few words">
+          <label class="step" for="note"><i>03</i><b id="q2">What happened?</b><span><span id="n">0</span> / 1000</span></label>
           <textarea id="note" maxlength="1000" placeholder="What did you do, what did you expect, what happened? Name the site if it's about one."></textarea>
-          <div class="step"><i>03</i><b>Screenshots</b><span>optional · up to 3</span></div>
+          <div class="step"><i>04</i><b>Screenshots</b><span>optional · up to 3</span></div>
           <label class="drop" id="drop"><input type="file" id="shots" accept="image/png,image/jpeg,image/webp" multiple><b>+ add screenshots</b><small>or drop images here · png, jpg, webp · crop out anything private</small></label>
           <div class="thumbs" id="thumbs"></div>
           <div id="ts" class="ts" data-sitekey="__TURNSTILE_SITEKEY__" data-action="report"></div>
@@ -187,7 +192,16 @@
     var picked = { bug: {}, idea: {} };
     var sending = false;
     var note = document.getElementById('note');
+    var subject = document.getElementById('subject');
     var go = document.getElementById('go');
+    // Left empty, the subject is what the report is about: the picked options' own words.
+    var autoSubject = function () {
+      return [].map.call(document.querySelectorAll('.why[data-t="' + type + '"] button[aria-pressed="true"] em'), function (em) { return em.textContent; }).join(' · ').slice(0, 80);
+    };
+    var hintSubject = function () {
+      var a = autoSubject();
+      subject.placeholder = a ? 'Left empty: ' + a : 'A few words';
+    };
     // Bug or idea: swaps the reasons, headings and wording. ?t=idea opens the page on ideas.
     var TEXT = {
       bug: { title: 'Report a problem.', q1: 'What went wrong?', q2: 'What happened?', go: 'send report', thx: 'Thanks, report received.', thx2: 'Fixes',
@@ -207,6 +221,7 @@
       document.querySelectorAll('.kind button').forEach(function (b) { b.setAttribute('aria-checked', String(b.dataset.t === t)); });
       document.querySelectorAll('.why').forEach(function (g) { g.hidden = g.dataset.t !== t; });
       document.querySelectorAll('[data-for]').forEach(function (el) { el.hidden = el.dataset.for !== t; });
+      hintSubject();
     };
     document.querySelectorAll('.kind button').forEach(function (b) {
       b.addEventListener('click', function () { setType(b.dataset.t); });
@@ -221,6 +236,7 @@
       b.addEventListener('click', function () {
         set[b.dataset.r] = !set[b.dataset.r];
         b.setAttribute('aria-pressed', String(set[b.dataset.r]));
+        hintSubject();
         update();
       });
     });
@@ -315,6 +331,7 @@
       var sentType = type;
       var reasons = Object.keys(picked[type]).filter(function (k) { return picked[type][k]; });
       var text = note.value;
+      var subj = subject.value.trim() || autoSubject();
       var chosen = files.slice();
       chosen.reduce(function (prev, file, i) {
         return prev.then(function (out) { return encode(file, i).then(function (s) { return out.concat(s); }); });
@@ -323,6 +340,7 @@
           kind: 'report',
           type: sentType,
           reasons: reasons,
+          subject: subj,
           note: text,
           v: v,
           b: br,

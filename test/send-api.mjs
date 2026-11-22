@@ -90,6 +90,26 @@ test('stores an idea from the report form, with its own reasons', async () => {
   assert.deepEqual(rec.reasons, ['feature', 'browser']);
 });
 
+test('a report may carry a short subject, cleaned, also in the summary', async () => {
+  const { status, env: e } = await send(report({ subject: '  Add a 1.5× upscale​ ' }));
+  assert.equal(status, 200);
+  const [, entry] = [...e.FEEDBACK.store].find(([k]) => k.startsWith('report:'));
+  assert.equal(JSON.parse(entry.value).subject, 'Add a 1.5× upscale');
+  assert.equal(entry.opts.metadata.j, 'Add a 1.5× upscale');
+  // Empty means none: nothing extra is stored.
+  const { env: e2 } = await send(report({ subject: '   ' }));
+  const [, plain] = [...e2.FEEDBACK.store].find(([k]) => k.startsWith('report:'));
+  assert.ok(!('subject' in JSON.parse(plain.value)) && !('j' in plain.opts.metadata));
+  // Too long, not text, or on the uninstall form: refused.
+  assert.deepEqual((await send(report({ subject: 'x'.repeat(81) }))).body, { ok: false, error: 'bad_subject' });
+  assert.deepEqual((await send(report({ subject: 5 }))).body, { ok: false, error: 'bad_subject' });
+  assert.equal((await send(uninstall({ subject: 'hi' }), {}, env(), passFor('uninstall'))).status, 400);
+  // The longest subject and note together still fit KV's 1024-byte metadata.
+  const { env: e3 } = await send(report({ subject: '😀'.repeat(40), note: '😀'.repeat(500) }));
+  const meta = [...e3.FEEDBACK.store].find(([k]) => k.startsWith('report:'))[1].opts.metadata;
+  assert.ok(new TextEncoder().encode(JSON.stringify(meta)).length <= 1024, 'metadata over the 1024-byte KV limit');
+});
+
 test('stores a valid uninstall answer', async () => {
   const { status, env: e } = await send(uninstall(), {}, env(), passFor('uninstall'));
   assert.equal(status, 200);

@@ -96,12 +96,28 @@ button { cursor: pointer; }
 .a-item .kind i { width: 6px; height: 6px; }
 .a-item .why { color: var(--faint); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }
 .a-item .when { margin-left: auto; color: var(--faint); flex: none; display: inline-flex; align-items: center; gap: 6px; }
-.a-item .snip { color: var(--dim); font-size: 12px; line-height: 1.5; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.a-item .snip { color: var(--dim); font-size: 12px; line-height: 1.5; min-height: 3em; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
 .a-item.unread .snip { color: var(--fg); }
+.a-item .snip .subj { color: var(--fg); font-weight: 600; }
 .a-item.unread .when::before { content: ""; width: 5px; height: 5px; background: var(--on); }
 .a-read { overflow: auto; padding: 28px 36px; display: grid; align-content: start; gap: 22px; }
 /* Cap the text width, not the pane, so the scrollbar sits at the window edge. */
-.a-read > * { max-width: 748px; }
+.a-read > * { max-width: 1100px; }
+.a-read > .a-cols { max-width: none; }
+/* Ticket left (with a divider), conversation right and as tall as the window, kept in view. */
+.a-cols { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(0, 1.5fr); gap: 28px; align-items: start; }
+.a-info { display: grid; gap: 22px; align-content: start; min-width: 0; border-right: 1px solid var(--line); padding-right: 24px; }
+.a-convo { position: sticky; top: 0; min-width: 0; }
+.a-convo .chat-frame { min-height: calc(100vh - 240px); grid-template-rows: auto 1fr auto; }
+.a-convo .chats { align-content: start; }
+.a-convo .chats.empty { align-content: center; }
+/* Status as separate boxes, three to a row. */
+.a-cols .status-seg { max-width: none; grid-template-columns: repeat(3, 1fr); gap: 6px; border: 0; }
+.a-cols .status-seg button { white-space: nowrap; padding: 8px 6px; border: 1px solid var(--line); }
+.a-cols .status-seg button:first-child { border-left: 1px solid var(--line); }
+.a-cols .status-seg button:hover { border-color: var(--line2); }
+.a-cols .status-seg button[aria-pressed="true"] { border-color: var(--c, var(--line2)); }
+@media (max-width: 1100px) { .a-cols { grid-template-columns: minmax(0, 1fr); } .a-info { border-right: 0; padding-right: 0; } .a-convo { position: static; } .a-convo .chat-frame { min-height: 0; } }
 .a-read h1 { font-size: 20px; margin: 0; letter-spacing: -.01em; }
 .a-meta { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 0; }
 .a-meta dt { color: var(--faint); }
@@ -117,13 +133,14 @@ button { cursor: pointer; }
 .stat-tag.progress { color: var(--s-warn); }
 .stat-tag.done { color: var(--s-ok); }
 .stat-tag.wontfix { color: var(--dim); text-decoration: line-through; }
+.stat-tag.cantfix { color: var(--s-crit); }
 .a-item .star { color: var(--s-warn); flex: none; }
 .a-item.closed .snip { color: var(--faint); }
 .a-title { display: flex; align-items: center; gap: 12px; }
 .star-btn { background: none; border: 1px solid var(--line2); color: var(--faint); width: 30px; height: 30px; font-size: 15px; line-height: 1; display: grid; place-items: center; }
 .star-btn:hover { color: var(--fg); border-color: var(--fg); }
 .star-btn[aria-pressed="true"] { color: var(--s-warn); border-color: rgba(227, 197, 138, .6); }
-.status-seg { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line); max-width: 520px; }
+.status-seg { display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid var(--line); max-width: 650px; }
 .status-seg button { display: flex; justify-content: center; align-items: center; gap: 8px; background: none; border: 0; border-left: 1px solid var(--line); color: var(--dim); font-size: 11px; padding: 8px 10px; }
 .status-seg button:first-child { border-left: 0; }
 .status-seg button::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--c, var(--faint)); }
@@ -133,6 +150,7 @@ button { cursor: pointer; }
 .status-seg [data-s="progress"] { --c: var(--s-warn); }
 .status-seg [data-s="done"] { --c: var(--s-ok); }
 .status-seg [data-s="wontfix"] { --c: var(--dim); }
+.status-seg [data-s="cantfix"] { --c: var(--s-crit); }
 .status-since { color: var(--faint); font-size: 11px; }
 .memo { width: 100%; min-height: 64px; resize: vertical; background: var(--panel); border: 1px solid var(--line); color: var(--fg); padding: 8px 10px; font: 12px/1.6 var(--mono); }
 .memo::placeholder { color: var(--faint); }
@@ -154,7 +172,7 @@ button { cursor: pointer; }
 .chat.us small b, .chat small i { font-style: normal; color: var(--s-ok); }
 .chat .shots img { width: 160px; height: 90px; }
 .chat-compose { display: grid; gap: 8px; padding: 10px 14px 12px; background: var(--panel); }
-.chat-input { width: 100%; min-height: 44px; resize: vertical; background: #0d0d0d; border: 1px solid var(--line); color: var(--fg); padding: 8px 10px; font: 12px/1.6 var(--mono); }
+.chat-input { width: 100%; min-height: 120px; resize: vertical; background: #0d0d0d; border: 1px solid var(--line); color: var(--fg); padding: 8px 10px; font: 12px/1.6 var(--mono); }
 .chat-input::placeholder { color: var(--faint); }
 .chat-input:focus { outline: none; border-color: var(--line2); }
 .reply-row { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
@@ -279,7 +297,7 @@ button { cursor: pointer; }
       <div class="a-sub">
         <select id="f-ver" aria-label="Version"><option value="">All</option></select>
         <select id="f-br" aria-label="Browser"><option value="">All</option><option>chrome</option><option>firefox</option></select>
-        <select id="f-st" aria-label="Status"><option value="active">Active</option><option value="open">Open</option><option value="progress">In progress</option><option value="starred">Starred</option><option value="done">Done</option><option value="wontfix">Won't fix</option><option value="">Any</option><option value="archived">Archived</option></select>
+        <select id="f-st" aria-label="Status"><option value="active">Active</option><option value="open">Open</option><option value="progress">In progress</option><option value="starred">Starred</option><option value="done">Done</option><option value="wontfix">Won't fix</option><option value="cantfix">Can't fix</option><option value="">Any</option><option value="archived">Archived</option></select>
       </div>
     </div>
     <div class="a-count" id="a-count">Loading…</div>
@@ -400,7 +418,7 @@ const matches = (r) => {
   const full = NOTES.get(r.key)?.note ?? r.p;
   return `${full} ${r.r.join(' ')}`.toLowerCase().includes(query);
 };
-const STATUSES = [['open', 'Open'], ['progress', 'In progress'], ['done', 'Done'], ['wontfix', "Won't fix"]];
+const STATUSES = [['open', 'Open'], ['progress', 'In progress'], ['done', 'Done'], ['wontfix', "Won't fix"], ['cantfix', "Can't fix"]];
 const statusLabel = (s) => STATUSES.find(([k]) => k === s)[1];
 const statusOk = (r) => {
   const f = fv('f-st');
@@ -533,7 +551,7 @@ function chatBox(r) {
   const chats = !full ? el('div', { class: 'chats empty' }, el('span', { class: 'muted' }, 'Loading…'))
     : bubbles.length ? el('div', { class: 'chats' }, ...bubbles)
       : el('div', { class: 'chats empty' }, el('span', { class: 'muted' }, 'No replies yet. Their report above is the first message.'));
-  const box = el('textarea', { class: 'chat-input', maxlength: '2000', rows: '2', 'aria-label': 'Reply',
+  const box = el('textarea', { class: 'chat-input', maxlength: '2000', rows: '5', 'aria-label': 'Reply',
     placeholder: bubbles.length ? 'Write a reply…' : 'Write the first reply. It shows on their ticket page, and in the extension popup.' });
   box.readOnly = !full;
   const send = el('button', { class: 'ghost send' }, 'Send');
@@ -593,7 +611,7 @@ function reader(r) {
   const note = full ? full.note : r.p;
   return [
     el('div', { style: 'display:flex;gap:6px;align-items:center' }, el('span', { class: `chip ${r.t}` }, r.t), el('span', { class: 'muted' }, when(r.at) + ' UTC')),
-    el('div', { class: 'a-title' }, el('h1', {}, titleOf(r)), starBtn(r)),
+    el('div', { class: 'a-title' }, el('h1', {}, r.j || titleOf(r)), starBtn(r)),
     statusRow(r),
     el('dl', { class: 'a-meta' }, el('dt', {}, 'Reasons'), el('dd', {}, r.r.join(', ') || '—'), el('dt', {}, 'Version'), el('dd', {}, r.v ? 'v' + r.v : '—'),
       r.t === 'uninstall' ? null : el('dt', {}, 'Browser'), r.t === 'uninstall' ? null : el('dd', {}, r.b || '—')),
@@ -602,10 +620,14 @@ function reader(r) {
       el('div', { class: 'note' }, note || el('span', { class: 'muted' }, 'No note'), !full && note ? el('span', { class: 'muted' }, ' …') : null)),
     r.s ? el('div', { style: 'display:grid;gap:8px' }, el('span', { class: 'label' }, `Screenshots · ${r.s}`), shotsRow(r)) : null,
     r.d ? el('span', { class: 'muted' }, `${r.d} more ${r.d === 1 ? 'screenshot was' : 'screenshots were'} dropped by the daily cap.`) : null,
-    chatBox(r),
-    memoBox(r),
-    actions(r),
   ].filter(Boolean);
+}
+
+// The open answer: the ticket on the left, its conversation on the right.
+function readerCols(r) {
+  return [el('div', { class: 'a-cols' },
+    el('div', { class: 'a-info' }, ...reader(r), memoBox(r), actions(r)),
+    el('div', { class: 'a-convo' }, chatBox(r)))];
 }
 
 async function fetchNote(r) {
@@ -613,7 +635,7 @@ async function fetchNote(r) {
   try {
     const res = await api(`/admin/api/answer?key=${encodeURIComponent(r.key)}`);
     NOTES.set(r.key, await res.json());
-    if (currentKey === r.key) $('a-read').replaceChildren(...reader(r));
+    if (currentKey === r.key) $('a-read').replaceChildren(...readerCols(r));
   } catch (e) {
     if (e.message !== 'signed out') showError(`Could not load the full note (${e.message}).`);
   }
@@ -625,7 +647,7 @@ function renderA() {
   $('a-count').textContent = `${list.length} shown${unread ? ` · ${unread} new` : ''} · newest first`;
   if (!list.some((r) => r.key === currentKey)) currentKey = list[0]?.key ?? null;
   $('a-items').replaceChildren(...list.map((r) => el('button', {
-    class: `a-item${r.unread ? ' unread' : ''}${r.status === 'done' || r.status === 'wontfix' ? ' closed' : ''}`, 'aria-current': String(r.key === currentKey),
+    class: `a-item${r.unread ? ' unread' : ''}${['done', 'wontfix', 'cantfix'].includes(r.status) ? ' closed' : ''}`, 'aria-current': String(r.key === currentKey),
     onclick: () => { currentKey = r.key; r.unread = false; renderA(); },
   },
   el('div', { class: 'row' }, r.star ? el('span', { class: 'star', 'aria-label': 'Starred' }, '★') : null,
@@ -634,10 +656,10 @@ function renderA() {
     waiting(r) ? el('span', { class: 'replied wait', title: 'The reporter wrote back' }, '↩ new')
       : r.thread ? el('span', { class: 'replied', title: r.thread.seen ? 'Reply seen' : 'Reply not seen yet' }, r.thread.seen ? '↩ seen' : '↩ sent') : null,
     el('span', { class: 'why' }, r.r.join(' · ')), el('span', { class: 'when' }, when(r.at))),
-  el('div', { class: 'snip' }, r.p || el('span', { class: 'muted' }, 'No note')))));
+  el('div', { class: 'snip' }, r.j ? el('b', { class: 'subj' }, r.j + ' · ') : null, r.p || el('span', { class: 'muted' }, 'No note')))));
   const r = list.find((x) => x.key === currentKey);
   if (!r) return $('a-read').replaceChildren(el('p', { class: 'muted' }, DATA.length ? 'Nothing matches these filters.' : 'No answers yet.'));
-  $('a-read').replaceChildren(...reader(r));
+  $('a-read').replaceChildren(...readerCols(r));
   fetchNote(r);
 }
 

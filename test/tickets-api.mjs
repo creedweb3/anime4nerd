@@ -125,6 +125,13 @@ test('reading a ticket shows the report and status, never the private note', asy
   assert.ok(!JSON.stringify(body).includes('SECRET'));
 });
 
+test('a ticket shows its subject when the report had one', async () => {
+  const e = await env();
+  const { body: { code } } = await sendReport(e, { subject: 'Black video on mkissa' });
+  const { body } = await read(e, { codes: [code] });
+  assert.equal(body.tickets[0].subject, 'Black video on mkissa');
+});
+
 test('unknown codes, deleted reports and archived ones each say so', async () => {
   const e = await env();
   const { body: { code } } = await sendReport(e);
@@ -177,6 +184,9 @@ test('writing back on a fixed ticket opens it again; on won\'t fix it stays; arc
   await e.FEEDBACK.put(`mark:${key}`, '', { metadata: { s: 'wontfix', at: '2026-11-21T10:00Z' } });
   assert.equal((await write(e, { code, text: 'please reconsider' })).status, 200);
   assert.equal(e.FEEDBACK.store.get(`mark:${key}`).opts.metadata.s, 'wontfix');
+  await e.FEEDBACK.put(`mark:${key}`, '', { metadata: { s: 'cantfix', at: '2026-11-21T10:00Z' } });
+  assert.equal((await write(e, { code, text: 'any workaround?' })).status, 200);
+  assert.equal(e.FEEDBACK.store.get(`mark:${key}`).opts.metadata.s, 'cantfix', "can't fix stays closed too");
   await e.FEEDBACK.put(`mark:${key}`, '', { metadata: { s: 'open', a: 1 } });
   assert.deepEqual((await write(e, { code, text: 'hello?' })).body, { ok: false, error: 'closed' });
 });

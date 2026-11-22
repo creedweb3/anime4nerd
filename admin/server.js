@@ -199,6 +199,7 @@ function row(key, at, meta, mark, thread) {
     s: int(meta.s, 3),
     d: int(meta.d, 3),
     p: str(meta.p, 400),
+    ...(meta.j ? { j: str(meta.j, 80) } : {}),
     ...mark,
     // Whether the answer has a ticket the reporter can read, and its conversation so far.
     ticket: meta.k === 1,

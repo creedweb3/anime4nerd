@@ -2,7 +2,7 @@
 //
 // Body: {"code", "text", "shots"?, "token"}. Same order of work as /api/send, cheapest first:
 // shape checks, Turnstile (action "reply"), then KV. A ticket the admin archived takes no more
-// messages; writing back on one marked fixed opens it again; won't fix stays won't fix.
+// messages; writing back on one marked fixed opens it again; won't fix and can't fix stay as they are.
 // Limits: 10 write-backs per visitor per day, 50 for everyone, 50 messages per ticket, and
 // screenshots share /api/send's daily screenshot ceilings.
 import {

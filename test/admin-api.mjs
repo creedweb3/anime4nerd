@@ -83,7 +83,7 @@ test('password hash verifies the right password only', async () => {
 
 test('a stored hash with stray spaces or a line break still works', async () => {
   const stored = await hashPassword(PASSWORD, { iterations: 1000 });
-  assert.equal(await verifyPassword(PASSWORD, ` ${stored}
+  assert.equal(await verifyPassword(PASSWORD, ` ${stored}
 `), true);
   const e = { ...(await env()), ADMIN_PASSWORD_HASH: `${stored}
 ` };
@@ -292,6 +292,15 @@ test('answers list comes from key metadata, with old answers read from their val
   assert.deepEqual(Object.keys(body.caps).sort(), ['report', 'shots', 'uninstall']);
 });
 
+test('a report with a subject lists it', async () => {
+  const { e, kv, cookie } = await seeded();
+  const { value, opts } = kv.store.get(`report:${ID}`);
+  await kv.put(`report:${ID}`, value, { metadata: { ...opts.metadata, j: 'Stutters on site x' } });
+  const body = await (await go('/admin/api/answers', e, { cookie })).json();
+  assert.equal(body.answers[0].j, 'Stutters on site x');
+  assert.ok(!('j' in body.answers[1]), 'no subject, no field');
+});
+
 test('one answer returns its full note as data', async () => {
   const { e, cookie } = await seeded();
   const res = await go(`/admin/api/answer?key=report:${ID}`, e, { cookie });
@@ -338,6 +347,14 @@ test('the private note is stored as the mark value and comes back with the answe
   // Changing the status keeps the note.
   await post('/admin/api/mark', { key: `report:${ID}`, status: 'done' });
   assert.equal(kv.store.get(`mark:report:${ID}`).value, 'Fix in 1.2.6');
+});
+
+test("can't fix is a status of its own", async () => {
+  const { e, kv, cookie } = await seeded();
+  const post = postAs(e, cookie);
+  assert.equal((await post('/admin/api/mark', { key: `report:${ID}`, status: 'cantfix' })).status, 204);
+  assert.equal(kv.store.get(`mark:report:${ID}`).opts.metadata.s, 'cantfix');
+  assert.equal((await post('/admin/api/mark', { key: `report:${ID}`, status: 'nope' })).status, 400);
 });
 
 test('a mark back to all defaults removes its key', async () => {

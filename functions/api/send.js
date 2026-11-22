@@ -45,7 +45,7 @@ const KINDS = {
   report: {
     reasons: ['controls', 'slow', 'site', 'look', 'menu', 'other'],
     noteMax: 1000,
-    fields: ['kind', 'type', 'reasons', 'note', 'v', 'b', 'token', 'shots'],
+    fields: ['kind', 'type', 'reasons', 'subject', 'note', 'v', 'b', 'token', 'shots'],
   },
 };
 // The report form sends either a bug or an idea; each has its own reasons. A report without a
@@ -55,6 +55,7 @@ const REPORT_TYPES = {
   idea: ['feature', 'picture', 'site', 'menu', 'browser', 'other'],
 };
 
+const SUBJECT_MAX = 80;
 const VERSION = /^\d+\.\d+\.\d+$/;
 const BROWSERS = ['chrome', 'firefox'];
 const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
@@ -118,11 +119,11 @@ export async function readCapped(request, limit) {
   return new TextDecoder('utf-8', { fatal: true }).decode(all);
 }
 
-export function cleanText(value, max) {
+export function cleanText(value, max, code = 'bad_note') {
   if (value === undefined) return '';
-  if (typeof value !== 'string') reject(400, 'bad_note');
+  if (typeof value !== 'string') reject(400, code);
   const text = value.toWellFormed().replace(/\r\n?/g, '\n').replace(INVISIBLE, '').trim();
-  if (text.length > max) reject(400, 'bad_note');
+  if (text.length > max) reject(400, code);
   return text;
 }
 
@@ -216,6 +217,8 @@ export function validate(input) {
   for (const r of reasons) if (typeof r !== 'string' || !allowed.includes(r)) reject(400, 'bad_reasons');
   if (new Set(reasons).size !== reasons.length) reject(400, 'bad_reasons');
 
+  // An optional one-line subject (report form only); the form fills in what it's about when left empty.
+  const subject = cleanText(input.subject, SUBJECT_MAX, 'bad_subject').replace(/\s+/g, ' ');
   const note = cleanText(input.note, spec.noteMax);
   if (input.kind === 'report' && !note) reject(400, 'note_required');
   if (input.kind === 'uninstall' && !note && !reasons.length) reject(400, 'empty');
@@ -231,7 +234,7 @@ export function validate(input) {
   if (!Array.isArray(shots) || shots.length > MAX_SHOTS) reject(400, 'bad_shot');
   shots.forEach(checkShotShape);
 
-  const record = { kind: input.kind, reasons, note, v, ...(type ? { b, type } : {}) };
+  const record = { kind: input.kind, reasons, ...(subject ? { subject } : {}), note, v, ...(type ? { b, type } : {}) };
   return { record, shots, token: input.token };
 }
 
@@ -307,6 +310,7 @@ export function summary(record, shots, dropped) {
     s: shots,
     d: dropped,
     p: [...record.note].slice(0, PREVIEW_CHARS).join(''),
+    ...(record.subject ? { j: record.subject } : {}),
   };
 }
 
