@@ -7,6 +7,37 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="assets/site.css">
 
+<style>
+  /* Privacy page in the home page's language: big headline, readout strip, numbered sections. */
+  .pv-hero { padding-block: clamp(40px, 6vw, 76px) clamp(28px, 4vw, 44px); }
+  .pv-hero h1 { font-size: clamp(2.8rem, 6.4vw, 5.6rem); line-height: .9; letter-spacing: -.055em; text-transform: uppercase; margin: 18px 0 0; font-weight: 800; }
+  .pv-hero h1 span { display: block; }
+  .pv-hero h1 .o { color: transparent; -webkit-text-stroke: 2px var(--ok); }
+  .pv-hero .lede { max-width: 64ch; }
+  .pv-hero .lede strong { color: var(--fg); }
+  .pv-jump { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 26px; }
+  .pv-jump a { text-decoration: none; }
+  .pv-jump a b { color: var(--ok); font-weight: 600; margin-right: 6px; }
+  .pv .readout { margin-bottom: clamp(40px, 6vw, 72px); }
+  .pv .readout b { font-size: 17px; }
+
+  .pv .sec { padding-block: clamp(32px, 5vw, 56px); border-top: 1px solid var(--line); }
+  .pv .sec > .rail h2 { margin-bottom: 0; }
+  .pv .panel h3 { font-size: 13px; margin: 0 0 8px; color: var(--fg); }
+  .pv .panel h3 ~ h3 { margin-top: 22px; }
+  .pv .panel p { margin: 0; color: var(--dim); font-size: 13px; }
+  .pv .panel p + p { margin-top: 12px; }
+  .pv .panel strong { color: var(--fg); }
+
+  /* Label + text rows; the label column lines up down the panel. */
+  .kv { display: grid; gap: 14px; margin: 0; }
+  .kv > div { display: grid; grid-template-columns: 17ch minmax(0, 1fr); gap: 16px; }
+  .kv dt { color: var(--fg); font-weight: 600; font-size: 12px; padding-top: 2px; }
+  .kv dd { margin: 0; color: var(--dim); font-size: 13px; }
+  .pv code { font: 600 11px var(--mono); color: var(--ok); background: rgba(var(--g), .08); border: 1px solid rgba(var(--g), .25); padding: 1px 6px; }
+  @media (max-width: 760px) { .kv > div { grid-template-columns: minmax(0, 1fr); gap: 4px; } }
+</style>
+
 <header class="top">
   <div class="wrap">
     <a class="brand" href="./#top"><img src="assets/icon.png" alt="" width="24" height="24">anime4nerd</a>
@@ -20,53 +51,139 @@
   </div>
 </header>
 
-<main class="wrap">
-  <section id="privacy" class="doc" style="border-top:0">
+<main class="wrap pv" id="privacy">
+  <section class="pv-hero">
     <div class="phead"><span>privacy policy · last updated 2026-11-21</span></div>
-    <h1 style="font-size:clamp(1.8rem, 3.6vw, 2.7rem);letter-spacing:-.03em;margin:14px 0 12px">Privacy policy.</h1>
-    <div class="prose">
-      <p><strong>Anime4Nerd collects no personal data automatically. Everything runs inside your browser.</strong> The only way anything reaches us is an optional feedback or problem-report form on this website, and only when you fill it in and press send. What you type and the screenshots you attach can contain personal information if you include it, so please leave out anything private.</p>
-      <h3>What the extension does</h3>
-      <p>Anime4Nerd upscales video on web pages using your computer's GPU. To do that it reads the frames of videos you switch on and draws the result over the video.</p>
-      <h3>Site access</h3>
-      <p>At install your browser asks you to allow the extension on all websites. Video players are often embedded from other domains, so the extension cannot know in advance where a video comes from. On each page it only looks for video elements. It does nothing to a video until you switch that video on in the popup. You can restrict it to specific sites at any time in your browser's extension settings.</p>
-      <h3>Data handled locally</h3>
-      <ul>
-        <li><strong>Video frames</strong> are read into GPU memory to be upscaled and discarded after each frame is drawn. They are never saved or sent anywhere.</li>
-        <li><strong>Page metadata</strong> (page title, headings, Open Graph tags, schema.org data, Media Session metadata) is read only when you open the popup, to label the video. It is not stored.</li>
-        <li><strong>Settings</strong> (preset, line effects, upscale factor, and which sites you switched on) are stored with your browser's extension storage. The preset, line effects and upscale factor may sync between your own browsers if you have Chrome sync or Firefox Sync turned on; the per-site switches stay on this device.</li>
-        <li><strong>Usage counts</strong>: total upscaling time, how many videos were upscaled for 10 minutes or more, which "rate it" card you last answered and how, and whether you had the extension before these counts existed. Numbers only, no titles or sites. They stay on this device, are never synced or sent, and only decide when the popup shows that card.</li>
-        <li><strong>Performance numbers</strong> are measured locally, shown in the popup, and not recorded.</li>
-        <li><strong>Tickets</strong>: whether you have sent a report from this browser (yes or no, nothing else), so the popup's bug icon can open your tickets. The extension never sees or sends your ticket codes.</li>
-      </ul>
-      <h3>Data leaving your device</h3>
-      <p>The extension sends nothing about you. It makes one kind of network request of its own: in manga mode, when a manga reader's page images cannot be read directly, it downloads those same images itself, from the same addresses and without cookies (local and private network addresses are refused). It has no analytics, telemetry, crash reporting, remote configuration, or accounts.</p>
-      <p>It opens two pages of this website. When you remove it, your browser opens <a href="uninstalled">/uninstalled</a>, with only the version number you had in the link. When you click the bug icon in the popup, a new tab opens <a href="report">/report</a> with the version and browser. Opening either page is an ordinary visit: the pages load fonts from Google Fonts, and once you start using a form they load Cloudflare Turnstile.</p>
-      <h3>Feedback and problem reports</h3>
-      <ul>
-        <li><strong>Only on send</strong>: each page has an optional form that sends only when you press send.</li>
-        <li><strong>What is sent</strong>: the reasons you ticked, the text you wrote, the version (and on the report page the browser, and whether it is a bug or an idea), and on the report page up to 3 screenshots you chose. Screenshots are re-encoded as JPEG in your browser first, which removes photo metadata such as location; the server also refuses any image that still carries such metadata. A screenshot shows whatever was on your screen, so crop out anything private. Answers are stored with the date and time of sending, to the minute. No name, email, account or IP address is stored.</li>
-        <li><strong>Abuse limits</strong>: a daily counter per visitor is kept under a one-way hash of the IP address (for IPv6, its /64 network) mixed with a secret and the date. The hash changes every day, the counter expires after two days, and the IP address itself is never stored. Cloudflare Turnstile, an invisible check that loads when you start using the form, verifies the sender is not a bot.</li>
-        <li><strong>Where it goes</strong>: answers are stored with Cloudflare (Workers KV) and read only by the developer, to fix problems. Screenshots are deleted automatically after 60 days; text answers are kept until deleted. Nothing is shared or sold.</li>
-      </ul>
-      <h3>Tickets and replies</h3>
-      <ul>
-        <li><strong>A ticket code</strong>: each report, and each uninstall answer where you wrote something, gets a random code shown once on the thank-you screen (also as a link, /r/&lt;code&gt;). The server keeps only a one-way hash of it, so the code itself is stored nowhere but with you. Whoever has the code can read the conversation and write in it, so keep it to yourself.</li>
-        <li><strong>In your browser</strong>: this site saves your codes in its own local storage, so the tickets page can list them. They stay on this device and are never synced; the × beside each ticket on the tickets page removes its code.</li>
-        <li><strong>The conversation</strong>: replies from the developer and anything you write back (text and up to 3 screenshots, handled like the report's) are stored with your answer, with the time to the minute. When you open a ticket, the time you read it is stored too, so the developer can see whether a reply was read. No name, email, account or IP address is stored.</li>
-        <li><strong>Deleting</strong>: when the developer deletes a report, its conversation and screenshots are deleted with it, and the code then only says the report was removed.</li>
-      </ul>
-      <h3>Permissions</h3>
-      <ul>
-        <li><code>storage</code>: saves your preset, the per-site switch and the local usage counts.</li>
-        <li><code>scripting</code>: adds the upscaler to tabs that were already open when you installed it.</li>
-        <li><code>webNavigation</code>: lists the frames of the current tab, because players are often in iframes.</li>
-        <li>Access to all sites: finds videos and reads their frames on whatever site the player is hosted on.</li>
-      </ul>
-      <h3>Third parties</h3>
-      <p>The Anime4K shaders are open-source code by bloc97 and run locally. The extension contacts no third-party service. This website is hosted on Cloudflare Pages, loads fonts from Google Fonts, and its forms use Cloudflare Turnstile; Cloudflare's and Google's privacy policies cover those visits and checks.</p>
-      <h3>Changes and contact</h3>
-      <p>If this policy changes, the date above is updated. Questions: open an issue on <a href="https://github.com/creedweb3/anime4nerd/issues" rel="noopener">GitHub</a>.</p>
+    <h1><span>Privacy,</span><span class="o">plainly.</span></h1>
+    <p class="lede"><strong>Anime4Nerd collects no personal data automatically. Everything runs inside your browser.</strong> The only way anything reaches us is an optional feedback or problem-report form on this website, and only when you fill it in and press send. What you type and the screenshots you attach can contain personal information if you include it, so please leave out anything private.</p>
+    <nav class="pv-jump" aria-label="On this page">
+      <a class="chip" href="#extension"><b>01</b>the extension</a>
+      <a class="chip" href="#local"><b>02</b>on your device</a>
+      <a class="chip" href="#leaving"><b>03</b>leaving your device</a>
+      <a class="chip" href="#forms"><b>04</b>feedback forms</a>
+      <a class="chip" href="#tickets"><b>05</b>tickets</a>
+      <a class="chip" href="#permissions"><b>06</b>permissions</a>
+      <a class="chip" href="#third"><b>07</b>third parties</a>
+    </nav>
+  </section>
+
+  <div class="readout">
+    <div><span>collected automatically</span><b class="ok">nothing</b></div>
+    <div><span>analytics · telemetry</span><b>none</b></div>
+    <div><span>accounts</span><b>none</b></div>
+    <div><span>forms send</span><b>only on send</b></div>
+  </div>
+
+  <section class="sec doc" id="extension">
+    <div class="rail">
+      <div class="phead"><span>01 · the extension</span></div>
+      <h2>What it does.</h2>
+    </div>
+    <div class="body">
+      <div class="panel">
+        <h3>What the extension does</h3>
+        <p>Anime4Nerd upscales video on web pages using your computer's GPU. To do that it reads the frames of videos you switch on and draws the result over the video.</p>
+        <h3>Site access</h3>
+        <p>At install your browser asks you to allow the extension on all websites. Video players are often embedded from other domains, so the extension cannot know in advance where a video comes from. On each page it only looks for video elements. It does nothing to a video until you switch that video on in the popup. You can restrict it to specific sites at any time in your browser's extension settings.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec doc" id="local">
+    <div class="rail">
+      <div class="phead"><span>02 · on your device</span></div>
+      <h2>Handled locally.</h2>
+    </div>
+    <div class="body">
+      <div class="panel">
+        <dl class="kv">
+          <div><dt>Video frames</dt><dd>are read into GPU memory to be upscaled and discarded after each frame is drawn. They are never saved or sent anywhere.</dd></div>
+          <div><dt>Page metadata</dt><dd>(page title, headings, Open Graph tags, schema.org data, Media Session metadata) is read only when you open the popup, to label the video. It is not stored.</dd></div>
+          <div><dt>Settings</dt><dd>(preset, line effects, upscale factor, and which sites you switched on) are stored with your browser's extension storage. The preset, line effects and upscale factor may sync between your own browsers if you have Chrome sync or Firefox Sync turned on; the per-site switches stay on this device.</dd></div>
+          <div><dt>Usage counts</dt><dd>total upscaling time, how many videos were upscaled for 10 minutes or more, which "rate it" card you last answered and how, and whether you had the extension before these counts existed. Numbers only, no titles or sites. They stay on this device, are never synced or sent, and only decide when the popup shows that card.</dd></div>
+          <div><dt>Performance numbers</dt><dd>are measured locally, shown in the popup, and not recorded.</dd></div>
+          <div><dt>Tickets</dt><dd>whether you have sent a report from this browser (yes or no, nothing else), so the popup's bug icon can open your tickets. The extension never sees or sends your ticket codes.</dd></div>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec doc" id="leaving">
+    <div class="rail">
+      <div class="phead"><span>03 · leaving your device</span></div>
+      <h2>What leaves.</h2>
+    </div>
+    <div class="body">
+      <div class="panel">
+        <p>The extension sends nothing about you. It makes one kind of network request of its own: in manga mode, when a manga reader's page images cannot be read directly, it downloads those same images itself, from the same addresses and without cookies (local and private network addresses are refused). It has no analytics, telemetry, crash reporting, remote configuration, or accounts.</p>
+        <p>It opens two pages of this website. When you remove it, your browser opens <a href="uninstalled">/uninstalled</a>, with only the version number you had in the link. When you click the bug icon in the popup, a new tab opens <a href="report">/report</a> with the version and browser. Opening either page is an ordinary visit: the pages load fonts from Google Fonts, and once you start using a form they load Cloudflare Turnstile.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec doc" id="forms">
+    <div class="rail">
+      <div class="phead"><span>04 · feedback and problem reports</span></div>
+      <h2>Only on send.</h2>
+    </div>
+    <div class="body">
+      <div class="panel">
+        <dl class="kv">
+          <div><dt>Only on send</dt><dd>each page has an optional form that sends only when you press send.</dd></div>
+          <div><dt>What is sent</dt><dd>the reasons you ticked, the text you wrote, the version (and on the report page the browser, and whether it is a bug or an idea), and on the report page up to 3 screenshots you chose. Screenshots are re-encoded as JPEG in your browser first, which removes photo metadata such as location; the server also refuses any image that still carries such metadata. A screenshot shows whatever was on your screen, so crop out anything private. Answers are stored with the date and time of sending, to the minute. No name, email, account or IP address is stored.</dd></div>
+          <div><dt>Abuse limits</dt><dd>a daily counter per visitor is kept under a one-way hash of the IP address (for IPv6, its /64 network) mixed with a secret and the date. The hash changes every day, the counter expires after two days, and the IP address itself is never stored. Cloudflare Turnstile, an invisible check that loads when you start using the form, verifies the sender is not a bot.</dd></div>
+          <div><dt>Where it goes</dt><dd>answers are stored with Cloudflare (Workers KV) and read only by the developer, to fix problems. Screenshots are deleted automatically after 60 days; text answers are kept until deleted. Nothing is shared or sold.</dd></div>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec doc" id="tickets">
+    <div class="rail">
+      <div class="phead"><span>05 · tickets and replies</span></div>
+      <h2>Your code, your thread.</h2>
+    </div>
+    <div class="body">
+      <div class="panel">
+        <dl class="kv">
+          <div><dt>A ticket code</dt><dd>each report, and each uninstall answer where you wrote something, gets a random code shown once on the thank-you screen (also as a link, /r/&lt;code&gt;). The server keeps only a one-way hash of it, so the code itself is stored nowhere but with you. Whoever has the code can read the conversation and write in it, so keep it to yourself.</dd></div>
+          <div><dt>In your browser</dt><dd>this site saves your codes in its own local storage, so the tickets page can list them. They stay on this device and are never synced; the × beside each ticket on the tickets page removes its code.</dd></div>
+          <div><dt>The conversation</dt><dd>replies from the developer and anything you write back (text and up to 3 screenshots, handled like the report's) are stored with your answer, with the time to the minute. When you open a ticket, the time you read it is stored too, so the developer can see whether a reply was read. No name, email, account or IP address is stored.</dd></div>
+          <div><dt>Deleting</dt><dd>when the developer deletes a report, its conversation and screenshots are deleted with it, and the code then only says the report was removed.</dd></div>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec doc" id="permissions">
+    <div class="rail">
+      <div class="phead"><span>06 · permissions</span></div>
+      <h2>What it asks for.</h2>
+    </div>
+    <div class="body">
+      <div class="panel">
+        <dl class="kv">
+          <div><dt><code>storage</code></dt><dd>saves your preset, the per-site switch and the local usage counts.</dd></div>
+          <div><dt><code>scripting</code></dt><dd>adds the upscaler to tabs that were already open when you installed it.</dd></div>
+          <div><dt><code>webNavigation</code></dt><dd>lists the frames of the current tab, because players are often in iframes.</dd></div>
+          <div><dt>Access to all sites</dt><dd>finds videos and reads their frames on whatever site the player is hosted on.</dd></div>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec doc" id="third">
+    <div class="rail">
+      <div class="phead"><span>07 · third parties and contact</span></div>
+      <h2>Everyone else.</h2>
+    </div>
+    <div class="body">
+      <div class="panel">
+        <h3>Third parties</h3>
+        <p>The Anime4K shaders are open-source code by bloc97 and run locally. The extension contacts no third-party service. This website is hosted on Cloudflare Pages, loads fonts from Google Fonts, and its forms use Cloudflare Turnstile; Cloudflare's and Google's privacy policies cover those visits and checks.</p>
+        <h3>Changes and contact</h3>
+        <p>If this policy changes, the date above is updated. Questions: open an issue on <a href="https://github.com/creedweb3/anime4nerd/issues" rel="noopener">GitHub</a>.</p>
+      </div>
     </div>
   </section>
 </main>
