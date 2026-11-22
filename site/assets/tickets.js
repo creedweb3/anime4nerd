@@ -40,7 +40,6 @@
     chip();
   };
   var remove = function (code) { write(read().filter(function (c) { return c !== code; })); chip(); };
-  var clear = function () { write([]); chip(); };
 
   var copyButton = function (value) {
     var b = el('button', 'btn', 'copy');
@@ -128,6 +127,6 @@
     chip();
   };
 
-  window.a4nTickets = { list: read, add: add, remove: remove, clear: clear, box: box, refresh: refresh, fetchAll: fetchAll, CODE: CODE };
+  window.a4nTickets = { list: read, add: add, remove: remove, box: box, refresh: refresh, fetchAll: fetchAll, CODE: CODE };
   chip();
 })();

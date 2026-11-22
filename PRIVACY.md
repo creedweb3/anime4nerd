@@ -39,7 +39,7 @@ Opening either page is an ordinary page visit. The pages load fonts from Google 
 ## Tickets and replies
 
 - **A ticket code**: each report, and each uninstall answer where you wrote something, gets a random code shown once on the thank-you screen (also as a link, `/r/<code>`). The server keeps only a one-way hash of it, so the code itself is stored nowhere but with you. Whoever has the code can read the conversation and write in it, so keep it to yourself.
-- **In your browser**: the site saves your codes in its own local storage, so the tickets page can list them. They stay on this device and are never synced; "Forget them" on the tickets page removes them.
+- **In your browser**: the site saves your codes in its own local storage, so the tickets page can list them. They stay on this device and are never synced; the × beside each ticket on the tickets page removes its code.
 - **The conversation**: replies from the developer and anything you write back (text and up to 3 screenshots, handled like the report's) are stored with your answer, with the time to the minute. When you open a ticket, the time you read it is stored too, so the developer can see whether a reply was read. No name, email, account or IP address is stored.
 - **Deleting**: when the developer deletes a report, its conversation and screenshots are deleted with it, and the code then only says the report was removed.
 

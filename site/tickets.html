@@ -22,6 +22,8 @@
   .th-tabs button[aria-selected="false"]:hover { border-color: var(--line2); color: var(--fg); }
   .th-tabs button[aria-selected="true"] { border-color: rgba(var(--g), .7); background: linear-gradient(135deg, rgba(var(--g), .16), transparent 60%) var(--bg); color: var(--fg); }
   .th-tabs button[aria-selected="true"] i { color: var(--ok); }
+  .th-tabs button i.new { color: var(--ok); display: inline-flex; align-items: center; gap: 6px; }
+  .th-tabs button i.new::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 6px rgba(var(--g), .7); }
   .threads { display: grid; gap: 8px; margin-top: 10px; }
   .th { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; text-align: left; border: 1px solid var(--line); background: var(--bg); padding: 11px 12px; cursor: pointer; font: 12px/1.4 var(--mono); color: var(--dim); transition: border-color .12s; }
   .th:hover { border-color: var(--line2); }
@@ -34,8 +36,23 @@
   .th .s::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
   .forget { margin: 12px 0 0; color: var(--faint); font-size: 11px; }
   .no-tickets { margin: 18px 0 0; color: var(--dim); font-size: 12px; }
-  .forget button { background: none; border: 0; color: var(--dim); font: inherit; text-decoration: underline; cursor: pointer; padding: 0; }
-  .have-code { margin-top: 18px; display: grid; gap: 8px; }
+  /* Each card has its own remove button; it asks first, showing the code (the only way back). */
+  .th-row { position: relative; display: grid; }
+  .th-row .th { padding-right: 44px; }
+  .th-x { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid var(--line2); background: var(--bg); color: var(--dim); font: 13px/1 var(--mono); cursor: pointer; transition: color .12s, background-color .12s, border-color .12s; }
+  .th-x:hover, .th-x:focus-visible { color: var(--bad); background: rgba(var(--r), .1); border-color: rgba(var(--r), .6); outline: none; }
+  .th-confirm { border: 1px solid rgba(var(--r), .5); border-left: 2px solid var(--bad); background: var(--bg); padding: 12px; display: grid; gap: 10px; font-size: 12px; }
+  .th-confirm b { color: var(--fg); font-weight: 600; }
+  .th-confirm p { margin: 0; color: var(--dim); font-size: 11px; line-height: 1.5; }
+  .th-confirm .c { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .th-confirm code { border: 1px solid var(--line2); padding: 7px 10px; color: var(--on); font: 600 11px var(--mono); letter-spacing: .08em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .th-confirm .acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .th-confirm .btn { justify-content: center; padding: 7px 10px; font-size: 11px; }
+  .th-confirm .btn::before { content: none; }
+  .th-confirm .btn.rm { color: var(--bad); border-color: rgba(var(--r), .5); }
+  .th-confirm .btn.rm:hover { background: rgba(var(--r), .12); color: var(--bad); border-color: var(--bad); }
+  .th-confirm .btn.rm::after { --m: var(--bad); }
+  .have-code { margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--line); display: grid; gap: 8px; }
   .have-code .phead { margin: 0; }
   .have-code form { display: flex; gap: 8px; }
   .have-code input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line2); color: var(--fg); padding: 9px 11px; font: 12px var(--mono); letter-spacing: .06em; }
@@ -68,13 +85,20 @@
   .gone-panel p { color: var(--dim); font-size: 13px; }
   .row-end { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 16px; }
   .row-end small { color: var(--faint); font-size: 11px; }
-  #compose { display: grid; gap: 10px; margin-top: 22px; }
+  #compose { display: grid; gap: 10px; margin-top: 22px; padding-top: 22px; border-top: 1px dashed var(--line); }
   #compose textarea { display: block; width: 100%; height: 76px; padding: 9px 11px; background: var(--bg); border: 1px solid var(--line2); color: var(--fg); font: 13px/1.5 var(--mono); resize: vertical; }
   #compose textarea:focus { outline: none; border-color: var(--on); }
   .compose-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-  .compose-row small { color: var(--faint); font-size: 11px; }
-  .compose-btns { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; flex: none; }
-  .compose-btns .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 16px; white-space: nowrap; line-height: 1; margin: 0; }
+  .compose-btns { display: grid; grid-template-columns: 128px 128px; gap: 8px; flex: none; margin-left: auto; }
+  .compose-btns .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; box-sizing: border-box; width: 128px; height: 34px; padding: 0 12px; font-size: 12px; white-space: nowrap; line-height: 1; margin: 0; }
+  .compose-btns .btn svg { width: 14px; height: 14px; }
+  /* The ticket's code beside the buttons: "code" floats on the box's top edge. */
+  .code-box { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .code-box:empty { display: none; }
+  .code-box code { position: relative; box-sizing: border-box; height: 34px; display: inline-flex; align-items: center; padding: 0 12px; border: 1px solid var(--line2); background: var(--bg); color: var(--on); font: 600 11px/1 var(--mono); letter-spacing: .08em; white-space: nowrap; }
+  .code-box code span { position: absolute; top: 0; left: 8px; transform: translateY(-50%); padding: 0 5px; background: var(--panel); color: var(--faint); font: 400 9px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; }
+  .code-box .btn { box-sizing: border-box; height: 34px; padding: 0 10px; font: 600 11px/1 var(--mono); }
+  .code-box .btn::before { content: none; }
   .add-shot { position: relative; cursor: pointer; }
   .add-shot::before { content: none; }
   .add-shot svg { display: block; flex: none; }
@@ -88,7 +112,7 @@
   .err { color: var(--bad); font-size: 12px; margin: 0; }
   .ts { display: flex; justify-content: center; }
   .ts:empty { display: none; }
-  @media (max-width: 520px) { .compose-row { flex-direction: column; align-items: stretch; } }
+  @media (max-width: 700px) { .compose-row { flex-direction: column; align-items: stretch; } .code-box { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; } }
 </style>
 
 <header class="top">
@@ -131,7 +155,7 @@
           <div class="shot-thumbs" id="thumbs"></div>
           <div id="ts" class="ts" data-sitekey="__TURNSTILE_SITEKEY__" data-action="reply"></div>
           <p class="err" id="err" hidden></p>
-          <div class="compose-row"><small>Shows as from you. Nothing about you is sent.</small>
+          <div class="compose-row"><span class="code-box" id="code-box"></span>
             <span class="compose-btns"><label class="btn add-shot" id="add-shot" title="Add screenshots (up to 3)"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><rect x="1.5" y="3" width="13" height="10"/><circle cx="5.5" cy="6.5" r="1.2"/><path d="M1.5 11.5l4-3.5 3 2.5 2-1.5 4 3"/></svg>screenshot<input type="file" id="shots" accept="image/png,image/jpeg,image/webp" multiple aria-label="Add screenshots"></label><button class="btn primary" type="submit" id="go">send</button></span></div>
         </form>
       </div>
@@ -194,7 +218,7 @@
       return T.fetchAll(codes, seen).then(function (list) { tickets = list; });
     };
 
-    // ---------- rail: open / history buttons, the list, forget ----------
+    // ---------- rail: open / history buttons, the list, remove ----------
     var drawRail = function () {
       var lists = $('lists');
       lists.replaceChildren();
@@ -212,7 +236,9 @@
           b.type = 'button';
           b.setAttribute('role', 'tab');
           b.setAttribute('aria-selected', String(v === view));
-          b.append(el('i', null, String(tickets.filter(function (t) { return inView(t, v); }).length)));
+          // A tab holding an unread reply says so, so the top-bar count always leads somewhere visible.
+          var fresh = tickets.filter(function (t) { return inView(t, v) && t.unseen; }).length;
+          b.append(el('i', fresh ? 'new' : null, fresh ? fresh + ' new' : String(tickets.filter(function (t) { return inView(t, v); }).length)));
           b.addEventListener('click', function () {
             view = v;
             var first = tickets.filter(function (t) { return inView(t, v); })[0];
@@ -235,14 +261,50 @@
         s.style.color = word[1];
         b.append(el('span', 't', title), s, el('span', 'd' + (t.unseen ? ' n' : ''), sub));
         b.addEventListener('click', function () { open(t.code); });
-        list.append(b);
+        var row = el('div', 'th-row');
+        var x = el('button', 'th-x', '×');
+        x.type = 'button';
+        x.title = 'Remove from this browser';
+        x.setAttribute('aria-label', 'Remove ticket ' + t.code + ' from this browser');
+        x.addEventListener('click', function () { row.replaceWith(confirmRemove(t)); });
+        row.append(b, x);
+        list.append(row);
       });
-      var forget = el('p', 'forget', 'Codes kept only in this browser. ');
-      var fb = el('button', null, 'Forget them');
-      fb.type = 'button';
-      fb.addEventListener('click', function () { T.clear(); tickets = []; current = null; draw(); });
-      forget.append(fb);
-      lists.append(list, forget);
+      lists.append(list, el('p', 'forget', 'Codes kept only in this browser. × removes one.'));
+    };
+
+    // Removing a ticket asks first and shows its code: without the code, its replies can't be read here again.
+    var confirmRemove = function (t) {
+      var c = el('div', 'th-confirm');
+      var code = el('div', 'c');
+      code.append(el('code', null, t.code), copyButton('copy', t.code));
+      var acts = el('div', 'acts');
+      var keep = el('button', 'btn', 'keep');
+      keep.type = 'button';
+      keep.addEventListener('click', function () { draw(); });
+      var go = el('button', 'btn rm', 'remove');
+      go.type = 'button';
+      go.addEventListener('click', function () {
+        T.remove(t.code);
+        tickets = tickets.filter(function (y) { return y !== t; });
+        if (current === t.code) current = null;
+        var next = tickets.filter(function (y) { return inView(y, view); })[0] || tickets[0];
+        if (!current && next) open(next.code); else draw();
+      });
+      acts.append(keep, go);
+      c.append(el('b', null, 'Remove from this browser?'), el('p', null, 'Replies we send stay on our side, but this browser stops showing them. To see them again, add this code back.'), code, acts);
+      setTimeout(function () { keep.focus(); });
+      return c;
+    };
+
+    var copyButton = function (label, value) {
+      var b = el('button', 'btn', label);
+      b.type = 'button';
+      b.addEventListener('click', function () {
+        var done = function () { b.textContent = 'copied'; setTimeout(function () { b.textContent = label; }, 1200); };
+        if (navigator.clipboard) navigator.clipboard.writeText(value).then(done, function () {});
+      });
+      return b;
     };
 
     // ---------- the open ticket ----------
@@ -321,6 +383,9 @@
         return box.append(r3);
       }
       $('text').placeholder = closed ? closed[3] : 'Write back: more detail, a follow-up, or just thanks.';
+      var codeEl = el('code', null);
+      codeEl.append(el('span', null, 'code'), t.code);
+      $('code-box').replaceChildren(codeEl, copyButton('copy', t.code), copyButton('link', location.origin + '/r/' + t.code));
       $('compose').hidden = false;
     };
 
