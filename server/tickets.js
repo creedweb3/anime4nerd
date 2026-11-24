@@ -12,6 +12,7 @@
 //   msga:<kind>:<id>       our messages, same shape
 //   seen:<kind>:<id>       metadata {ts}: when the reporter last read the ticket
 //   rshot:<id>:<k>:<i>     JPEG i (1-3) of the reporter's k-th message (60-day TTL)
+//   ashot:<id>:<k>:<i>     JPEG i (1-3) of our k-th message (60-day TTL), shown via /api/shot
 // Each side writes only its own key, and reading never rewrites a message key: KV has no
 // compare-and-swap, so a shared key would let one writer replace the other's newer copy.
 // "at" is the minute shown on screen; "ts" (milliseconds) orders the two sides.
@@ -105,8 +106,9 @@ export function threadSummary(uMeta, aMeta, seenMeta) {
   return { n: nu + na, last: uts >= ats && nu ? 'u' : 'a', seen: !na || Math.max(uts, Number(seenMeta?.ts) || 0) >= ats };
 }
 
-// Messages as clients see them: who, text, minute, screenshot count.
-export const shown = (msgs) => msgs.map(({ f, t, at, s }) => ({ f, t, at, ...(s ? { s } : {}) }));
+// Messages as clients see them: who, text, minute, screenshot count, and for our messages with
+// screenshots the message number /api/shot needs to fetch them.
+export const shown = (msgs) => msgs.map(({ f, t, at, s, k }) => ({ f, t, at, ...(s ? { s } : {}), ...(s && f === 'a' ? { k } : {}) }));
 
 // What the reporter sees: their own answer, the status, and the conversation. Never the private note.
 export function publicView(code, answerRaw, mark, msgs, unseen) {

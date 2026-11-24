@@ -76,6 +76,9 @@
   .msg.us .who b { color: var(--ok); }
   .msg p { margin: 0; color: var(--fg); font-size: 13px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
   .msg .att { color: var(--faint); font-size: 11px; }
+  .msg .pics { display: flex; flex-wrap: wrap; gap: 8px; }
+  .msg .pics a { display: block; width: 160px; height: 90px; border: 1px solid var(--line2); background: #000; cursor: zoom-in; }
+  .msg .pics img { display: block; width: 100%; height: 100%; object-fit: cover; }
   .ev { justify-self: center; display: inline-flex; align-items: center; gap: 8px; color: var(--faint); font-size: 11px; }
   .ev::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--c, var(--faint)); }
   .closed { margin-top: 22px; border: 1px solid var(--line2); border-left: 2px solid var(--c); background: var(--bg); padding: 12px 14px; display: grid; gap: 4px; }
@@ -314,13 +317,48 @@
       $('p-env').textContent = t && !t.unknown && !t.gone ? [t.v ? 'v' + t.v : '', t.b].filter(Boolean).join(' · ') : '';
     };
 
-    var message = function (from, text, at, shots) {
+    // Our screenshots, fetched once per page by ticket code (POST, so the code stays out of URLs)
+    // and kept as blob: URLs while the page is open.
+    var pics = new Map();
+    var picUrl = function (code, k, i) {
+      var id = code + '|' + k + '|' + i;
+      if (!pics.has(id)) {
+        pics.set(id, fetch('/api/shot', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: code, k: k, i: i }) })
+          .then(function (res) { if (!res.ok) throw new Error('HTTP ' + res.status); return res.blob(); })
+          .then(function (blob) { return URL.createObjectURL(blob); })
+          .catch(function (x) { pics.delete(id); throw x; }));
+      }
+      return pics.get(id);
+    };
+    var picsRow = function (code, k, count) {
+      var row = el('div', 'pics');
+      for (var i = 1; i <= count; i++) {
+        (function (i) {
+          var a = el('a');
+          a.target = '_blank';
+          a.rel = 'noopener';
+          a.setAttribute('aria-label', 'Open screenshot ' + i);
+          row.append(a);
+          picUrl(code, k, i).then(function (url) {
+            var img = document.createElement('img');
+            img.alt = 'Screenshot ' + i;
+            img.src = url;
+            a.href = url;
+            a.append(img);
+          }, function () { a.replaceWith(el('span', 'att', 'screenshot ' + i + ' is no longer available')); });
+        })(i);
+      }
+      return row;
+    };
+
+    var message = function (from, text, at, shots, code, k) {
       var m = el('div', 'msg ' + (from === 'a' ? 'us' : 'you'));
       var who = el('div', 'who');
       who.append(el('b', null, from === 'a' ? 'anime4nerd' : 'you'), el('span', null, when(at, true)));
       m.append(who);
       if (text) m.append(el('p', null, text));
-      if (shots) m.append(el('span', 'att', '+ ' + shots + ' screenshot' + (shots === 1 ? '' : 's')));
+      if (shots && from === 'a' && k) m.append(picsRow(code, k, shots));
+      else if (shots) m.append(el('span', 'att', '+ ' + shots + ' screenshot' + (shots === 1 ? '' : 's')));
       return m;
     };
 
@@ -360,7 +398,7 @@
       var msgs = el('div', 'msgs');
       // Their report first, then the conversation; the current status sits where it last changed.
       var items = [{ at: t.at, node: message('u', t.note, t.at, t.shots) }];
-      (t.msgs || []).forEach(function (m) { items.push({ at: m.at, node: message(m.f, m.t, m.at, m.s) }); });
+      (t.msgs || []).forEach(function (m) { items.push({ at: m.at, node: message(m.f, m.t, m.at, m.s, t.code, m.k) }); });
       if (EVENT[t.status] && t.since) {
         var ev = el('div', 'ev', EVENT[t.status][0] + ' · ' + when(t.since, true));
         ev.style.setProperty('--c', EVENT[t.status][1]);

@@ -181,6 +181,15 @@ button { cursor: pointer; }
 .reply-row small { color: var(--faint); font-size: 11px; }
 .ghost.send { background: var(--on); color: #000; border-color: var(--on); }
 .ghost.send::before { content: "↩ "; }
+.reply-btns { display: flex; gap: 8px; flex: none; }
+.ghost.attach { position: relative; cursor: pointer; display: inline-flex; align-items: center; }
+.ghost.attach.full { opacity: .45; pointer-events: none; }
+.ghost.attach input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; clip-path: inset(50%); }
+.ghost.attach:focus-within { color: var(--on); border-color: var(--on); }
+.picked { display: flex; gap: 8px; }
+.picked:empty { display: none; }
+.picked figure { position: relative; margin: 0; width: 96px; height: 60px; border: 1px solid var(--line2); background: center/cover no-repeat #000; }
+.picked button { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border: 0; padding: 0; background: rgba(0,0,0,.75); color: var(--on); font: 11px/1 var(--mono); }
 .a-item .replied { color: var(--s-ok); flex: none; }
 .a-item .replied.wait { color: var(--s-warn); }
 
@@ -528,8 +537,45 @@ function memoBox(r) {
 // The ticket conversation the reporter sees on their ticket page: their report is the first
 // message (shown above as the note), then both sides. Only answers with a ticket can be answered:
 // every report, and uninstall answers with a note, sent after tickets existed.
-const rshotUrl = (r, n, i) => `/admin/api/shot?key=${encodeURIComponent(`rshot:${r.key.slice(r.key.indexOf(':') + 1)}:${n}:${i}`)}`;
+// m.k numbers each side's messages on its own: rshot for theirs, ashot for ours.
+const msgShotUrl = (r, m, i) => `/admin/api/shot?key=${encodeURIComponent(`${m.f === 'a' ? 'ashot' : 'rshot'}:${r.key.slice(r.key.indexOf(':') + 1)}:${m.k}:${i}`)}`;
 const waiting = (r) => r.thread?.last === 'u';
+
+// Screenshots picked for a reply, per answer, so a redraw does not drop them. Re-encoded to JPEG of
+// at most ~250 KB before sending, as on the site's forms (the server takes JPEG only).
+const PICKED = new Map();
+const SHOT_LIMIT = 250000;
+const SHOT_SIDE = 1600;
+const isImage = (f) => ['image/png', 'image/jpeg', 'image/webp'].includes(f.type);
+function jpegOf(bmp, scale, quality) {
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(bmp.width * scale));
+  c.height = Math.max(1, Math.round(bmp.height * scale));
+  const g = c.getContext('2d');
+  g.fillStyle = '#fff';
+  g.fillRect(0, 0, c.width, c.height);
+  g.drawImage(bmp, 0, 0, c.width, c.height);
+  return new Promise((ok) => c.toBlob(ok, 'image/jpeg', quality));
+}
+async function shrinkShot(file) {
+  const bmp = await createImageBitmap(file);
+  try {
+    let scale = Math.min(1, SHOT_SIDE / bmp.width, SHOT_SIDE / bmp.height);
+    let quality = 0.8;
+    for (;;) {
+      const blob = await jpegOf(bmp, scale, quality);
+      if (blob && blob.size <= SHOT_LIMIT) return blob;
+      if (scale < 0.1) throw new Error('image too big');
+      if (quality > 0.5) quality -= 0.15; else { scale *= 0.75; quality = 0.8; }
+    }
+  } finally { bmp.close(); }
+}
+const base64Of = (blob) => new Promise((ok, no) => {
+  const fr = new FileReader();
+  fr.onload = () => ok(String(fr.result).split(',')[1]);
+  fr.onerror = () => no(fr.error);
+  fr.readAsDataURL(blob);
+});
 
 function chatBox(r) {
   const full = NOTES.get(r.key);
@@ -544,7 +590,8 @@ function chatBox(r) {
     el('small', {}, el('b', {}, m.f === 'a' ? 'you · anime4nerd' : 'reporter'), ` · ${when(m.at)} UTC`),
     m.t ? el('p', {}, m.t) : null,
     m.s ? el('div', { class: 'shots' }, ...Array.from({ length: m.s }, (_, k) => {
-      const src = rshotUrl(r, m.k, k + 1); // m.k: the reporter's message number
+      // A picture we just sent shows from memory until the next load.
+      const src = m.local?.[k] ?? msgShotUrl(r, m, k + 1);
       return el('img', { src, alt: `Screenshot ${k + 1}`, loading: 'lazy', onclick: () => openLb(src) });
     })) : null));
   if (bubbles.length && r.thread?.last === 'a') {
@@ -557,14 +604,41 @@ function chatBox(r) {
     placeholder: bubbles.length ? 'Write a reply…' : 'Write the first reply. It shows on their ticket page, and in the extension popup.' });
   box.readOnly = !full;
   const send = el('button', { class: 'ghost send' }, 'Send');
+
+  // Screenshots: the button, or paste one (Ctrl+V) into the reply box. Up to 3 per reply.
+  const files = PICKED.get(r.key) ?? [];
+  PICKED.set(r.key, files);
+  const picker = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', multiple: '', 'aria-label': 'Add screenshots' });
+  const attach = el('label', { class: 'ghost attach', title: 'Add screenshots (up to 3), or paste one into the reply' }, 'Screenshot', picker);
+  const thumbs = el('div', { class: 'picked' });
+  const drawPicked = () => {
+    thumbs.replaceChildren(...files.map((p, i) => el('figure', { style: `background-image:url("${p.url}")` },
+      el('button', { 'aria-label': `Remove screenshot ${i + 1}`, onclick: () => { if (send.disabled) return; URL.revokeObjectURL(p.url); files.splice(i, 1); drawPicked(); } }, '✕'))));
+    attach.classList.toggle('full', files.length >= 3);
+  };
+  const add = (list) => {
+    for (const f of list) if (files.length < 3 && isImage(f)) files.push({ file: f, url: URL.createObjectURL(f) });
+    drawPicked();
+  };
+  picker.onchange = () => { add(picker.files); picker.value = ''; };
+  box.onpaste = (e) => {
+    const pics = [...(e.clipboardData?.files ?? [])].filter(isImage);
+    if (pics.length) { e.preventDefault(); add(pics); }
+  };
+  drawPicked();
+
   send.onclick = async () => {
     const text = box.value.trim();
-    if (!text || !full) return box.focus();
+    if ((!text && !files.length) || !full) return box.focus();
     send.disabled = true;
     try {
-      await post('/admin/api/reply', { key: r.key, text });
+      const shots = await Promise.all(files.map((p) => shrinkShot(p.file).then(base64Of)));
+      await post('/admin/api/reply', { key: r.key, text, ...(shots.length ? { shots } : {}) });
       const at = nowMinute();
-      NOTES.set(r.key, { ...full, msgs: [...msgs, { f: 'a', t: text, at }] });
+      const k = msgs.filter((m) => m.f === 'a').length + 1;
+      const sent = files.length ? { s: files.length, k, local: files.map((p) => p.url) } : {};
+      NOTES.set(r.key, { ...full, msgs: [...msgs, { f: 'a', t: text, at, ...sent }] });
+      PICKED.delete(r.key);
       r.thread = { n: msgs.length + 1, last: 'a', seen: false };
       showError('');
       renderA();
@@ -576,7 +650,8 @@ function chatBox(r) {
   box.onkeydown = (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send.click(); } };
   requestAnimationFrame(() => (chats.scrollTop = chats.scrollHeight));
   return el('div', { class: 'chat-frame' }, head, chats,
-    el('div', { class: 'chat-compose' }, box, el('div', { class: 'reply-row' }, el('small', {}, 'Plain text · shows as from anime4nerd · Ctrl+Enter sends'), send)));
+    el('div', { class: 'chat-compose' }, box, thumbs, el('div', { class: 'reply-row' },
+      el('small', {}, 'Plain text · paste or add up to 3 screenshots · Ctrl+Enter sends'), el('div', { class: 'reply-btns' }, attach, send))));
 }
 
 function actions(r) {

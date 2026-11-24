@@ -281,6 +281,75 @@ test('the admin can open reply screenshots, only by their own key shape', async 
   assert.equal((await a.get('/admin/api/shot?key=rshot:../x:1:1')).status, 400);
 });
 
+// ---------- admin screenshots ----------
+
+const seeShot = async (e, body, opts = {}) => (await import('../functions/api/shot.js')).handle(req('/api/shot', body, opts), e);
+
+test('the admin can reply with screenshots; the ticket shows them by message number', async () => {
+  const e = await env();
+  const { body: { code } } = await sendReport(e);
+  const key = answerKey(e);
+  const id = key.slice(key.indexOf(':') + 1);
+  const a = await admin(e);
+  assert.equal((await a.post('/admin/api/reply', { key, text: 'first, no picture' })).status, 204);
+  assert.equal((await a.post('/admin/api/reply', { key, text: 'like this', shots: [jpeg(), jpeg()] })).status, 204);
+  assert.equal((await a.post('/admin/api/reply', { key, shots: [jpeg()] })).status, 204, 'a picture alone is enough');
+  assert.deepEqual([...e.FEEDBACK.store.keys()].filter((k) => k.startsWith('ashot:')).sort(), [`ashot:${id}:2:1`, `ashot:${id}:2:2`, `ashot:${id}:3:1`]);
+  assert.ok(e.FEEDBACK.store.get(`ashot:${id}:2:1`).opts.expirationTtl > 0, 'admin screenshots expire like the others');
+  const t = (await read(e, { codes: [code] })).body.tickets[0];
+  assert.deepEqual(t.msgs.map(({ f, t: text, s, k }) => [f, text, s, k]), [['a', 'first, no picture', undefined, undefined], ['a', 'like this', 2, 2], ['a', '', 1, 3]]);
+  const one = (await a.get(`/admin/api/answer?key=${encodeURIComponent(key)}`)).body;
+  assert.deepEqual(one.msgs.map(({ f, s, k }) => [f, s, k]), [['a', undefined, undefined], ['a', 2, 2], ['a', 1, 3]]);
+  const img = await a.get(`/admin/api/shot?key=${encodeURIComponent(`ashot:${id}:2:1`)}`);
+  assert.equal(img.res.headers.get('content-type'), 'image/jpeg');
+});
+
+test('admin screenshots are checked like the reporter\'s: at most 3, JPEG only', async () => {
+  const e = await env();
+  await sendReport(e);
+  const key = answerKey(e);
+  const a = await admin(e);
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...Array(92).fill(0)]).toString('base64');
+  for (const shots of [[jpeg(), jpeg(), jpeg(), jpeg()], [png], 'x', [5]]) {
+    assert.equal((await a.post('/admin/api/reply', { key, text: 'x', shots })).status, 400, JSON.stringify(shots).slice(0, 30));
+  }
+  assert.equal((await a.post('/admin/api/reply', { key, shots: [] })).status, 400, 'nothing to send');
+  assert.equal([...e.FEEDBACK.store.keys()].some((k) => /^(ashot|msga):/.test(k)), false);
+});
+
+test('the reporter opens our screenshots with the ticket code, and nothing else', async () => {
+  const e = await env();
+  const { body: { code } } = await sendReport(e, { shots: [jpeg()] });
+  const key = answerKey(e);
+  const a = await admin(e);
+  await a.post('/admin/api/reply', { key, text: 'see', shots: [jpeg()] });
+  await write(e, { code, text: 'mine', shots: [jpeg()] });
+  const ok = await seeShot(e, { code: code.toLowerCase(), k: 1, i: 1 });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.headers.get('content-type'), 'image/jpeg');
+  assert.equal(ok.headers.get('x-content-type-options'), 'nosniff');
+  assert.match(ok.headers.get('content-security-policy'), /sandbox/);
+  assert.deepEqual([...new Uint8Array(await ok.arrayBuffer())].slice(0, 2), [0xff, 0xd8]);
+  assert.equal((await seeShot(e, { code, k: 1, i: 2 })).status, 404);
+  assert.equal((await seeShot(e, { code: 'A4N-0000-0000-0000', k: 1, i: 1 })).status, 404);
+  for (const bad of [{ code, k: 0, i: 1 }, { code, k: 1, i: 4 }, { code, k: '1', i: 1 }, { code, k: 51, i: 1 }, { code: 'nope', k: 1, i: 1 }, { code, k: 1, i: 1, f: 'u' }]) {
+    assert.equal((await seeShot(e, bad)).status, 400, JSON.stringify(bad));
+  }
+  assert.equal((await seeShot(e, { code, k: 1, i: 1 }, { origin: 'https://evil.example' })).status, 403);
+  await e.FEEDBACK.delete(key);
+  assert.equal((await seeShot(e, { code, k: 1, i: 1 })).status, 404, 'a removed report shows nothing');
+});
+
+test('deleting an answer removes our screenshots too', async () => {
+  const e = await env();
+  await sendReport(e);
+  const key = answerKey(e);
+  const a = await admin(e);
+  await a.post('/admin/api/reply', { key, text: 'see', shots: [jpeg(), jpeg()] });
+  assert.equal((await a.post('/admin/api/delete', { key })).status, 204);
+  assert.deepEqual([...e.FEEDBACK.store.keys()].filter((k) => k.startsWith('ashot:')), []);
+});
+
 // ---------- injection and abuse ----------
 
 test('script and HTML in messages are stored and returned as plain JSON text, never as a page', async () => {

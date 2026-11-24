@@ -21,7 +21,9 @@
 // Answers are untrusted text typed by strangers. They leave here only as JSON or JPEG with
 // nosniff, and the page puts them on screen as text, never as HTML.
 
-import { PER_KIND_PER_DAY, Rejected, SHOTS_PER_DAY, ipBucket, readCapped, sha256Hex, verifyTurnstile } from '../functions/api/send.js';
+import {
+  PER_KIND_PER_DAY, Rejected, SHOTS_PER_DAY, SHOT_TTL, checkShotShape, decodeShot, ipBucket, readCapped, sha256Hex, verifyTurnstile,
+} from '../functions/api/send.js';
 import { b64url, isPasswordHash, sameBytes, verifyPassword } from './password.js';
 import { MAX_ADMIN_TEXT, MAX_MSGS, STATUSES, markMetadata, markOf, merged, sideFrom, threadSummary, withMessage } from '../server/tickets.js';
 
@@ -31,6 +33,8 @@ const FAILS_PER_VISITOR = 5;
 const LOCK_SECONDS = 15 * 60;
 const FAILS_PER_DAY = 30;
 const MAX_BODY = 4096;
+const MAX_REPLY_BODY = 1_050_000; // a reply with three screenshots, as on /api/reply
+const MAX_REPLY_SHOTS = 3;
 const MAX_PASSWORD = 256;
 const MAX_TOKEN = 2048;
 const MAX_ANSWERS = 5000; // per kind; far above the 60-a-day cap for the 180 days the charts show
@@ -39,6 +43,8 @@ const ANSWER_KEY = /^(report|uninstall):(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z)-[0-9a-f
 const SHOT_KEY = /^shot:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z-[0-9a-f]{16}:[1-3]$/;
 // Screenshots the reporter attached when writing back: message number, then 1-3 (server/tickets.js).
 const RSHOT_KEY = /^rshot:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z-[0-9a-f]{16}:\d{1,2}:[1-3]$/;
+// Screenshots we attached to our own replies, same shape ("ashot:").
+const ASHOT_KEY = /^ashot:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z-[0-9a-f]{16}:\d{1,2}:[1-3]$/;
 const TAGS = ['bug', 'idea', 'uninstall'];
 const BROWSERS = ['', 'chrome', 'firefox'];
 // Admin marks, one KV key per answer: "mark:<answer key>". Status, star, archive and the time the
@@ -59,11 +65,12 @@ const BASE_HEADERS = {
   'cross-origin-resource-policy': 'same-origin',
   'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
 };
-const COMMON_CSP = "img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+const COMMON_CSP = "connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 // Fonts: the site's own JetBrains Mono from Google Fonts, as on every other page of the site.
 const FONTS = 'font-src https://fonts.gstatic.com';
-const LOGIN_CSP = (n) => `default-src 'none'; script-src 'nonce-${n}' ${TURNSTILE}; style-src 'nonce-${n}' https://fonts.googleapis.com; ${FONTS}; frame-src ${TURNSTILE}; ${COMMON_CSP}`;
-const APP_CSP = (n) => `default-src 'none'; script-src 'nonce-${n}'; style-src 'nonce-${n}' https://fonts.googleapis.com; ${FONTS}; ${COMMON_CSP}`;
+const LOGIN_CSP = (n) => `default-src 'none'; script-src 'nonce-${n}' ${TURNSTILE}; style-src 'nonce-${n}' https://fonts.googleapis.com; ${FONTS}; frame-src ${TURNSTILE}; img-src 'self'; ${COMMON_CSP}`;
+// blob: shows thumbnails of screenshots picked for a reply before they are sent.
+const APP_CSP = (n) => `default-src 'none'; script-src 'nonce-${n}'; style-src 'nonce-${n}' https://fonts.googleapis.com; ${FONTS}; img-src 'self' blob:; ${COMMON_CSP}`;
 
 const headers = (extra = {}) => ({ ...BASE_HEADERS, ...extra });
 const notFound = () => new Response('Not found', { status: 404, headers: headers({ 'content-type': 'text/plain; charset=utf-8' }) });
@@ -128,10 +135,10 @@ function checkPost(request, url) {
   if (!(request.headers.get('content-type') ?? '').toLowerCase().startsWith('application/json')) reject(415, 'bad_type');
 }
 
-async function readJson(request, fields) {
+async function readJson(request, fields, max = MAX_BODY) {
   let input;
   try {
-    input = JSON.parse(await readCapped(request, MAX_BODY));
+    input = JSON.parse(await readCapped(request, max));
   } catch (e) {
     if (e instanceof Rejected) throw e;
     reject(400, 'bad_json');
@@ -292,7 +299,7 @@ async function answer(env, url) {
 // nosniff and a sandbox policy, so even opened directly in a tab nothing in them can run.
 async function shot(env, url) {
   const key = url.searchParams.get('key') ?? '';
-  if (!SHOT_KEY.test(key) && !RSHOT_KEY.test(key)) reject(400, 'bad_key');
+  if (!SHOT_KEY.test(key) && !RSHOT_KEY.test(key) && !ASHOT_KEY.test(key)) reject(400, 'bad_key');
   const bytes = await kvCall(() => env.FEEDBACK.get(key, 'arrayBuffer'));
   if (bytes === null) reject(404, 'not_found');
   return new Response(bytes, {
@@ -327,13 +334,19 @@ async function mark(request, env, url) {
   return done();
 }
 
-// Adds our message to the ticket's conversation; the reporter sees it on their ticket page.
+// Adds our message, with up to 3 JPEG screenshots, to the ticket's conversation; the reporter sees
+// it on their ticket page.
 async function replyTo(request, env, url) {
   checkPost(request, url);
-  const input = await readJson(request, ['key', 'text']);
+  const input = await readJson(request, ['key', 'text', 'shots'], MAX_REPLY_BODY);
   const key = answerKey(input.key);
   const text = typeof input.text === 'string' ? input.text.replace(/\r\n?/g, '\n').trim() : '';
-  if (!text || text.length > MAX_ADMIN_TEXT) reject(400, 'bad_text');
+  if (text.length > MAX_ADMIN_TEXT) reject(400, 'bad_text');
+  const shotText = input.shots ?? [];
+  if (!Array.isArray(shotText) || shotText.length > MAX_REPLY_SHOTS) reject(400, 'bad_shot');
+  shotText.forEach(checkShotShape);
+  if (!text && !shotText.length) reject(400, 'bad_text');
+  const shots = shotText.map(decodeShot);
   const kv = env.FEEDBACK;
   const [answer, mine, ours] = await Promise.all([
     kvCall(() => kv.getWithMetadata(key)), kvCall(() => kv.getWithMetadata(`msgu:${key}`)), kvCall(() => kv.get(`msga:${key}`)),
@@ -342,8 +355,14 @@ async function replyTo(request, env, url) {
   if (answer.metadata?.k !== 1) reject(400, 'no_ticket');
   const ourMsgs = sideFrom(ours, 'a');
   if (ourMsgs.length + (Number.isInteger(mine.metadata?.n) ? mine.metadata.n : 0) >= MAX_MSGS) reject(409, 'thread_full');
+  // Screenshots first, named by the number this message will get, so a message never points at
+  // pictures that were not stored.
+  const id = key.slice(key.indexOf(':') + 1);
+  for (const [i, bytes] of shots.entries()) {
+    await kvCall(() => kv.put(`ashot:${id}:${ourMsgs.length + 1}:${i + 1}`, bytes, { expirationTtl: SHOT_TTL, metadata: { contentType: 'image/jpeg' } }));
+  }
   // Only our own key is written: the reporter's messages live in msgu: and can't be overwritten.
-  const next = withMessage(ourMsgs, { t: text, at: `${new Date().toISOString().slice(0, 16)}Z`, ts: Date.now() });
+  const next = withMessage(ourMsgs, { t: text, at: `${new Date().toISOString().slice(0, 16)}Z`, ts: Date.now(), ...(shots.length ? { s: shots.length } : {}) });
   await kvCall(() => kv.put(`msga:${key}`, next.value, { metadata: next.metadata }));
   return done();
 }
@@ -354,7 +373,7 @@ async function remove(request, env, url) {
   const id = key.slice(key.indexOf(':') + 1);
   const kv = env.FEEDBACK;
   // The ticket index ("tk:…") stays: the reporter's link then says the report was removed.
-  const replyShots = (await listKeys(kv, `rshot:${id}:`, 200)).map((k) => k.name);
+  const replyShots = [...await listKeys(kv, `rshot:${id}:`, 200), ...await listKeys(kv, `ashot:${id}:`, 200)].map((k) => k.name);
   for (const k of [key, `done:${key}`, `mark:${key}`, `msgu:${key}`, `msga:${key}`, `seen:${key}`, `shot:${id}:1`, `shot:${id}:2`, `shot:${id}:3`, ...replyShots]) await kvCall(() => kv.delete(k));
   log(204, 'deleted');
   return done();
