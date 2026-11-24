@@ -165,8 +165,11 @@ button { cursor: pointer; }
 
 /* ticket conversation: one chat window, the reply box docked at its bottom */
 .chat-frame { border: 1px solid var(--line2); background: #0d0d0d; display: grid; }
-.chat-head { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 14px; background: var(--panel); }
-.chats { display: grid; gap: 10px; align-content: start; padding: 14px; max-height: 380px; overflow: auto; }
+/* One background for the whole box; head, messages and reply box share the 24px side margin. */
+.chat-head { display: flex; justify-content: space-between; align-items: baseline; padding: 12px 24px 4px; }
+/* The scrollbar sits in its own gutter, inset from the frame's border, with the same space on the
+   left: messages keep an even margin on both sides whether or not the list scrolls. */
+.chats { display: grid; gap: 10px; align-content: start; padding: 14px; margin-inline: 4px; scrollbar-gutter: stable both-edges; max-height: 380px; overflow: auto; }
 .chats.empty { padding-block: 22px; justify-items: center; }
 .chat { max-width: 88%; border: 1px solid var(--line2); background: var(--panel); padding: 9px 12px; display: grid; gap: 6px; justify-self: start; }
 .chat.us { justify-self: end; border-color: rgba(var(--g), .5); background: linear-gradient(135deg, rgba(var(--g), .12), transparent 60%) var(--bg); }
@@ -175,7 +178,7 @@ button { cursor: pointer; }
 .chat small b { font-weight: 400; color: var(--dim); }
 .chat.us small b, .chat small i { font-style: normal; color: var(--s-ok); }
 .chat .shots img { width: 160px; height: 90px; }
-.chat-compose { display: grid; gap: 8px; padding: 10px 14px 12px; background: var(--panel); }
+.chat-compose { display: grid; gap: 8px; padding: 10px 24px 16px; }
 .chat-input { width: 100%; min-height: 120px; resize: vertical; background: #0d0d0d; border: 1px solid var(--line); color: var(--fg); padding: 8px 10px; font: 12px/1.6 var(--mono); }
 .chat-input::placeholder { color: var(--faint); }
 .chat-input:focus { outline: none; border-color: var(--line2); }
