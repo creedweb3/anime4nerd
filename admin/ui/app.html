@@ -110,8 +110,10 @@ button { cursor: pointer; }
 .a-info { display: flex; flex-direction: column; gap: 22px; min-width: 0; border-right: 1px solid var(--line); padding-right: 24px; }
 .a-info > .a-actions { margin-top: auto; }
 .a-convo { position: sticky; top: 0; min-width: 0; }
-.a-convo .chat-frame { min-height: calc(100vh - 240px); grid-template-rows: auto 1fr auto; }
-.a-convo .chats { align-content: start; }
+/* Fixed to the window: the messages fill the space between the head and the reply box and scroll
+   inside it (no 380px cap here, which left the last message cut off above an empty gap). */
+.a-convo .chat-frame { height: calc(100vh - 240px); min-height: 420px; grid-template-rows: auto minmax(0, 1fr) auto; }
+.a-convo .chats { align-content: start; max-height: none; }
 .a-convo .chats.empty { align-content: center; }
 /* Status as separate boxes, three to a row. */
 .a-cols .status-seg { max-width: none; grid-template-columns: repeat(3, 1fr); gap: 6px; border: 0; }
@@ -119,7 +121,7 @@ button { cursor: pointer; }
 .a-cols .status-seg button:first-child { border-left: 1px solid var(--line); }
 .a-cols .status-seg button:hover { border-color: var(--line2); }
 .a-cols .status-seg button[aria-pressed="true"] { border-color: var(--c, var(--line2)); }
-@media (max-width: 1100px) { .a-cols { grid-template-columns: minmax(0, 1fr); } .a-info { border-right: 0; padding-right: 0; } .a-convo { position: static; } .a-convo .chat-frame { min-height: 0; } }
+@media (max-width: 1100px) { .a-cols { grid-template-columns: minmax(0, 1fr); } .a-info { border-right: 0; padding-right: 0; } .a-convo { position: static; } .a-convo .chat-frame { height: auto; min-height: 0; } .a-convo .chats { max-height: 380px; } }
 .a-read h1 { font-size: 20px; margin: 0; letter-spacing: -.01em; }
 .a-meta { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 0; }
 .a-meta dt { color: var(--faint); }
@@ -592,7 +594,8 @@ function chatBox(r) {
     m.s ? el('div', { class: 'shots' }, ...Array.from({ length: m.s }, (_, k) => {
       // A picture we just sent shows from memory until the next load.
       const src = m.local?.[k] ?? msgShotUrl(r, m, k + 1);
-      return el('img', { src, alt: `Screenshot ${k + 1}`, loading: 'lazy', onclick: () => openLb(src) });
+      // A picture that loads late grows its message: keep the newest message in view.
+      return el('img', { src, alt: `Screenshot ${k + 1}`, onclick: () => openLb(src), onload: (e) => { const c = e.target.closest('.chats'); if (c) c.scrollTop = c.scrollHeight; } });
     })) : null));
   if (bubbles.length && r.thread?.last === 'a') {
     bubbles.at(-1).querySelector('small').append(r.thread.seen ? el('i', {}, ' · seen') : ' · not seen yet');
