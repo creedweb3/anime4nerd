@@ -72,6 +72,8 @@
       </div>
     </div>
     <p class="empty" id="empty">No video found yet. Start playback, then reopen this popup.</p>
+    <!-- The browser withholds access to this page or its player frames: no script runs there, so no video is found. -->
+    <p class="empty access" id="access" hidden><span>No access to this site, so videos here can't be found.</span><button type="button" class="mp-btn primary" id="access-go">allow</button></p>
   </section>
 
   <section class="panel" id="pmap" hidden>

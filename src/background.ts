@@ -49,6 +49,18 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 
 chrome.runtime.onStartup.addListener(() => { void restoreBadge().catch(() => {}); });
 
+// Site access granted from the popup's "allow" button (or the browser's own menu): open tabs on
+// those sites get the scripts now, without a reload. The popup may already be closed (Firefox
+// closes it while its permission prompt shows), so this is done here.
+chrome.permissions.onAdded.addListener(async ({ origins }) => {
+  if (!origins?.length) return;
+  // Every web tab, not only tabs whose address matches: the host granted is often a player frame
+  // inside another site. Frames that still refuse fail one by one; the content script guards
+  // against running twice.
+  const tabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] }).catch(() => []);
+  await Promise.allSettled(tabs.map((t) => (t.id !== undefined ? injectTab(t.id) : Promise.resolve())));
+});
+
 // Rating card counters, and manga page images. Only this extension's own
 // pages and content scripts can send runtime messages here; values are clamped again in addWatch.
 chrome.runtime.onMessage.addListener((msg: Message, sender, respond) => {

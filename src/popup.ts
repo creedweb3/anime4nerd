@@ -11,6 +11,7 @@ import type { MangaMeta } from './manga-meta';
 import { BROWSER, reportUrl } from './site-links';
 import { TICKETS_URL, hasTickets } from './tickets';
 import { initColorTab, setColorVideo } from './popup-color';
+import { accessOrigins, missingAccess } from './site-access';
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
 const hintEl = $('#hint');
@@ -279,10 +280,26 @@ function paintSettings(s: Settings) {
 }
 
 // --- helpers ---------------------------------------------------------------------
+// Frames webNavigation does not list: Chromium leaves out blob: frames, where some players live.
+// An all-frames executeScript answers with every frame's id; it is asked at most every few seconds,
+// and its frames are only added to webNavigation's list, never taken away from it.
+const FRAME_PROBE_MS = 3000;
+let probedFrames: number[] = [];
+let lastFrameProbe = -Infinity;
+function probeFrames(id: number) {
+  if (performance.now() - lastFrameProbe < FRAME_PROBE_MS) return;
+  lastFrameProbe = performance.now();
+  chrome.scripting.executeScript({ target: { tabId: id, allFrames: true }, func: () => 0 })
+    .then((hits) => { probedFrames = (hits ?? []).map((h) => h.frameId); }, () => { /* a frame refused: keep the last list */ });
+}
+
 async function sendToFrames<T>(msg: Message): Promise<{ frameId: number; value: T }[]> {
   if (tabId === undefined) return [];
+  probeFrames(tabId);
   let frames: { frameId: number }[] = [{ frameId: 0 }];
   try { frames = (await chrome.webNavigation.getAllFrames({ tabId })) ?? frames; } catch { /* keep main frame */ }
+  const extra = probedFrames.filter((id) => !frames.some((f) => f.frameId === id)).map((frameId) => ({ frameId }));
+  frames = [...frames, ...extra];
   const results = await Promise.allSettled(frames.map(async (f) => ({
     frameId: f.frameId,
     value: await chrome.tabs.sendMessage(tabId!, msg, { frameId: f.frameId }) as T,
@@ -672,7 +689,11 @@ async function refresh() {
     try { paintMangaCard(manga); paintPageMap(manga); } catch { /* never let the manga card stop the rest of the popup */ }
     const offered = paintPrompt(detected, list.map((x) => x.v));
     sourcesEl.hidden = offered === 'anime'; // the preview stands in for the paused video cards
-    emptyEl.hidden = list.length > 0 || !!manga || !!offered; // "No video found yet" would contradict the preview
+    // No video: a frame the browser gives us no access to may hold it. Say so instead of "No video found yet".
+    if (list.length === 0) void checkAccess(); else missingSites = [];
+    const blocked = list.length === 0 && !manga && !offered && missingSites.length > 0;
+    accessEl.hidden = !blocked;
+    emptyEl.hidden = list.length > 0 || !!manga || !!offered || blocked; // "No video found yet" would contradict the preview
     const reading = !!manga && list.length === 0;
     setText($('#nowLabel'), reading ? 'reading now' : 'playing now');
     $('#perf').hidden = reader;
@@ -761,6 +782,40 @@ let mangaHost = ''; // the address-bar host the switch belongs to
 let mangaSiteOn = false; // stored switch state for mangaHost
 let mangaPending: boolean | null = null; // clicked state until storage echoes it
 let injected = false;
+
+// --- site access ---------------------------------------------------------------------
+const accessEl = $('#access');
+let tabUrl: string | undefined; // the address-bar URL (absent when the browser withholds it)
+let missingSites: string[] = []; // host patterns of this tab's page and frames the browser withholds
+let checkingAccess = false;
+
+async function checkAccess() {
+  if (checkingAccess || tabId === undefined) return;
+  checkingAccess = true;
+  try {
+    const frames = await chrome.webNavigation.getAllFrames({ tabId }).catch(() => null);
+    const origins = accessOrigins([tabUrl, ...(frames ?? []).map((f) => f.url)]);
+    missingSites = await missingAccess(origins, (o) => chrome.permissions.contains({ origins: [o] }));
+  } finally {
+    checkingAccess = false;
+  }
+}
+
+// The browser's own prompt. Firefox may close the popup while it shows; the background then
+// injects the scripts when access is granted (permissions.onAdded), so nothing is lost.
+function initAccess() {
+  $('#access-go').addEventListener('click', () => {
+    const origins = missingSites;
+    if (!origins.length || tabId === undefined) return;
+    const id = tabId;
+    // request() must be the first call in the click, or the browser refuses it as not user-initiated.
+    chrome.permissions.request({ origins }).then((granted) => {
+      if (!granted) return;
+      missingSites = [];
+      void injectContent(id).then(refresh);
+    }, () => {});
+  });
+}
 
 async function injectContent(id: number) {
   const target = { tabId: id, allFrames: true };
@@ -1200,12 +1255,14 @@ function initPrompt() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   tabId = tab?.id;
   try { tabHost = new URL(tab?.url ?? '').host; } catch { /* no url permission */ }
+  tabUrl = tab?.url;
   tick();
   initColorTab();
   void showWhatsNew();
   void showRateCard();
   initMangaCard(tab?.url);
   initPrompt();
+  initAccess();
   paintSettings(await loadSettings());
   onSettingsChanged((s) => { paintSettings(s); void refresh(); });
   onSourcesChanged(() => { void refresh(); });

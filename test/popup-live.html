@@ -29,6 +29,15 @@
   const STORE = q.get('store') === '1';
   // build=firefox: Firefox gives WebGL no GPU timer queries, so the video reports frame rate only.
   const FIREFOX = q.get('build') === 'firefox';
+  // access=1: the browser withholds access to the player frame (tau-video.xyz), so no video answers
+  // until permissions.request grants it.
+  const ACCESS = q.get('access') === '1';
+  let granted = !ACCESS;
+  const PLAYER_FRAME = 'https://tau-video.xyz/embed/demo';
+  // unlisted=1: the video is in a frame webNavigation leaves out (a blob: frame in Chromium);
+  // only an all-frames executeScript reports it.
+  const UNLISTED = q.get('unlisted') === '1';
+  const HIDDEN_FRAME = 7;
   if (PROFILES) {
     const v = { brightness: 1, contrast: 1.05, saturation: 1.1, gamma: 1, vibrance: 1, temperature: 0, tint: 0, deband: 0, grain: 0 };
     const name = (i) => (q.get('names') === 'long' ? `WMWMWMWMWMW${String(i + 1).padStart(3, '0')}` : `look ${i + 1}`); // long: PROFILE_NAME_MAX wide letters
@@ -101,15 +110,24 @@
     storage: { sync: area('sync'), local: area('local'), onChanged: { addListener: (fn) => listeners.push(fn) } },
     tabs: {
       query: async () => [{ id: 1, url: PAGES ? 'https://reader.example/vagabond/12' : 'https://player.example/watch/frieren-12', active: true }],
-      sendMessage: async (_tab, msg) => {
-        if (msg?.type === 'a4k-list') return PAGES ? [] : [video()];
+      sendMessage: async (_tab, msg, opts) => {
+        // access=1: the video is in the player frame only; the top page has none.
+        if (msg?.type === 'a4k-list' && UNLISTED) return opts?.frameId === HIDDEN_FRAME ? [video()] : [];
+        if (msg?.type === 'a4k-list') return PAGES || !granted || (ACCESS && opts?.frameId === 0) ? [] : [video()];
         if (msg?.type === 'a4k-manga-status') return PAGES ? manga() : null;
         if (msg?.type === 'a4k-page-meta') return META;
         return null;
       },
     },
-    webNavigation: { getAllFrames: async () => [{ frameId: 0, url: 'https://player.example/watch/frieren-12' }] },
-    scripting: { insertCSS: async () => {}, executeScript: async () => [] },
+    webNavigation: { getAllFrames: async () => [{ frameId: 0, url: 'https://player.example/watch/frieren-12' }, ...(ACCESS ? [{ frameId: 3, url: PLAYER_FRAME }] : [])] },
+    permissions: {
+      contains: async ({ origins }) => granted || !origins.some((o) => o.startsWith('https://tau-video.xyz/')),
+      request: async () => { window.__accessRequested = true; granted = true; return true; },
+    },
+    scripting: {
+      insertCSS: async () => {},
+      executeScript: async ({ target }) => (target?.allFrames ? [{ frameId: 0, result: 0 }, ...(UNLISTED ? [{ frameId: HIDDEN_FRAME, result: 0 }] : [])] : []),
+    },
     action: { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} },
   };
 })();

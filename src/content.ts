@@ -1155,12 +1155,26 @@ let settings: Settings;
 let sources: Sources = {};
 let colorState: ColorState = DEFAULT_COLOR;
 
+/**
+ * An element's shadow root, closed ones included: some players hide their <video> in a closed
+ * root, where element.shadowRoot reads null. Content scripts may read closed roots: Firefox through
+ * element.openOrClosedShadowRoot, Chromium through chrome.dom.openOrClosedShadowRoot.
+ */
+function shadowOf(el: Element): ShadowRoot | null {
+  if (el.shadowRoot) return el.shadowRoot;
+  const firefoxRoot = (el as Element & { openOrClosedShadowRoot?: ShadowRoot | null }).openOrClosedShadowRoot;
+  if (firefoxRoot !== undefined) return firefoxRoot;
+  if (!(el instanceof HTMLElement)) return null;
+  try { return chrome.dom?.openOrClosedShadowRoot?.(el) ?? null; } catch { return null; }
+}
+
 function collectVideos(root: Document | ShadowRoot | Element, out: HTMLVideoElement[]) {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
   let n = walker.currentNode as Element | null;
   while (n) {
     if (n instanceof HTMLVideoElement) out.push(n);
-    if ((n as Element).shadowRoot) collectVideos((n as Element).shadowRoot!, out);
+    const shadow = n instanceof Element ? shadowOf(n) : null;
+    if (shadow) collectVideos(shadow, out);
     n = walker.nextNode() as Element | null;
   }
 }
