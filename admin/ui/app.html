@@ -186,6 +186,12 @@ button { cursor: pointer; }
 .acts button.danger { color: var(--bad); }
 .chat.editing { border-color: var(--on); }
 .ghost.cancel::before { content: "✕ "; }
+/* The status change and closed banner, as the reporter's ticket page shows them. */
+.chats .ev { justify-self: center; display: inline-flex; align-items: center; gap: 8px; color: var(--faint); font-size: 11px; }
+.chats .ev::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--c, var(--faint)); }
+.chats .closed { border: 1px solid var(--line2); border-left: 2px solid var(--c); background: var(--bg); padding: 10px 14px; display: grid; gap: 4px; }
+.chats .closed b { color: var(--c); font-weight: 600; }
+.chats .closed small { color: var(--dim); font-size: 11px; }
 .chat-compose { display: grid; gap: 8px; padding: 10px 24px 16px; }
 .chat-input { width: 100%; min-height: 120px; resize: vertical; background: #0d0d0d; border: 1px solid var(--line); color: var(--fg); padding: 8px 10px; font: 12px/1.6 var(--mono); }
 .chat-input::placeholder { color: var(--faint); }
@@ -594,6 +600,15 @@ const base64Of = (blob) => new Promise((ok, no) => {
   fr.readAsDataURL(blob);
 });
 
+// Same words as the reporter's ticket page (site/tickets.html), so this view matches what they see.
+const EVENT = { progress: ['marked working on it', 'var(--s-warn)'], done: ['marked fixed', 'var(--s-ok)'], wontfix: ["marked won't fix", 'var(--dim)'], cantfix: ["marked can't fix", 'var(--s-crit)'] };
+const CLOSED = {
+  done: ['var(--s-ok)', 'Fixed.', 'Still happening after the update? Write back and this opens again.'],
+  wontfix: ['var(--dim)', "Closed: won't fix.", 'The last reply explains why. Questions or thoughts on it? Write back, every message is read.'],
+  cantfix: ['var(--s-crit)', "Closed: can't fix.", 'This one is outside what the extension can change; the last reply explains why.'],
+  archived: ['var(--faint)', 'This conversation is closed.', 'Replies are off here. If something comes up again, send a new report: it gets its own code.'],
+};
+
 function chatBox(r) {
   const full = NOTES.get(r.key);
   const head = el('div', { class: 'chat-head' }, el('span', { class: 'label' }, 'Conversation · the reporter sees this'),
@@ -649,8 +664,17 @@ function chatBox(r) {
   if (bubbles.length && r.thread?.last === 'a') {
     bubbles.at(-1).querySelector('small').append(r.thread.seen ? el('i', {}, ' · seen') : ' · not seen yet');
   }
+  // The status line sits where the status last changed; the banner closes the list, as on their page.
+  const event = EVENT[r.status] && r.since
+    ? el('div', { class: 'ev', style: `--c:${EVENT[r.status][1]}` }, `${EVENT[r.status][0]} · ${when(r.since)} UTC`) : null;
+  const evAt = msgs.findIndex((m) => m.at > r.since);
+  const banner = CLOSED[r.archived ? 'archived' : r.status];
+  const items = [
+    ...(event ? [...bubbles.slice(0, evAt < 0 ? bubbles.length : evAt), event, ...bubbles.slice(evAt < 0 ? bubbles.length : evAt)] : bubbles),
+    banner ? el('div', { class: 'closed', style: `--c:${banner[0]}` }, el('b', {}, banner[1]), el('small', {}, banner[2])) : null,
+  ].filter(Boolean);
   const chats = !full ? el('div', { class: 'chats empty' }, el('span', { class: 'muted' }, 'Loading…'))
-    : bubbles.length ? el('div', { class: 'chats' }, ...bubbles)
+    : items.length ? el('div', { class: 'chats' }, ...items)
       : el('div', { class: 'chats empty' }, el('span', { class: 'muted' }, 'No replies yet. Their report above is the first message.'));
   const box = el('textarea', { class: 'chat-input', maxlength: '2000', rows: '5', 'aria-label': 'Reply',
     placeholder: bubbles.length ? 'Write a reply…' : 'Write the first reply. It shows on their ticket page, and in the extension popup.' });
