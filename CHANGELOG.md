@@ -1,6 +1,21 @@
 # Changelog
 
-## 1.3.0 (2026-11-21)
+## 1.3.1 (2026-11-25)
+
+### Fixed
+- 8x upscale no longer zooms into the video. At 8x a 1080p video needs a
+  15360x8640 canvas; Chromium silently halves canvases that large, and only
+  the corner of the frame showed, stretched over the player. The upscale
+  still runs at full 8x and is scaled into the canvas the browser gives.
+- Videos in player frames that hide from scripts are found: frames loaded
+  from `blob:` or `data:` addresses (`match_origin_as_fallback`; in Chrome,
+  Edge and Brave the popup also asks frames the browser's frame list leaves
+  out) and videos inside closed shadow roots.
+- When no video is found because the browser withholds access to the page or
+  a player frame (Firefox, or "on click" site access in Chrome), the popup
+  names the host and offers "allow", which opens the browser's own permission
+  prompt; the video then shows without a reload. It used to say only
+  "No video found yet".
 
 ### Added
 - Manga mode, on Chrome, Edge, Brave and Firefox: detects manga readers and

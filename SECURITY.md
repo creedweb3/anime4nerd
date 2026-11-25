@@ -1,7 +1,7 @@
 # Security
 
 This document describes what Anime4Nerd can and cannot do, how it is protected,
-what was reviewed, and how to use it safely. Last reviewed: 2026-11-21 (v1.3.0).
+what was reviewed, and how to use it safely. Last reviewed: 2026-11-25 (v1.3.1).
 
 ## Threat model in one paragraph
 
@@ -127,6 +127,19 @@ origin only, stores whether the site holds any ticket (a yes/no flag), and the p
 icon then opens the tickets page. Known limit: reading tickets is open to anyone with the
 site (codes cannot be guessed, but a flood of requests can use up the Free plan's daily
 storage reads); a rate-limiting rule needs a custom domain.
+
+An eighth pass (2026-11-25, v1.3.1) covered the player-detection changes. Content scripts
+now also run in `blob:`/`data:` frames (`match_origin_as_fallback`); those frames exist only
+inside pages that already get the scripts, and the page-world script still has no extension
+API or messaging. The popup asks every frame of the active tab for its id with an empty
+script (at most every 3 s while open); frame ids come from the browser and cannot be
+spoofed, and frame replies are still shown only as text. The scan reads closed shadow
+roots (content scripts only; nothing is exposed to the page), limited to elements that can
+host one and to 32 levels of nesting. The "allow" button requests only hosts the browser
+withholds, names the first of them, and runs only on the user's click; pages cannot open
+the prompt. No critical or high issues were found; the fixes from the pass (the host
+named in the row, feedback when the browser refuses, no stale state after a grant) are
+in this release.
 
 ## For people who install it
 
