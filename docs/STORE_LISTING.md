@@ -37,7 +37,7 @@ Screenshot credits: the before/after image uses "A snapshot from the 2012 demo r
 
 **Permission justifications (store form):**
 - `storage`: saves the chosen preset, color settings and profiles, which sites and manga readers are switched on, whether the user has a report ticket on our website (yes or no), and local usage counts (upscaled time and episodes) that decide when the popup shows a "rate it" card. Stays on the device; nothing is sent.
-- `scripting`: adds the upscaler to tabs that were already open at install, so no reload is needed.
+- `scripting`: adds the upscaler to tabs that were already open at install, and to a site once you allow access from the popup, so no reload is needed. The popup also runs an empty script in each frame of the current tab to find player frames the browser's frame list leaves out.
 - `webNavigation`: lists the frames of the current tab, because video players are usually embedded in iframes.
 - `webRequest`: Manga mode only. Read-only listeners (no blocking, no changes) note which IP address answered a page load and the extension's own downloads of manga page images. Manga readers often serve page images from other hosts without CORS, so the extension downloads them itself; the address check makes sure a page cannot use those downloads to reach local or private network addresses. Nothing is sent anywhere.
 - Host permission `<all_urls>`: video players and manga readers are embedded from many different domains (the page and the player's host differ), so the extension must be able to find a video or reader pages in any frame. It reads frames only from videos and readers the user switches on and sends nothing about the user anywhere.

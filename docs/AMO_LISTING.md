@@ -62,7 +62,7 @@ AMO has no per-permission form; reviewers read the code and the notes to reviewe
 in the notes (they are also in `PRIVACY.md`):
 
 - `storage`: saves the preset, line effects and upscale factor (`storage.sync`, synced by Firefox Sync if the user has it on), the per-site on/off map (`storage.local`, key `anime4k-sources`) and a one-off "updated to x.y.z" flag for the What's new notice (`storage.local`), and local usage counts (upscaled time and episodes, `storage.local` key `anime4k-rate`) that decide when the popup shows a "rate it" card linking to this add-on's reviews page; never synced or sent. See `src/settings.ts`, `src/whats-new.ts` and `src/rate-prompt.ts`.
-- `scripting`: on install or update, `src/background.ts` injects `content.css`, `content.js` and `fullscreen-redirect.js` into frames of tabs that were already open, so the user does not have to reload them. That is its only use.
+- `scripting`: on install or update, `src/background.ts` injects `content.css`, `content.js` and `fullscreen-redirect.js` into frames of tabs that were already open, so the user does not have to reload them, and does the same after the user grants site access from the popup (`permissions.onAdded`). The popup (`src/popup.ts`) injects `content.js` into the current tab after such a grant, and runs an empty function (`() => 0`) in all frames of the current tab at most every 3 seconds while it is open, only to learn frame ids that `webNavigation.getAllFrames` leaves out (blob: frames in Chromium). Nothing is read from the page that way.
 - `webNavigation`: `webNavigation.getAllFrames` lists the frames of a tab. The background uses it to inject frame by frame (one refused frame does not stop the rest), and the popup uses it to ask each frame for its videos, because players are usually in iframes.
 - `webRequest` (manga mode): the background reads, with no blocking and no changes, the IP address that answered (`details.ip`) for two kinds of request: page and frame loads, and its own fetches of manga page images. Manga readers serve page images from other hosts without CORS, so the background downloads them for the content script; the address check makes sure a page cannot use this to read local network or cloud metadata addresses (a public name that resolves to a private address is refused). It also reads the `Location` header of its own fetches to check each redirect hop the same way. Nothing is recorded beyond the current session (`storage.session`) and nothing is sent anywhere.
 - Host permission `<all_urls>`: video players are embedded from many different domains (the page and the player's host differ), so the content script must run in every frame to find `<video>` elements, and must be able to read the frames of a video the user switches on. Until the user switches a video on in the popup, the content script only looks for `<video>` elements. Nothing is sent anywhere.
@@ -89,7 +89,7 @@ would make that file differ from a reviewer's build.
 **Notes to reviewer (paste into the AMO field; AMO allows at most 3000 characters):**
 
 ```text
-Anime4Nerd 1.3.0 runs bloc97's Anime4K shaders (MIT, unchanged) over web <video> and manga reader page images with WebGL2. No remote code, no analytics, no accounts. Source attached; also https://github.com/creedweb3/anime4nerd. Full reviewer notes: docs/AMO_LISTING.md in the source archive.
+Anime4Nerd 1.3.1 runs bloc97's Anime4K shaders (MIT, unchanged) over web <video> and manga reader page images with WebGL2. No remote code, no analytics, no accounts. Source attached; also https://github.com/creedweb3/anime4nerd. Full reviewer notes: docs/AMO_LISTING.md in the source archive.
 
 BUILD (Node 24, npm 11; any OS)
   npm ci
@@ -98,10 +98,12 @@ Output is dist-firefox/, identical file for file to the uploaded zip:
   unzip "Anime4Nerd firefox.zip" -d uploaded && diff -r uploaded dist-firefox
 esbuild bundles and minifies src/*.ts; .glsl shaders are bundled as text into gpu.js. Firefox manifest changes are in firefoxManifest() in build.mjs.
 
-NEW IN 1.3.0
-- Manga mode: background.js downloads manga page images the reader already shows (readers often serve them cross-origin without CORS): http(s) only, no cookies, 25 MB cap, timeout, max 5 redirects followed by hand. Local, private and cloud-metadata addresses are refused by name and by the address that answered.
-- webRequest (new): read-only listeners (no blocking, no changes) read details.ip and the Location header for page/frame loads and the add-on's own image fetches, only for that address check. Kept in storage.session, never sent.
-- Color controls: applied in the shader's final pass; settings in storage.local.
+NEW IN 1.3.1 (no new permissions)
+- Content scripts set match_origin_as_fallback, so they also run in blob:/data: player frames.
+- The video scan also reads closed shadow roots (element.openOrClosedShadowRoot).
+- If the user has withheld site access, the popup names the host and its "allow" button calls permissions.request for hosts already in host_permissions, on the user's click only. permissions.onAdded then injects the content scripts into open tabs.
+- 8x fix: the final pass scales into the canvas size the browser actually gives.
+Unchanged since 1.3.0: manga image downloads (http(s) only, no cookies, 25 MB cap, local/private/metadata addresses refused) and read-only webRequest for that address check.
 
 INNERHTML (the validator's 5 warnings)
 - popup.js video card (src/popup.ts): constant template, no interpolation; page text is set later with textContent.
@@ -116,7 +118,7 @@ Their optional forms send only what the user types (and screenshots they attach)
 
 PERMISSIONS
 - storage: settings, per-site on/off, color profiles, local usage counts for a "rate it" card. Never sent.
-- scripting: injects content scripts into already-open tabs on install/update.
+- scripting: injects content scripts into already-open tabs on install/update and after a site-access grant; the popup runs an empty function in the current tab's frames to learn their ids.
 - webNavigation: getAllFrames (players live in iframes); onCommitted for the address check.
 - <all_urls>: players and readers are embedded from any domain; nothing runs beyond finding videos until the user switches one on.
 
