@@ -103,7 +103,7 @@ NEW IN 1.3.1 (no new permissions)
 - The video scan also reads closed shadow roots (element.openOrClosedShadowRoot).
 - If the user has withheld site access, the popup names the host and its "allow" button calls permissions.request for hosts already in host_permissions, on the user's click only. permissions.onAdded then injects the content scripts into open tabs.
 - 8x fix: the final pass scales into the canvas size the browser actually gives.
-Unchanged since 1.3.0: manga image downloads (http(s) only, no cookies, 25 MB cap, local/private/metadata addresses refused) and read-only webRequest for that address check.
+Validator warning "dom.openOrClosedShadowRoot is not supported": a Chromium-only fallback. Firefox takes element.openOrClosedShadowRoot first, so that call never runs in Firefox.
 
 INNERHTML (the validator's 5 warnings)
 - popup.js video card (src/popup.ts): constant template, no interpolation; page text is set later with textContent.
