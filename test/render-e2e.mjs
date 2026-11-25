@@ -42,6 +42,10 @@ execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'nullsrc=size=
   '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '35', '-pix_fmt', 'yuv420p', '-an', '-movflags', '+faststart', path.join(work, 'noise.mp4')]);
 fs.writeFileSync(path.join(work, 'noise.html'), '<video src="noise.mp4" muted autoplay playsinline style="width:1920px;height:1080px"></video>');
 fs.writeFileSync(path.join(work, 'index.html'), '<video src="v.mp4" muted autoplay loop playsinline style="width:1920px;height:1080px"></video>');
+// 1080p source: at 8x (15360x8640) it fits the texture limit but not Chromium's canvas buffer.
+execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=1920x1080:rate=24:duration=60',
+  '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-an', '-movflags', '+faststart', path.join(work, 'hd.mp4')]);
+fs.writeFileSync(path.join(work, 'hd.html'), '<body style="margin:0"><video src="hd.mp4" muted autoplay loop playsinline style="width:960px;height:540px;display:block"></video></body>');
 const server = http.createServer((req, res) => {
   const file = path.join(work, req.url === '/' ? 'index.html' : path.basename(req.url));
   if (!fs.existsSync(file)) { res.writeHead(404).end(); return; }
@@ -175,6 +179,46 @@ try {
   check('cost model predicts 4x from 2x never more than 10% low, and closer than a flat 4x, for presets it was and was not fitted on', measuredRows.length >= 4
     && measuredRows.every((e) => under(e) <= 0.1 && e.modelErr < e.flatErr),
     errors.map((e) => e.skipped ? `${e.preset}: skipped` : `${e.preset}: 2x ${e.at2} ms, 4x ${e.at4} ms, model ${e.model} (${(e.modelErr * 100).toFixed(0)}%), flat ${e.flat} (${(e.flatErr * 100).toFixed(0)}%)`).join(' | '));
+
+  // 8x of a 1080p video: Chromium caps the canvas's drawing buffer by area and halves it without
+  // an error. The canvas must still show the whole frame, scaled down, not a zoomed-in corner:
+  // a screenshot of it must match one of the paused video under it (both shrunk to 240x135).
+  await sw.evaluate(async () => {
+    const cur = (await chrome.storage.sync.get('anime4k')).anime4k ?? {};
+    await chrome.storage.sync.set({ anime4k: { ...cur, preset: 'A', upscale: '8x' } });
+  });
+  await page.goto(`http://${host}/hd.html`);
+  await page.waitForSelector('canvas.a4k-canvas:not([hidden])', { timeout: 30000 });
+  let hd = null;
+  for (let i = 0; i < 40 && hd?.status !== 'Active'; i++) { await page.waitForTimeout(250); hd = (await list())?.[0]; }
+  await page.evaluate(() => document.querySelector('video').pause());
+  await page.waitForTimeout(800);
+  const clip = { x: 0, y: 0, width: 960, height: 540 };
+  const shown = (await page.screenshot({ clip })).toString('base64');
+  await page.evaluate(() => { document.querySelector('canvas.a4k-canvas').style.visibility = 'hidden'; });
+  await page.waitForTimeout(300);
+  const plain = (await page.screenshot({ clip })).toString('base64');
+  const diff = await page.evaluate(async ([a, b]) => {
+    const pixels = (png) => new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = 240; c.height = 135;
+        const g = c.getContext('2d');
+        g.drawImage(img, 0, 0, 240, 135);
+        resolve(g.getImageData(0, 0, 240, 135).data);
+      };
+      img.src = `data:image/png;base64,${png}`;
+    });
+    const [x, y] = [await pixels(a), await pixels(b)];
+    let sum = 0;
+    for (let i = 0; i < x.length; i += 4) sum += Math.abs(x[i] - y[i]) + Math.abs(x[i + 1] - y[i + 1]) + Math.abs(x[i + 2] - y[i + 2]);
+    return sum / (x.length / 4) / 3; // mean difference per channel, 0-255
+  }, [shown, plain]);
+  // Upscaling changes the picture a little (about 0.5 here); a zoomed-in corner differs by ~100.
+  check('8x of a 1080p video shows the whole frame, not a zoomed-in corner', hd?.status === 'Active' && hd.stats?.outputWidth === 1920 * 8 && diff < 5,
+    `${hd?.status}, output ${hd?.stats?.outputWidth}x${hd?.stats?.outputHeight}, mean difference from the video ${diff.toFixed(2)}`);
+
   await sw.evaluate(async () => {
     const cur = (await chrome.storage.sync.get('anime4k')).anime4k ?? {};
     await chrome.storage.sync.set({ anime4k: { ...cur, preset: 'A', upscale: '2x' } });

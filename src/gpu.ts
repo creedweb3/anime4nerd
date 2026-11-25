@@ -349,6 +349,16 @@ async function buildRenderer(
     canvas.width = finalSize.w;
     canvas.height = finalSize.h;
   }
+  // Browsers cap the canvas's drawing buffer by area, below the texture limit, and shrink it
+  // without an error (Chromium halves 15360x8640, a 1080p video at 8x). Drawing the full output
+  // into the smaller buffer would show only its corner, zoomed in. The chain keeps its full size
+  // in textures; the canvas takes the buffer's real size and the present pass scales down into it.
+  // Both sizes are read first: setting canvas.width reallocates the buffer and changes the height.
+  const { drawingBufferWidth: bufW, drawingBufferHeight: bufH } = gl;
+  if (bufW < canvas.width || bufH < canvas.height) {
+    canvas.width = bufW;
+    canvas.height = bufH;
+  }
   const presentPass = addPass('present', PRESENT_FRAG, [{ name: 'FRAME', tex: texOf(plan.final) }], null);
 
   await finishPrograms(gl, pendingPrograms, () => destroyed);
@@ -442,9 +452,9 @@ async function buildRenderer(
    */
   function measureReach(): number | null {
     const last = compiled.find((c) => c.final);
-    const sx = canvas.width / w;
+    const sx = finalSize.w / w;
     const half = Math.min(REACH_WINDOW, Math.floor(Math.min(w, h) / 2) - 1);
-    if (!last || !floatRead || half < 8 || !Number.isInteger(sx) || canvas.height !== h * sx) return null;
+    if (!last || !floatRead || half < 8 || !Number.isInteger(sx) || finalSize.h !== h * sx) return null;
     const side = 2 * half * sx;
     const px = new Uint8Array(w * h * 4);
     const shots = [new Float32Array(side * side * 4), new Float32Array(side * side * 4)];
@@ -454,7 +464,7 @@ async function buildRenderer(
       gl!.texSubImage2D(gl!.TEXTURE_2D, 0, 0, 0, w, h, gl!.RGBA, gl!.UNSIGNED_BYTE, px);
       drawPasses(false);
       gl!.bindFramebuffer(gl!.FRAMEBUFFER, last.fbo);
-      gl!.readPixels(canvas.width / 2 - half * sx, canvas.height / 2 - half * sx, side, side, gl!.RGBA, gl!.FLOAT, into);
+      gl!.readPixels(finalSize.w / 2 - half * sx, finalSize.h / 2 - half * sx, side, side, gl!.RGBA, gl!.FLOAT, into);
     };
     let worst = 0;
     // Harsh and mild noise: the first drives data-dependent shaders hard, the second avoids
@@ -477,7 +487,7 @@ async function buildRenderer(
   let reach: number | null = null; // source pixels; null = draw every frame in full
   let prevValid = false; // prevTex holds the frame the final texture was drawn from
   if (reuse?.usable) {
-    const key = `${chainKey(settings)}|${debandPass ? 'deband' : ''}|${w}x${h}|${canvas.width}`;
+    const key = `${chainKey(settings)}|${debandPass ? 'deband' : ''}|${w}x${h}|${finalSize.w}`;
     if (!reachCache.has(key)) {
       // Measured with deband at full strength (its reach is also floored below).
       debandStrength = DEBAND_MEASURE;
@@ -561,8 +571,8 @@ async function buildRenderer(
       fps: frameTimes.length / 2,
       passes: compiled.length,
       textureBytes,
-      outputWidth: canvas.width,
-      outputHeight: canvas.height,
+      outputWidth: finalSize.w, // the chain's output, also when the canvas shows it scaled down
+      outputHeight: finalSize.h,
       timerSupported: !!timerExt,
       reach,
     };
