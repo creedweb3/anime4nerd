@@ -2,11 +2,12 @@
 //
 // Body: {"code", "k", "i"}: the ticket code, the number of our message (k, from the ticket's
 // messages) and the picture in it (1-3). Only our own screenshots ("ashot:") are served: the code
-// is the key, as for /api/tickets, so it is sent in the body, never in a URL. Costs two KV reads,
-// no writes. The bytes are JPEG we stored from the admin page; they go out as image/jpeg with
+// is the key, as for /api/tickets, so it is sent in the body, never in a URL. Costs four KV
+// reads, no writes. Only a picture of a message still shown is served: never one of an unsent
+// message, or a slot past the message's count, even if a key was left behind. The bytes are JPEG we stored from the admin page; they go out as image/jpeg with
 // nosniff and a sandbox policy, so nothing in them can run even if opened on their own.
 import { Rejected, kvCall, logOutcome, readCapped, reply } from './send.js';
-import { MAX_MSGS, normCode, ticketKey } from '../../server/tickets.js';
+import { MAX_MSGS, normCode, sideFrom, ticketKey } from '../../server/tickets.js';
 
 const MAX_BODY = 512;
 
@@ -39,7 +40,10 @@ export async function handle(request, env) {
     const key = await kvCall(() => kv.get(index));
     if (!key) reject(404, 'not_found');
     // The answer itself must still exist: a removed report shows nothing.
-    if ((await kvCall(() => kv.get(key))) === null) reject(404, 'not_found');
+    const [answer, ours] = await Promise.all([kvCall(() => kv.get(key)), kvCall(() => kv.get(`msga:${key}`))]);
+    if (answer === null) reject(404, 'not_found');
+    const msg = sideFrom(ours, 'a').find((m) => m.k === input.k);
+    if (!msg || msg.gone || input.i > (msg.s ?? 0)) reject(404, 'not_found');
     const id = key.slice(key.indexOf(':') + 1);
     const bytes = await kvCall(() => kv.get(`ashot:${id}:${input.k}:${input.i}`, 'arrayBuffer'));
     if (bytes === null) reject(404, 'not_found');

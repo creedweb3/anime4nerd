@@ -60,12 +60,15 @@ const VERSION = /^\d+\.\d+\.\d+$/;
 const BROWSERS = ['chrome', 'firefox'];
 const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
 // Invisible or text-disguising code points, removed from notes: C0/C1 controls except tab and
-// newline, soft hyphen, Mongolian vowel separator, zero-width characters, bidi controls,
-// line/paragraph separators, word joiners, the byte-order mark, interlinear annotation
-// characters and Unicode tag characters. Built from numbers so the source stays plain ASCII.
+// newline, soft hyphen, combining grapheme joiner, Arabic letter mark (a bidi control),
+// Hangul and Braille blanks that render as nothing, Mongolian vowel separator, zero-width
+// characters, bidi controls, line/paragraph separators, word joiners, the byte-order mark,
+// interlinear annotation characters and Unicode tag characters. Built from numbers so the source
+// stays plain ASCII.
 const INVISIBLE_RANGES = [
-  [0x00, 0x08], [0x0b, 0x1f], [0x7f, 0x9f], [0xad, 0xad], [0x180e, 0x180e], [0x200b, 0x200f],
-  [0x2028, 0x202e], [0x2060, 0x2064], [0x2066, 0x2069], [0xfeff, 0xfeff], [0xfff9, 0xfffb],
+  [0x00, 0x08], [0x0b, 0x1f], [0x7f, 0x9f], [0xad, 0xad], [0x34f, 0x34f], [0x61c, 0x61c],
+  [0x115f, 0x1160], [0x180e, 0x180e], [0x200b, 0x200f], [0x2028, 0x202e], [0x2060, 0x2069],
+  [0x2800, 0x2800], [0x3164, 0x3164], [0xfeff, 0xfeff], [0xffa0, 0xffa0], [0xfff9, 0xfffb],
   [0xe0000, 0xe007f],
 ];
 const cp = (n) => `\\u{${n.toString(16)}}`;

@@ -396,6 +396,11 @@ test('the admin can unsend a message: it leaves the ticket, its screenshots go, 
   assert.equal((await seeShot(e, { code, k: 1, i: 1 })).status, 404);
   assert.equal((await seeShot(e, { code, k: 2, i: 1 })).status, 200);
   assert.equal((await a.post('/admin/api/unsend', { key, k: 1 })).status, 404, 'already unsent');
+  // A picture key left behind (an unsend cut off midway) is still never served.
+  await e.FEEDBACK.put(`ashot:${id}:1:1`, Buffer.from(jpeg(1), 'base64'));
+  assert.equal((await seeShot(e, { code, k: 1, i: 1 })).status, 404, 'no pictures of an unsent message');
+  await e.FEEDBACK.put(`ashot:${id}:2:2`, Buffer.from(jpeg(1), 'base64'));
+  assert.equal((await seeShot(e, { code, k: 2, i: 2 })).status, 404, 'no slot past the message\'s count');
   assert.equal((await a.post('/admin/api/edit', { key, k: 1, text: 'back?' })).status, 404, 'an unsent message cannot be edited');
   // A new reply after it still gets the next number.
   await a.post('/admin/api/reply', { key, text: 'third', shots: [jpeg(3)] });
@@ -455,6 +460,10 @@ test('invisible and direction-changing characters are removed from write-backs',
   const { body: { code } } = await sendReport(e);
   await write(e, { code, text: 'ok‮gnp.exe​\u0000 done' });
   assert.equal((await read(e, { codes: [code] })).body.tickets[0].msgs[0].t, 'okgnp.exe done');
+  // Blanks that render as nothing, and the Arabic letter mark (a bidi control).
+  await write(e, { code, text: 'a\u061cb\u3164c\u2800d\u034fe\u115ff\uffa0g\u2065h' });
+  assert.equal((await read(e, { codes: [code] })).body.tickets[0].msgs[1].t, 'abcdefgh');
+  assert.equal((await write(e, { code, text: '\u3164\u3164\u2800' })).status, 400, 'a message of blanks alone is empty');
 });
 
 test('codes cannot reach any KV key but their own hashed index', async () => {
