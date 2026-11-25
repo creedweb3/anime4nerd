@@ -32,7 +32,9 @@
   still scenes), with bit-identical output.
 - GPU-load cap: when the GPU cannot keep up, the upscale steps down (never
   below 2x) instead of dropping frames, and says so in the popup. 16x and 32x
-  are removed; a saved choice of either becomes 8x.
+  are removed; a saved choice of either becomes 8x. The fixed 8K output cap and
+  2 GB texture budget are gone too: only the GPU's own texture limit and the
+  load cap lower the factor.
 
 ### Fixed
 - Turning upscaling on in a Vime player (mkissa.to) blacked out the video and
@@ -160,7 +162,7 @@
 - Upscale factor: **auto** (default), 2×, 4×, 8×, 16×, 32×. Factors above 2×
   chain extra `Anime4K_Upscale_CNN_x2_M` passes, one per doubling. Auto uses 4×
   only when the video is shown at more than 2× its source size, such as 720p in
-  fullscreen on a 1440p or 4K screen. A manual choice runs at the largest factor
+  fullscreen on a 4K screen. A manual choice runs at the largest factor
   that fits the GPU texture limit, 8K output and a 2 GB texture budget; the
   popup then says e.g. `(8×) · 32× capped: GPU limit`.
 - The video card shows the exact output size, e.g. `720p → 5120×2880 (4×)`.

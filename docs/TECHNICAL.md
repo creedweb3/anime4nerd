@@ -103,11 +103,12 @@ The Anime4K networks are trained for exactly 2x, so larger factors chain extra
 `Upscale_CNN_x2_M` passes, one per doubling:
 
 - **auto** (default): 2x, or 4x when the video is shown at more than 2x its
-  source size in device pixels (e.g. 720p fullscreen on a 1440p+ screen).
+  source size in device pixels (e.g. 720p fullscreen on a 4K screen; on a
+  1440p screen 720p is exactly 2x, so it stays at 2x).
 - **2x, 4x, 8x**: manual. The renderer uses the largest factor at or
-  below the choice whose output fits the GPU's texture limit, stays at or under
-  8K (7680×4320 pixels) and keeps all intermediate textures under 2 GB, and steps
-  down while the GPU cannot keep up. The popup then shows e.g.
+  below the choice whose output fits the GPU's texture limit
+  (`MAX_TEXTURE_SIZE`), and steps down while the GPU cannot keep up (the
+  load cap also runs in auto, without a note). The popup then shows e.g.
   `(4×) · 8× capped: GPU limit` or `GPU load`. A saved 16x or 32x (removed in
   1.3.0) becomes 8x. In practice 8x is reachable
   for 480p and smaller sources; above 4x the extra detail is mostly downscaled
@@ -167,19 +168,23 @@ Fixtures live in `test/meta-test.ts`.
 ## GPU meter
 
 Each active video row shows live GPU cost measured with
-`EXT_disjoint_timer_query_webgl2`: ms per frame, load (% of the frame budget at
-the video's fps), rolling average/peak, a 48-sample bar graph, pass count, VRAM
-held by the shader textures, and output size. Red bars mean the GPU took longer
-than one video frame.
+`EXT_disjoint_timer_query_webgl2`: GPU load (% of the frame limit at the
+video's fps), ms per frame, output fps, average · peak, the frame limit, late
+frames, and a 48-sample bar graph. Output size is on the video's own card. Red
+bars mean the GPU took longer than one video frame.
 
-Reference numbers, RTX 2060, 1920×1080 source → 3840×2160, Chromium (ANGLE D3D11):
+Reference numbers, RTX 2060, 1920×1080 source → 3840×2160, Chromium (ANGLE D3D11),
+every frame drawn in full (measured for 1.0.0, before frame reuse; the 1.0.0
+VRAM figures are left out because textures have been shared since 1.3.0):
 
-| Preset | GPU ms/frame | Passes | VRAM |
-|---|---|---|---|
-| A   | 15.1 | 39 | 704 MB |
-| A+A | 23.7 | 47 | 1210 MB |
-| C   | 13.2 | 22 | 435 MB |
-| C+A | 15.8 | 30 | 941 MB |
+| Preset | GPU ms/frame | Passes |
+|---|---|---|
+| A   | 15.1 | 39 |
+| A+A | 23.7 | 47 |
+| C   | 13.2 | 22 |
+| C+A | 15.8 | 30 |
+
+Pass counts include the final present (colour) pass; deband adds one more.
 
 A 24 fps video gives a 41.7 ms budget, so A uses ~36% of the GPU, A+A ~57%.
 
