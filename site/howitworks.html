@@ -78,7 +78,7 @@
     <div><span>runs on</span><b>your gpu · webgl2</b></div>
     <div><span>shaders</span><b>anime4k, unchanged</b></div>
     <div><span>still scenes</span><b>3–5× less gpu</b></div>
-    <div><span>sent over the network</span><b class="ok">0 bytes</b></div>
+    <div><span>sent about you</span><b class="ok">nothing</b></div>
   </div>
 
   <section class="sec doc" id="loop">
@@ -90,11 +90,11 @@
     <div class="body">
       <div class="panel">
         <dl class="kv">
-          <div><dt>Finding videos</dt><dd>the extension runs in every frame of the page, embedded players included, and looks for <code>&lt;video&gt;</code> elements, even inside shadow roots. It lists them in the popup with a name taken from the page (series, episode). Nothing happens to a video until you switch it on.</dd></div>
+          <div><dt>Finding videos</dt><dd>the extension runs in every frame of the page, embedded players included, and looks for <code>&lt;video&gt;</code> elements, even inside open shadow roots. It lists them in the popup with a name taken from the page (series, episode). Nothing is upscaled until you switch it on.</dd></div>
           <div><dt>The overlay</dt><dd>a <code>&lt;canvas&gt;</code> is laid exactly over the video, at the video's own stacking level, so the player's controls, menus and subtitles stay on top. Subtitles the browser draws inside the video itself (WebVTT) are redrawn above the picture.</dd></div>
-          <div><dt>One render per frame</dt><dd>on Chrome, Edge and Brave, <code>requestVideoFrameCallback</code> fires once for each decoded frame, and each one is rendered once. Firefox fires it too rarely on 60 fps video, so there the extension renders on the first screen refresh after the frame count changes.</dd></div>
+          <div><dt>One render per frame</dt><dd>on Chrome, Edge and Brave, <code>requestVideoFrameCallback</code> fires once for each decoded frame, and each one is rendered at most once (a frame is skipped while the GPU is still busy with the last). Firefox fires it too rarely on 60 fps video, so there the extension renders on the first screen refresh after the frame count changes.</dd></div>
           <div><dt>The frame on the GPU</dt><dd>the frame is copied into GPU memory, run through every shader pass into 16-bit float textures, and the last one is drawn to the canvas. The video never touches the disk.</dd></div>
-          <div><dt>When it pauses</dt><dd>in picture-in-picture, in the browser's own video fullscreen and in hidden tabs, rendering stops. On resize the chain is rebuilt for the new size. On any GPU error the canvas is removed and the plain video shows.</dd></div>
+          <div><dt>When it pauses</dt><dd>in picture-in-picture, in the browser's own video fullscreen, in hidden tabs and while the video is scrolled out of view, rendering stops. Resizing the player only moves the canvas; the chain is rebuilt when the video's own resolution changes, or when auto switches between 2× and 4×. On any GPU error the canvas is removed and the plain video shows.</dd></div>
           <div><dt>Fullscreen</dt><dd>nothing can be drawn over a bare fullscreen video, so when a page fullscreens an upscaled video, the extension fullscreens the video's parent instead and shows its own on-video menu there.</dd></div>
         </dl>
       </div>
@@ -112,7 +112,7 @@
         <h3>Read like mpv reads them</h3>
         <p>Anime4K ships as mpv "user shaders": GLSL files whose comments say which texture each pass reads, what size it writes and when it runs. Anime4Nerd parses that format, works out every pass's size for your video, and compiles all the programs in parallel. The first start compiles about 40 large shaders, which takes 5–10 seconds once; after that the browser caches them.</p>
         <h3>The passes</h3>
-        <p><strong>Clamp highlights</strong> limits bright overshoot so later passes don't ring around edges. <strong>Restore</strong> is a small neural network that repairs blur and compression damage on line art. <strong>Upscale ×2</strong> is a second network that doubles width and height, predicting the new pixels instead of stretching the old ones. Optional <strong>line effects</strong> darken or thin outlines at the end.</p>
+        <p><strong>Restore</strong> is a small neural network that repairs blur and compression damage on line art. <strong>Upscale ×2</strong> is a second network that doubles width and height, predicting the new pixels instead of stretching the old ones. Optional <strong>line effects</strong> darken or thin outlines. <strong>Clamp highlights</strong> (Anime4K's de-ring) records the source's local brightest values first, and runs last: it clamps the result to them, removing the bright halos the networks can leave around edges.</p>
       </div>
       <div class="table-wrap">
         <table>
@@ -127,7 +127,7 @@
         </tbody>
         </table>
       </div>
-      <p class="credit">The standard Anime4K mpv mappings. Pass counts at 2×, without line effects or colour passes.</p>
+      <p class="credit">The standard Anime4K mpv mappings. Pass counts at 2× without line effects, including the final colour pass; deband adds one more.</p>
     </div>
   </section>
 
@@ -140,9 +140,9 @@
     <div class="body">
       <div class="panel">
         <dl class="kv">
-          <div><dt>auto (default)</dt><dd>2×, or 4× when the video is shown at more than twice its source size in screen pixels, for example 720p fullscreen on a 1440p or larger screen.</dd></div>
-          <div><dt>2×, 4×, 8×</dt><dd>each doubling past 2× adds one more upscale pass. Above 4× the extra detail is mostly scaled back down by the browser, so 8× pays off only for small sources (480p and below).</dd></div>
-          <div><dt>Honest caps</dt><dd>the renderer uses the largest factor at or below your choice whose output fits the GPU's texture limit, stays at or under 8K (7680×4320) and keeps all its textures under 2 GB. When it caps, the popup says why, for example <code>8× capped: GPU limit</code>.</dd></div>
+          <div><dt>auto (default)</dt><dd>2×, or 4× when the video is shown at more than twice its source size in screen pixels, for example 720p fullscreen on a 4K screen. (On a 1440p screen, 720p is exactly 2×, so it stays at 2×.)</dd></div>
+          <div><dt>2×, 4×, 8×</dt><dd>each doubling past 2× adds one more upscale step (9 passes). Above 4× the extra detail is mostly scaled back down by the browser, so 8× pays off only for small sources (480p and below).</dd></div>
+          <div><dt>Honest caps</dt><dd>the renderer uses the largest factor at or below your choice whose output fits the GPU's texture limit (the largest image your graphics card can hold). The only other thing that lowers it is the GPU-load cap below. When a manual choice is capped, the popup says why, for example <code>8× capped: GPU limit</code>.</dd></div>
         </dl>
       </div>
     </div>
@@ -173,7 +173,7 @@
       <div class="panel">
         <dl class="kv">
           <div><dt>What it watches</dt><dd>the share of the video's frames that actually get drawn, and the GPU's own frame times. Fewer than 92% drawn means frames are being dropped. The GPU counts as the cause when its usual frame time is close to the frame's time limit, or its slowest frames go over it.</dd></div>
-          <div><dt>Stepping down</dt><dd>a moderate drop must last 6 seconds, a severe one (under 75% drawn) 2 seconds, before the factor steps down to one predicted to use at most 80% of the GPU's time. It never goes below 2×, and the popup shows <code>GPU load</code> while it is capped.</dd></div>
+          <div><dt>Stepping down</dt><dd>a moderate drop must last 6 seconds, a severe one (under 75% drawn) 2 seconds, before the factor steps down to one predicted to use at most 80% of the GPU's time. It never goes below 2×. With a manual factor the popup shows <code>GPU load</code> while it is capped; in auto it steps down quietly.</dd></div>
           <div><dt>No false alarms</dt><dd>the first 8 seconds of a video, and 3 seconds after resuming from pause, don't count: the GPU is still clocking up from idle and the page is still settling. A confirmed cap holds for that video, so it doesn't flip back and forth.</dd></div>
           <div><dt>If 2× is too much</dt><dd>the cap can't go lower, so on a weak GPU choose a lighter preset (Mode C is the cheapest), or use colour grading on its own (below).</dd></div>
         </dl>
@@ -192,7 +192,7 @@
         <h3>The controls</h3>
         <p>Brightness, contrast, saturation, gamma, hue and grain use <strong>VLC's own units</strong>, so a value you know from VLC's Video Effects means the same here. Vibrance, temperature, tint and deband are added on top.</p>
         <h3>Where it runs</h3>
-        <p>Colour is applied in the final draw to the canvas. That pass runs in full every frame, so moving a slider takes effect at once without rebuilding anything. The math is VLC's adjust filter on BT.709 YUV:</p>
+        <p>Colour is applied in the final draw to the canvas. That pass runs in full every frame, so moving a slider takes effect at once. Only turning deband on from zero rebuilds the chain, because it adds a pass. The math is VLC's adjust filter on BT.709 YUV:</p>
         <code class="formula">Y' = (C·(Y − 0.5) + 0.5 + (B − 1)) ^ (1/G)
 U' = S·(U cos h + V sin h)
 V' = S·(V cos h − U sin h)</code>
@@ -200,9 +200,9 @@ V' = S·(V cos h − U sin h)</code>
         <h3>Deband</h3>
         <p>Deband is mpv's algorithm, run as the very first pass, before Anime4K, as mpv does it. It averages each pixel with random samples around it, but only where they differ by less than the threshold. Banding in flat skies and shadows smooths out; real edges stay.</p>
         <h3>The included looks</h3>
-        <p>Each takes the colour grade of a published ReShade preset for anime-style games, converted from the shaders' source, plus the deband and grain values recommended in a well-known mpv anime guide. Every look sets all the controls on purpose, not just one or two.</p>
+        <p>Slice of life, sunlit, shonen, moody and vintage. The first four take the colour grade of a published ReShade preset for anime-style games, converted from the shaders' source; vintage is ReShade's Technicolor2 shader at its defaults. Each adds deband, and most add a little grain, starting from the values a well-known mpv anime guide recommends.</p>
         <h3>Without upscaling</h3>
-        <p>Turn on colour for videos that aren't upscaled, and only the colour pass runs. That is almost no GPU load, so it suits computers that can't run Anime4K.</p>
+        <p>Turn on <strong>also use colors when not upscaled</strong>, and videos you haven't switched on get the colour pass (plus deband, when the look uses it) and nothing else. That is a small fraction of Anime4K's GPU load, so it suits computers that can't run the upscale.</p>
       </div>
     </div>
   </section>
@@ -216,11 +216,11 @@ V' = S·(V cos h − U sin h)</code>
     <div class="body">
       <div class="panel">
         <dl class="kv">
-          <div><dt>Is this a reader?</dt><dd>the page's images are measured. It needs large portrait pages of one width stacked in a column (or one page filling the screen), plus a chapter number or reader controls such as next chapter or a page list. Galleries and ordinary pages don't qualify, and nothing is upscaled unless this check passes, even on a site you switched on.</dd></div>
-          <div><dt>Each page once</dt><dd>unlike video, every page goes through the Anime4K chain at 2× once, nearest to where you are reading first, and the result replaces the page image. A page is redone only if you change the preset.</dd></div>
+          <div><dt>Is this a reader?</dt><dd>the page's images are measured. It needs big pages of one width stacked in a column (or one page filling the screen), plus a chapter number or reader controls such as next chapter or a page list. Without those, a manga-looking address and a longer run of same-width portrait pages can still qualify. Readers that draw pages on a canvas are detected but not upscaled. Galleries and ordinary pages don't qualify, and nothing is upscaled unless this check passes, even on a site you switched on.</dd></div>
+          <div><dt>Each page once</dt><dd>unlike video, every page goes through the Anime4K chain at 2× once, nearest to where you are reading first, and the result replaces the page image. A page is redone only if you change the preset or a line effect.</dd></div>
           <div><dt>Grey stays grey</dt><dd>the shaders add a slight colour cast to grey input, so black-and-white pages are kept grey.</dd></div>
           <div><dt>Compare</dt><dd>press <code>Alt+M</code> to flip back to the original pages. The popup shows a page bar, counts and a page map.</dd></div>
-          <div><dt>Locked images</dt><dd>some readers serve pages the extension isn't allowed to read on the page. It then downloads those same images itself, from the same addresses and without cookies. Local, private and cloud-metadata addresses are refused, on every redirect too. Nothing about you is sent.</dd></div>
+          <div><dt>Locked images</dt><dd>some readers serve pages the extension isn't allowed to read on the page. It then downloads those same images itself, from the same addresses, without cookies or a referrer, up to 25 MB each. Cloud-metadata addresses are always refused, and local and private ones too unless the reader itself is on your own network, checked on every redirect. Nothing about you is sent.</dd></div>
           <div><dt>The mode setting</dt><dd><strong>auto</strong>, <strong>anime</strong> or <strong>manga</strong> decides what the extension works on. The popup suggests a switch when a page holds the other kind.</dd></div>
         </dl>
       </div>
@@ -235,21 +235,21 @@ V' = S·(V cos h − U sin h)</code>
     </div>
     <div class="body">
       <div class="panel">
-        <p>On Chrome, Edge and Brave, every active video shows its GPU time from the GPU's timer queries: milliseconds per frame, load as a share of the video's frame time, rolling average and peak, a bar graph of the last 2 seconds, pass count, GPU memory held and output size. Red bars mean the GPU took longer than one video frame.</p>
-        <p>Firefox has no GPU timer, so there the card shows frame-rate figures instead: the video's fps, the share of frames drawn, frames missed per second, and whether it keeps up. Speed is about the same in both browsers.</p>
+        <p>On Chrome, Edge and Brave, every active video shows its GPU time from the GPU's timer queries: GPU load as a share of the frame's time limit, milliseconds per frame, output fps, average and peak, the frame limit, late frames, and a graph of the last 48 frames. Red bars mean the GPU took longer than one video frame.</p>
+        <p>Firefox has no GPU timer, so there the card shows frame-rate figures instead: the video's fps, the share of frames drawn, frames missed per second, passes and GPU memory, and whether it keeps up. Speed is about the same in both browsers.</p>
       </div>
       <div class="table-wrap">
         <table>
-        <thead><tr><th>Preset</th><th>GPU memory · passes</th><th>GPU per frame</th></tr></thead>
+        <thead><tr><th>Preset</th><th>Passes</th><th>GPU per frame</th></tr></thead>
         <tbody>
-        <tr><td>Mode A</td><td>704 MB · 39 passes</td><td>15.1 ms</td></tr>
-        <tr><td>A+A</td><td>1210 MB · 47 passes</td><td>23.7 ms</td></tr>
-        <tr><td>Mode C</td><td>435 MB · 22 passes</td><td>13.2 ms</td></tr>
-        <tr><td>C+A</td><td>941 MB · 30 passes</td><td>15.8 ms</td></tr>
+        <tr><td>Mode A</td><td>39</td><td>15.1 ms</td></tr>
+        <tr><td>A+A</td><td>47</td><td>23.7 ms</td></tr>
+        <tr><td>Mode C</td><td>22</td><td>13.2 ms</td></tr>
+        <tr><td>C+A</td><td>30</td><td>15.8 ms</td></tr>
         </tbody>
         </table>
       </div>
-      <p class="credit">RTX 2060, 1080p source to 4K, Chromium, every frame drawn in full. A 24 fps video allows 41.7 ms per frame, so Mode A uses about 36% of this GPU and A+A about 57%.</p>
+      <p class="credit">RTX 2060, 1080p source to 4K, Chromium, every frame drawn in full (measured before frame reuse, so a worst case today). A 24 fps video allows 41.7 ms per frame, so Mode A uses about 36% of this GPU and A+A about 57%.</p>
     </div>
   </section>
 
@@ -263,6 +263,7 @@ V' = S·(V cos h − U sin h)</code>
         <dl class="kv">
           <div><dt>Locked video</dt><dd>to read a frame on the GPU, the site must allow it (it serves the video with CORS). Many players do. For the others the popup says the source doesn't allow browser upscaling and suggests trying another server or source. DRM-protected video (Netflix, Crunchyroll and the like) can never be read.</dd></div>
           <div><dt>Your GPU</dt><dd>it all runs on your graphics card. A weak or integrated GPU may not keep up even at 2×; see the load cap above.</dd></div>
+          <div><dt>Two at once</dt><dd>at most 2 videos per page are upscaled at the same time.</dd></div>
           <div><dt>Browsers</dt><dd>WebGL2 only. Chrome, Edge, Brave and Firefox 140+ on desktop. Safari and phones are untested.</dd></div>
           <div><dt>Native fullscreen</dt><dd>the fullscreen button of the browser's own built-in video controls bypasses the page, so it shows the plain video without the upscale.</dd></div>
         </dl>
