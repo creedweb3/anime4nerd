@@ -25,7 +25,7 @@ import {
   PER_KIND_PER_DAY, Rejected, SHOTS_PER_DAY, SHOT_TTL, checkShotShape, decodeShot, ipBucket, readCapped, sha256Hex, verifyTurnstile,
 } from '../functions/api/send.js';
 import { b64url, isPasswordHash, sameBytes, verifyPassword } from './password.js';
-import { MAX_ADMIN_TEXT, MAX_MSGS, STATUSES, markMetadata, markOf, merged, sideFrom, threadSummary, withMessage } from '../server/tickets.js';
+import { MAX_ADMIN_TEXT, MAX_MSGS, STATUSES, markMetadata, markOf, merged, sideFrom, sideValue, threadSummary, withMessage } from '../server/tickets.js';
 
 export const SESSION_COOKIE = '__Host-a4n_admin';
 const SESSION_SECONDS = 12 * 60 * 60;
@@ -290,8 +290,9 @@ async function answer(env, url) {
   return json(200, {
     note: str(a.note, 2000), reasons: reasons(a.reasons), v: str(a.v, 20), b: BROWSERS.includes(a.b) ? a.b : '',
     shots: int(a.shots, 3), shotsDropped: int(a.shotsDropped, 3), memo: str(memo, MAX_MEMO),
-    // k: the reporter's message number, which names its screenshots (rshot:<id>:<k>:<i>).
-    msgs: merged(sideFrom(mine, 'u'), sideFrom(ours, 'a')).map(({ f, t, at, s, k }) => ({ f, t, at, ...(s ? { s, k } : {}) })),
+    // k: the message's number on its side, which names its screenshots (rshot:/ashot:<id>:<k>:<i>)
+    // and, for ours, which one to edit or unsend. e: when we last edited it (ms).
+    msgs: merged(sideFrom(mine, 'u'), sideFrom(ours, 'a')).map(({ f, t, at, s, k, e }) => ({ f, t, at, ...(s || f === 'a' ? { k } : {}), ...(s ? { s } : {}), ...(e ? { e } : {}) })),
   });
 }
 
@@ -367,6 +368,65 @@ async function replyTo(request, env, url) {
   return done();
 }
 
+// Our k-th message, still shown, from the ticket's stored conversation.
+async function ourMessage(kv, key, k) {
+  if (!Number.isInteger(k) || k < 1 || k > MAX_MSGS) reject(400, 'bad_message');
+  const [answer, ours] = await Promise.all([kvCall(() => kv.get(key)), kvCall(() => kv.get(`msga:${key}`))]);
+  if (answer === null) reject(404, 'not_found');
+  const side = sideFrom(ours, 'a');
+  const msg = side.find((m) => m.k === k);
+  if (!msg || msg.gone) reject(404, 'no_message');
+  return { side, msg, id: key.slice(key.indexOf(':') + 1) };
+}
+
+// Replaces the text and screenshots of one of our messages. keep lists the screenshots to keep
+// (1-3, in the order they should show); shots adds new ones after them. The reporter sees "edited".
+async function edit(request, env, url) {
+  checkPost(request, url);
+  const input = await readJson(request, ['key', 'k', 'text', 'keep', 'shots'], MAX_REPLY_BODY);
+  const key = answerKey(input.key);
+  const text = typeof input.text === 'string' ? input.text.replace(/\r\n?/g, '\n').trim() : '';
+  if (text.length > MAX_ADMIN_TEXT) reject(400, 'bad_text');
+  const keep = input.keep ?? [];
+  const shotText = input.shots ?? [];
+  if (!Array.isArray(keep) || !Array.isArray(shotText) || keep.length + shotText.length > MAX_REPLY_SHOTS) reject(400, 'bad_shot');
+  shotText.forEach(checkShotShape);
+  if (!text && !keep.length && !shotText.length) reject(400, 'bad_text');
+  const kv = env.FEEDBACK;
+  const { side, msg, id } = await ourMessage(kv, key, input.k);
+  if (!keep.every((i) => Number.isInteger(i) && i >= 1 && i <= (msg.s ?? 0)) || new Set(keep).size !== keep.length) reject(400, 'bad_keep');
+  // Every kept picture is read before any is written: keeping 2 alone moves it to slot 1.
+  const kept = await Promise.all(keep.map((i) => kvCall(() => kv.get(`ashot:${id}:${msg.k}:${i}`, 'arrayBuffer'))));
+  if (kept.some((b) => b === null)) reject(410, 'shot_expired');
+  const shots = [...kept, ...shotText.map(decodeShot)];
+  const moved = (i) => keep[i] !== i + 1;
+  for (const [i, bytes] of shots.entries()) {
+    if (i >= keep.length || moved(i)) {
+      await kvCall(() => kv.put(`ashot:${id}:${msg.k}:${i + 1}`, bytes, { expirationTtl: SHOT_TTL, metadata: { contentType: 'image/jpeg' } }));
+    }
+  }
+  for (let i = shots.length + 1; i <= (msg.s ?? 0); i++) await kvCall(() => kv.delete(`ashot:${id}:${msg.k}:${i}`));
+  const { s: _s, ...rest } = msg;
+  const next = sideValue(side.map((m) => (m === msg ? { ...rest, t: text, e: Date.now(), ...(shots.length ? { s: shots.length } : {}) } : m)));
+  await kvCall(() => kv.put(`msga:${key}`, next.value, { metadata: next.metadata }));
+  return done();
+}
+
+// Takes back one of our messages: its text and screenshots are deleted, and the reporter no
+// longer sees it. Its slot stays (as {x:1}) so the numbers of later messages, which name their
+// screenshots, don't shift.
+async function unsend(request, env, url) {
+  checkPost(request, url);
+  const input = await readJson(request, ['key', 'k']);
+  const key = answerKey(input.key);
+  const kv = env.FEEDBACK;
+  const { side, msg, id } = await ourMessage(kv, key, input.k);
+  const next = sideValue(side.map((m) => (m === msg ? { ...m, gone: true } : m)));
+  await kvCall(() => kv.put(`msga:${key}`, next.value, { metadata: next.metadata }));
+  for (let i = 1; i <= (msg.s ?? 0); i++) await kvCall(() => kv.delete(`ashot:${id}:${msg.k}:${i}`));
+  return done();
+}
+
 async function remove(request, env, url) {
   checkPost(request, url);
   const key = answerKey((await readJson(request, ['key'])).key);
@@ -407,6 +467,8 @@ export async function handleAdmin(request, env, ui, fetchFn = fetch) {
     if (method === 'GET' && path === '/admin/api/shot') return await shot(env, url);
     if (method === 'POST' && path === '/admin/api/mark') return await mark(request, env, url);
     if (method === 'POST' && path === '/admin/api/reply') return await replyTo(request, env, url);
+    if (method === 'POST' && path === '/admin/api/edit') return await edit(request, env, url);
+    if (method === 'POST' && path === '/admin/api/unsend') return await unsend(request, env, url);
     if (method === 'POST' && path === '/admin/api/delete') return await remove(request, env, url);
     return notFound();
   } catch (e) {

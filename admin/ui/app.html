@@ -178,6 +178,14 @@ button { cursor: pointer; }
 .chat small b { font-weight: 400; color: var(--dim); }
 .chat.us small b, .chat small i { font-style: normal; color: var(--s-ok); }
 .chat .shots img { width: 160px; height: 90px; }
+.chat-top { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; }
+.chat .acts { display: none; gap: 12px; flex: none; }
+.chat.us:hover .acts, .chat.us:focus-within .acts, .chat.editing .acts { display: inline-flex; }
+.acts button { background: none; border: 0; padding: 0; color: var(--faint); font: 11px var(--mono); cursor: pointer; }
+.acts button:hover, .acts button:focus-visible { color: var(--on); outline: none; }
+.acts button.danger { color: var(--bad); }
+.chat.editing { border-color: var(--on); }
+.ghost.cancel::before { content: "✕ "; }
 .chat-compose { display: grid; gap: 8px; padding: 10px 24px 16px; }
 .chat-input { width: 100%; min-height: 120px; resize: vertical; background: #0d0d0d; border: 1px solid var(--line); color: var(--fg); padding: 8px 10px; font: 12px/1.6 var(--mono); }
 .chat-input::placeholder { color: var(--faint); }
@@ -543,12 +551,16 @@ function memoBox(r) {
 // message (shown above as the note), then both sides. Only answers with a ticket can be answered:
 // every report, and uninstall answers with a note, sent after tickets existed.
 // m.k numbers each side's messages on its own: rshot for theirs, ashot for ours.
-const msgShotUrl = (r, m, i) => `/admin/api/shot?key=${encodeURIComponent(`${m.f === 'a' ? 'ashot' : 'rshot'}:${r.key.slice(r.key.indexOf(':') + 1)}:${m.k}:${i}`)}`;
+// v (the edit time) makes the browser fetch again pictures an edit moved or replaced.
+const msgShotUrl = (r, m, i) => `/admin/api/shot?key=${encodeURIComponent(`${m.f === 'a' ? 'ashot' : 'rshot'}:${r.key.slice(r.key.indexOf(':') + 1)}:${m.k}:${i}`)}${m.e ? `&v=${m.e}` : ''}`;
 const waiting = (r) => r.thread?.last === 'u';
 
 // Screenshots picked for a reply, per answer, so a redraw does not drop them. Re-encoded to JPEG of
 // at most ~250 KB before sending, as on the site's forms (the server takes JPEG only).
 const PICKED = new Map();
+// The message being edited, per answer: {k, text, files}, files holding kept pictures ({old: i}) and
+// new ones ({file}). While it is set, the reply box edits that message instead of writing a new one.
+const EDITING = new Map();
 const SHOT_LIMIT = 250000;
 const SHOT_SIDE = 1600;
 const isImage = (f) => ['image/png', 'image/jpeg', 'image/webp'].includes(f.type);
@@ -591,8 +603,42 @@ function chatBox(r) {
       r.t === 'uninstall' && !r.p ? 'Reason only, no note: no ticket to answer.' : 'Sent before tickets existed: no way to answer this one.')));
   }
   const msgs = full?.msgs ?? [];
-  const bubbles = msgs.map((m) => el('div', { class: `chat ${m.f === 'a' ? 'us' : 'you'}` },
-    el('small', {}, el('b', {}, m.f === 'a' ? 'you · anime4nerd' : 'reporter'), ` · ${when(m.at)} UTC`),
+  const ed = EDITING.get(r.key);
+  // Our messages can be edited (the reporter sees "edited") or unsent (gone from their page).
+  const acts = (m) => {
+    if (m.f !== 'a' || !m.k || m.local) return null;
+    const editBtn = el('button', { type: 'button', onclick: () => {
+      EDITING.set(r.key, { k: m.k, text: m.t, files: Array.from({ length: m.s ?? 0 }, (_, i) => ({ old: i + 1, url: msgShotUrl(r, m, i + 1) })) });
+      renderA();
+    } }, 'edit');
+    const unsendBtn = el('button', { type: 'button' }, 'unsend');
+    let armed = null;
+    unsendBtn.onclick = async () => {
+      if (!armed) {
+        unsendBtn.textContent = 'unsend for good?';
+        unsendBtn.classList.add('danger');
+        armed = setTimeout(() => { armed = null; unsendBtn.textContent = 'unsend'; unsendBtn.classList.remove('danger'); }, 4000);
+        return;
+      }
+      clearTimeout(armed);
+      unsendBtn.disabled = true;
+      try {
+        await post('/admin/api/unsend', { key: r.key, k: m.k });
+        const left = msgs.filter((x) => x !== m);
+        NOTES.set(r.key, { ...full, msgs: left });
+        if (ed?.k === m.k) EDITING.delete(r.key);
+        r.thread = left.length ? { ...r.thread, n: left.length, last: left.at(-1).f } : null;
+        showError('');
+        renderA();
+      } catch (e) {
+        unsendBtn.disabled = false;
+        if (e.message !== 'signed out') showError(`Could not unsend (${e.message}).`);
+      }
+    };
+    return el('span', { class: 'acts' }, editBtn, unsendBtn);
+  };
+  const bubbles = msgs.map((m) => el('div', { class: `chat ${m.f === 'a' ? 'us' : 'you'}${ed && m.f === 'a' && m.k === ed.k ? ' editing' : ''}` },
+    el('div', { class: 'chat-top' }, el('small', {}, el('b', {}, m.f === 'a' ? 'you · anime4nerd' : 'reporter'), ` · ${when(m.at)} UTC${m.e ? ' · edited' : ''}`), acts(m)),
     m.t ? el('p', {}, m.t) : null,
     m.s ? el('div', { class: 'shots' }, ...Array.from({ length: m.s }, (_, k) => {
       // A picture we just sent shows from memory until the next load.
@@ -609,17 +655,23 @@ function chatBox(r) {
   const box = el('textarea', { class: 'chat-input', maxlength: '2000', rows: '5', 'aria-label': 'Reply',
     placeholder: bubbles.length ? 'Write a reply…' : 'Write the first reply. It shows on their ticket page, and in the extension popup.' });
   box.readOnly = !full;
-  const send = el('button', { class: 'ghost send' }, 'Send');
+  if (ed) { box.value = ed.text; box.oninput = () => (ed.text = box.value); }
+  const send = el('button', { class: 'ghost send' }, ed ? 'Save' : 'Send');
+  const cancel = ed ? el('button', { class: 'ghost cancel', onclick: () => {
+    for (const p of ed.files) if (p.file) URL.revokeObjectURL(p.url);
+    EDITING.delete(r.key);
+    renderA();
+  } }, 'Cancel') : null;
 
   // Screenshots: the button, or paste one (Ctrl+V) into the reply box. Up to 3 per reply.
-  const files = PICKED.get(r.key) ?? [];
-  PICKED.set(r.key, files);
+  const files = ed ? ed.files : PICKED.get(r.key) ?? [];
+  if (!ed) PICKED.set(r.key, files);
   const picker = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', multiple: '', 'aria-label': 'Add screenshots' });
   const attach = el('label', { class: 'ghost attach', title: 'Add screenshots (up to 3), or paste one into the reply' }, 'Screenshot', picker);
   const thumbs = el('div', { class: 'picked' });
   const drawPicked = () => {
     thumbs.replaceChildren(...files.map((p, i) => el('figure', { style: `background-image:url("${p.url}")` },
-      el('button', { 'aria-label': `Remove screenshot ${i + 1}`, onclick: () => { if (send.disabled) return; URL.revokeObjectURL(p.url); files.splice(i, 1); drawPicked(); } }, '✕'))));
+      el('button', { 'aria-label': `Remove screenshot ${i + 1}`, onclick: () => { if (send.disabled) return; if (p.file) URL.revokeObjectURL(p.url); files.splice(i, 1); drawPicked(); } }, '✕'))));
     attach.classList.toggle('full', files.length >= 3);
   };
   const add = (list) => {
@@ -637,6 +689,7 @@ function chatBox(r) {
     const text = box.value.trim();
     if ((!text && !files.length) || !full) return box.focus();
     send.disabled = true;
+    if (ed) return saveEdit(text);
     try {
       const shots = await Promise.all(files.map((p) => shrinkShot(p.file).then(base64Of)));
       await post('/admin/api/reply', { key: r.key, text, ...(shots.length ? { shots } : {}) });
@@ -653,11 +706,27 @@ function chatBox(r) {
       if (e.message !== 'signed out') showError(`Could not send the reply (${e.message}).`);
     }
   };
+  const saveEdit = async (text) => {
+    try {
+      const shots = await Promise.all(files.filter((p) => p.file).map((p) => shrinkShot(p.file).then(base64Of)));
+      const keep = files.filter((p) => p.old).map((p) => p.old);
+      await post('/admin/api/edit', { key: r.key, k: ed.k, text, keep, ...(shots.length ? { shots } : {}) });
+      for (const p of files) if (p.file) URL.revokeObjectURL(p.url);
+      EDITING.delete(r.key);
+      NOTES.delete(r.key); // load it again: the pictures moved, and the edit time names them
+      showError('');
+      renderA();
+    } catch (e) {
+      send.disabled = false;
+      if (e.message !== 'signed out') showError(`Could not save the edit (${e.message}).`);
+    }
+  };
   box.onkeydown = (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send.click(); } };
   requestAnimationFrame(() => (chats.scrollTop = chats.scrollHeight));
   return el('div', { class: 'chat-frame' }, head, chats,
     el('div', { class: 'chat-compose' }, box, thumbs, el('div', { class: 'reply-row' },
-      el('small', {}, 'Plain text · paste or add up to 3 screenshots · Ctrl+Enter sends'), el('div', { class: 'reply-btns' }, attach, send))));
+      el('small', {}, ed ? 'Editing your message · the reporter sees it marked edited · Ctrl+Enter saves' : 'Plain text · paste or add up to 3 screenshots · Ctrl+Enter sends'),
+      el('div', { class: 'reply-btns' }, cancel, attach, send))));
 }
 
 function actions(r) {

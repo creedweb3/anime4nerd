@@ -51,8 +51,9 @@ const req = (path, body, { origin = ORIGIN, ip = '203.0.113.7', cookie } = {}) =
 });
 const json = async (res) => ({ status: res.status, body: await res.json().catch(() => null), res });
 
-const jpeg = () => {
+const jpeg = (mark = 0) => {
   const b = new Uint8Array(100);
+  b[50] = mark; // tells pictures apart in tests that move them
   b.set([0xff, 0xd8]);
   b.set([0xff, 0xc0, 0x00, 0x0b], 2);
   b.set([0xff, 0xda, 0x00, 0x08], 15);
@@ -299,7 +300,7 @@ test('the admin can reply with screenshots; the ticket shows them by message num
   const t = (await read(e, { codes: [code] })).body.tickets[0];
   assert.deepEqual(t.msgs.map(({ f, t: text, s, k }) => [f, text, s, k]), [['a', 'first, no picture', undefined, undefined], ['a', 'like this', 2, 2], ['a', '', 1, 3]]);
   const one = (await a.get(`/admin/api/answer?key=${encodeURIComponent(key)}`)).body;
-  assert.deepEqual(one.msgs.map(({ f, s, k }) => [f, s, k]), [['a', undefined, undefined], ['a', 2, 2], ['a', 1, 3]]);
+  assert.deepEqual(one.msgs.map(({ f, s, k }) => [f, s, k]), [['a', undefined, 1], ['a', 2, 2], ['a', 1, 3]], 'the admin gets k for every message of ours, to edit or unsend it');
   const img = await a.get(`/admin/api/shot?key=${encodeURIComponent(`ashot:${id}:2:1`)}`);
   assert.equal(img.res.headers.get('content-type'), 'image/jpeg');
 });
@@ -348,6 +349,88 @@ test('deleting an answer removes our screenshots too', async () => {
   await a.post('/admin/api/reply', { key, text: 'see', shots: [jpeg(), jpeg()] });
   assert.equal((await a.post('/admin/api/delete', { key })).status, 204);
   assert.deepEqual([...e.FEEDBACK.store.keys()].filter((k) => k.startsWith('ashot:')), []);
+});
+
+const markOf = (e, k) => {
+  const v = e.FEEDBACK.store.get(k)?.value;
+  return v ? new Uint8Array(v.buffer ?? v)[50] : null;
+};
+
+test('the admin can edit a message: new text, kept and new screenshots, and the reporter sees "edited"', async () => {
+  const e = await env();
+  const { body: { code } } = await sendReport(e);
+  const key = answerKey(e);
+  const id = key.slice(key.indexOf(':') + 1);
+  const a = await admin(e);
+  await a.post('/admin/api/reply', { key, text: 'first' });
+  await a.post('/admin/api/reply', { key, text: 'typo hre', shots: [jpeg(1), jpeg(2), jpeg(3)] });
+  // Keep the third picture only (it moves to slot 1) and add a new one after it.
+  assert.equal((await a.post('/admin/api/edit', { key, k: 2, text: 'typo here', keep: [3], shots: [jpeg(9)] })).status, 204);
+  assert.deepEqual([...e.FEEDBACK.store.keys()].filter((k) => k.startsWith('ashot:')).sort(), [`ashot:${id}:2:1`, `ashot:${id}:2:2`]);
+  assert.deepEqual([markOf(e, `ashot:${id}:2:1`), markOf(e, `ashot:${id}:2:2`)], [3, 9]);
+  const t = (await read(e, { codes: [code] })).body.tickets[0];
+  assert.deepEqual(t.msgs.map(({ t: text, s, k, e: ed }) => [text, s, k, ed]), [['first', undefined, undefined, undefined], ['typo here', 2, 2, 1]]);
+  const one = (await a.get(`/admin/api/answer?key=${encodeURIComponent(key)}`)).body;
+  assert.ok(one.msgs[1].e > 0, 'the admin gets the edit time');
+  assert.equal(one.msgs[0].e, undefined);
+  // Dropping every picture leaves text only.
+  assert.equal((await a.post('/admin/api/edit', { key, k: 2, text: 'no pictures now' })).status, 204);
+  assert.deepEqual([...e.FEEDBACK.store.keys()].filter((k) => k.startsWith('ashot:')), []);
+  assert.equal((await read(e, { codes: [code] })).body.tickets[0].msgs[1].s, undefined);
+});
+
+test('the admin can unsend a message: it leaves the ticket, its screenshots go, later numbers stay', async () => {
+  const e = await env();
+  const { body: { code } } = await sendReport(e);
+  const key = answerKey(e);
+  const id = key.slice(key.indexOf(':') + 1);
+  const a = await admin(e);
+  await a.post('/admin/api/reply', { key, text: 'wrong ticket', shots: [jpeg(1)] });
+  await a.post('/admin/api/reply', { key, text: 'right one', shots: [jpeg(2)] });
+  assert.equal((await read(e, { codes: [code] })).body.tickets[0].unseen, 2);
+  assert.equal((await a.post('/admin/api/unsend', { key, k: 1 })).status, 204);
+  assert.deepEqual([...e.FEEDBACK.store.keys()].filter((k) => k.startsWith('ashot:')), [`ashot:${id}:2:1`]);
+  const t = (await read(e, { codes: [code] })).body.tickets[0];
+  assert.deepEqual(t.msgs.map(({ t: text, k }) => [text, k]), [['right one', 2]], 'the second message keeps number 2, which names its picture');
+  assert.equal(t.unseen, 1);
+  assert.equal((await seeShot(e, { code, k: 1, i: 1 })).status, 404);
+  assert.equal((await seeShot(e, { code, k: 2, i: 1 })).status, 200);
+  assert.equal((await a.post('/admin/api/unsend', { key, k: 1 })).status, 404, 'already unsent');
+  assert.equal((await a.post('/admin/api/edit', { key, k: 1, text: 'back?' })).status, 404, 'an unsent message cannot be edited');
+  // A new reply after it still gets the next number.
+  await a.post('/admin/api/reply', { key, text: 'third', shots: [jpeg(3)] });
+  assert.equal(markOf(e, `ashot:${id}:3:1`), 3);
+  // Unsending every message of ours: the list no longer says we are waiting on them to read it.
+  await a.post('/admin/api/unsend', { key, k: 2 });
+  await a.post('/admin/api/unsend', { key, k: 3 });
+  assert.deepEqual((await read(e, { codes: [code] })).body.tickets[0].msgs, []);
+  const row = (await a.get('/admin/api/answers')).body.answers[0];
+  assert.equal(row.thread.seen, true);
+});
+
+test('edit and unsend refuse bad input, the reporter\'s messages, a session-less call and other origins', async () => {
+  const e = await env();
+  const { body: { code } } = await sendReport(e);
+  const key = answerKey(e);
+  const a = await admin(e);
+  await write(e, { code, text: 'theirs' });
+  await a.post('/admin/api/reply', { key, text: 'ours', shots: [jpeg(), jpeg()] });
+  const bad = [
+    { key, k: 0, text: 'x' }, { key, k: '1', text: 'x' }, { key, k: 51, text: 'x' }, { key, k: 1, text: '' },
+    { key, k: 1, text: 'x', keep: [3] }, { key, k: 1, text: 'x', keep: [1, 1] }, { key, k: 1, text: 'x', keep: ['1'] },
+    { key, k: 1, text: 'x', keep: [1, 2], shots: [jpeg(), jpeg()] }, { key, k: 1, text: 'x'.repeat(2001) },
+    { key, k: 1, text: 'x', f: 'u' }, { key: 'msgu:' + key, k: 1, text: 'x' },
+  ];
+  for (const body of bad) assert.equal((await a.post('/admin/api/edit', body)).status, 400, JSON.stringify(body).slice(0, 60));
+  assert.equal((await a.post('/admin/api/edit', { key, k: 2, text: 'x' })).status, 404, 'k numbers our side only: there is no 2');
+  assert.equal((await a.post('/admin/api/unsend', { key, k: 'all' })).status, 400);
+  const theirs = (await read(e, { codes: [code] })).body.tickets[0].msgs.find((m) => m.f === 'u');
+  assert.equal(theirs.t, 'theirs', 'the reporter\'s message is untouched');
+  assert.equal((await handleAdmin(req('/admin/api/unsend', { key, k: 1 }), e, UI)).status, 404, 'no session');
+  const cookie = (await handleAdmin(req('/admin/login', { password: 'pw for tests', token: 'tok' }), e, UI,
+    async () => Response.json({ success: true, hostname: 'anime4nerd.pages.dev', action: 'admin-login' }))).headers.get('set-cookie').split(';')[0];
+  assert.notEqual((await handleAdmin(req('/admin/api/unsend', { key, k: 1 }, { cookie, origin: 'https://evil.example' }), e, UI)).status, 204);
+  assert.equal((await read(e, { codes: [code] })).body.tickets[0].msgs.length, 2, 'nothing changed');
 });
 
 // ---------- injection and abuse ----------

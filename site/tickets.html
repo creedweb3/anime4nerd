@@ -352,10 +352,10 @@
       return row;
     };
 
-    var message = function (from, text, at, shots, code, k) {
+    var message = function (from, text, at, shots, code, k, edited) {
       var m = el('div', 'msg ' + (from === 'a' ? 'us' : 'you'));
       var who = el('div', 'who');
-      who.append(el('b', null, from === 'a' ? 'anime4nerd' : 'you'), el('span', null, when(at, true)));
+      who.append(el('b', null, from === 'a' ? 'anime4nerd' : 'you'), el('span', null, when(at, true) + (edited ? ' · edited' : '')));
       m.append(who);
       if (text) m.append(el('p', null, text));
       if (shots && from === 'a' && k) m.append(picsRow(code, k, shots));
@@ -399,7 +399,7 @@
       var msgs = el('div', 'msgs');
       // Their report first, then the conversation; the current status sits where it last changed.
       var items = [{ at: t.at, node: message('u', t.note, t.at, t.shots) }];
-      (t.msgs || []).forEach(function (m) { items.push({ at: m.at, node: message(m.f, m.t, m.at, m.s, t.code, m.k) }); });
+      (t.msgs || []).forEach(function (m) { items.push({ at: m.at, node: message(m.f, m.t, m.at, m.s, t.code, m.k, m.e) }); });
       if (EVENT[t.status] && t.since) {
         var ev = el('div', 'ev', EVENT[t.status][0] + ' · ' + when(t.since, true));
         ev.style.setProperty('--c', EVENT[t.status][1]);

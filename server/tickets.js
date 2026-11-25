@@ -9,7 +9,8 @@
 // Keys, next to the answer "<kind>:<id>" and its admin mark "mark:<kind>:<id>":
 //   tk:<sha256 hex>        value: the answer key
 //   msgu:<kind>:<id>       the reporter's messages, value {"m":[{t,at,ts,s?}]}, metadata {n, ts}
-//   msga:<kind>:<id>       our messages, same shape
+//   msga:<kind>:<id>       our messages, same shape; ours may also carry e (when last edited, ms),
+//                          and an unsent one is kept as {x:1,at,ts} so later numbers don't shift
 //   seen:<kind>:<id>       metadata {ts}: when the reporter last read the ticket
 //   rshot:<id>:<k>:<i>     JPEG i (1-3) of the reporter's k-th message (60-day TTL)
 //   ashot:<id>:<k>:<i>     JPEG i (1-3) of our k-th message (60-day TTL), shown via /api/shot
@@ -72,28 +73,39 @@ export function sideFrom(raw, f) {
   try {
     const m = JSON.parse(raw)?.m;
     if (!Array.isArray(m)) return [];
-    return m.filter((x) => x && typeof x.t === 'string' && typeof x.at === 'string' && Number.isFinite(x.ts))
-      .map((x, i) => ({ f, t: x.t, at: x.at, ts: x.ts, k: i + 1, ...(Number.isInteger(x.s) && x.s > 0 ? { s: Math.min(x.s, 3) } : {}) }));
+    // k is the stored position, which names the message's screenshots; unsent ones keep theirs.
+    return m.map((x, i) => {
+      if (!x || typeof x.at !== 'string' || !Number.isFinite(x.ts)) return null;
+      if (x.x === 1) return { f, t: '', at: x.at, ts: x.ts, k: i + 1, gone: true };
+      if (typeof x.t !== 'string') return null;
+      return { f, t: x.t, at: x.at, ts: x.ts, k: i + 1, ...(Number.isInteger(x.s) && x.s > 0 ? { s: Math.min(x.s, 3) } : {}), ...(Number.isFinite(x.e) ? { e: x.e } : {}) };
+    }).filter(Boolean);
   } catch {
     return [];
   }
 }
 
-// The value and metadata to store after adding one message to a side.
-export function withMessage(side, msg) {
-  const next = [...side.map(({ t, at, ts, s }) => ({ t, at, ts, ...(s ? { s } : {}) })), msg];
-  return { value: JSON.stringify({ m: next }), metadata: { n: next.length, ts: msg.ts } };
+const stored = ({ t, at, ts, s, e, gone }) => (gone ? { x: 1, at, ts } : { t, at, ts, ...(s ? { s } : {}), ...(e ? { e } : {}) });
+
+// The value and metadata to store for one side. n counts every slot (unsent ones too, so the
+// thread cap and message numbers hold); ts is the newest message still shown.
+export function sideValue(side) {
+  const live = side.filter((m) => !m.gone);
+  return { value: JSON.stringify({ m: side.map(stored) }), metadata: { n: side.length, ts: live.length ? Math.max(...live.map((m) => m.ts)) : 0 } };
 }
+
+// The value and metadata to store after adding one message to a side.
+export const withMessage = (side, msg) => sideValue([...side, msg]);
 
 // Both sides in time order (the reporter's first on a tie: they wrote what we answered).
 export function merged(mine, ours) {
-  return [...mine, ...ours].sort((a, b) => a.ts - b.ts || (a.f === b.f ? a.k - b.k : a.f === 'u' ? -1 : 1));
+  return [...mine, ...ours].filter((m) => !m.gone).sort((a, b) => a.ts - b.ts || (a.f === b.f ? a.k - b.k : a.f === 'u' ? -1 : 1));
 }
 
 // Our messages the reporter has not read: newer than their last visit and their last message.
 export function unseenCount(ours, mineTs, seenTs) {
   const read = Math.max(Number(mineTs) || 0, Number(seenTs) || 0);
-  return ours.filter((m) => m.ts > read).length;
+  return ours.filter((m) => !m.gone && m.ts > read).length;
 }
 
 // The same from list metadata alone (admin list): whether our latest message was read.
@@ -107,8 +119,8 @@ export function threadSummary(uMeta, aMeta, seenMeta) {
 }
 
 // Messages as clients see them: who, text, minute, screenshot count, and for our messages with
-// screenshots the message number /api/shot needs to fetch them.
-export const shown = (msgs) => msgs.map(({ f, t, at, s, k }) => ({ f, t, at, ...(s ? { s } : {}), ...(s && f === 'a' ? { k } : {}) }));
+// screenshots the message number /api/shot needs to fetch them; e: 1 marks one we edited.
+export const shown = (msgs) => msgs.map(({ f, t, at, s, k, e }) => ({ f, t, at, ...(s ? { s } : {}), ...(s && f === 'a' ? { k } : {}), ...(e ? { e: 1 } : {}) }));
 
 // What the reporter sees: their own answer, the status, and the conversation. Never the private note.
 export function publicView(code, answerRaw, mark, msgs, unseen) {
