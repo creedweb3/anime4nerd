@@ -304,7 +304,7 @@
         <li><span>Choose <b>Load unpacked</b> and pick the unzipped folder.</span></li>
         <li><span>Play a video, open the extension, and switch the video on.</span></li>
         </ol>
-        <div class="foot"><span class="chip">release 1.3.0</span><span class="chip">mit</span><a class="chip" href="https://github.com/creedweb3/anime4nerd" rel="noopener">source on github →</a></div>
+        <div class="foot"><span class="chip">release 1.3.1</span><span class="chip">mit</span><a class="chip" href="https://github.com/creedweb3/anime4nerd" rel="noopener">source on github →</a></div>
         </div>
         <div class="panel">
         <div class="phead"><span>option c · firefox</span></div>
@@ -323,7 +323,7 @@
         <figure class="scene" aria-hidden="true"><div class="phead"><span><b>only some sites</b></span><span>site access</span></div>
         <div class="stage"><div class="in s6">
         <div class="ext">
-        <div class="hd"><img src="assets/icon.png" alt=""><b>Anime4Nerd</b><small>details · 1.3.0</small></div>
+        <div class="hd"><img src="assets/icon.png" alt=""><b>Anime4Nerd</b><small>details · 1.3.1</small></div>
         <div class="rw"><span>Site access</span><span data-aim="1" class="dd"><span class="v1">On all sites</span><span class="v2">On specific sites</span><span class="opts"><i>When you click it</i><i data-aim="2" class="spec">On specific sites</i><i class="all">On all sites</i></span></span></div>
         <div class="list"><span class="lbl">runs on</span><span class="all-sites">all sites</span><div class="sites"><i class="add">stream.example</i><i>+ add a site</i></div></div>
         </div>
@@ -360,7 +360,15 @@
       <div class="body">
         <div class="timeline">
           <article class="rel latest">
-            <div class="rel-head"><h3>1.3.0</h3><span class="new">latest</span><time class="date" datetime="2026-11-21">21 Nov 2026</time></div>
+            <div class="rel-head"><h3>1.3.1</h3><span class="new">latest</span><time class="date" datetime="2026-11-25">25 Nov 2026</time></div>
+            <ul>
+            <li><strong>8× is sharp again.</strong> At 8× the picture no longer zooms into a corner of the video.</li>
+            <li><strong>More players found.</strong> Videos in player frames that hide from scripts, and in closed player components, are now found.</li>
+            <li><strong>Site access.</strong> When your browser hasn't given Anime4Nerd access to a site or its player, the popup now names it and offers "allow" instead of just "No video found yet".</li>
+            </ul>
+          </article>
+          <article class="rel">
+            <div class="rel-head"><h3>1.3.0</h3><time class="date" datetime="2026-11-21">21 Nov 2026</time></div>
             <ul>
             <li><strong>Manga mode.</strong> Upscales the pages of manga readers, once per chapter, on Chrome, Edge, Brave and Firefox. Alt+M shows the originals. A mode setting (auto, anime, manga) decides what it works on, and the popup suggests a switch when a page holds the other kind.</li>
             <li><strong>Color controls.</strong> Ten controls in VLC's units (brightness, contrast, saturation, gamma, hue, vibrance, temperature, tint, deband, grain), five ready-made looks and your own saved profiles, in the popup and the fullscreen menu. They can also apply to videos that are not upscaled.</li>
@@ -487,7 +495,7 @@
 </main>
 
 <footer class="wrap">
-  <span>anime4nerd · v1.3.0 · mit</span>
+  <span>anime4nerd · v1.3.1 · mit</span>
   <span><a href="#changes">changes</a> · <a href="howitworks">how it works</a> · <a href="report">report a bug</a> · <a href="privacy">privacy</a> · <a href="#credits">credits</a> · <a href="https://github.com/creedweb3/anime4nerd" rel="noopener">github</a></span>
 </footer>
 
@@ -797,7 +805,7 @@
           }
           return true;
         } },
-        // after an update: the pointer rests on the "new v1.3.0" chip and the popup shows its tooltip
+        // after an update: the pointer rests on the "new v1.3.1" chip and the popup shows its tooltip
         { sel: '.s2', from: .56, to: .84, set: function (d, on) {
           var n = d.querySelector('#whatsnew');
           if (!n || n.hidden) return false;

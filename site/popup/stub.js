@@ -4,7 +4,7 @@
 // every setting lives in this frame's memory and resets on reload.
 // Query: pages=N plays a manga chapter of N pages instead of the video (its pages keep getting
 // upscaled, in a loop, unless the visitor asks for reduced motion); off=1 starts with the video off; new=1 opens it right after
-// an update (the "new v1.3.0" chip); color=1 starts on neutral, with the ready-made looks and one saved profile.
+// an update (the "new v1.3.1" chip); color=1 starts on neutral, with the ready-made looks and one saved profile.
 // Hash: tab=color|upscale opens that folder tab.
 (() => {
   const COLOR = 'anime4k-color';
@@ -14,7 +14,7 @@
     sync: { anime4k: { mode: 'auto', preset: 'A', darkenLines: false, thinLines: true, upscale: 'auto' } },
     local: { 'anime4k-sources': q.get('off') === '1' ? {} : { 'stream.example::blob:': true } },
   };
-  if (q.get('new') === '1') store.local['anime4k-whats-new'] = '1.3.0';
+  if (q.get('new') === '1') store.local['anime4k-whats-new'] = '1.3.1';
   if (PAGES) store.local['a4k-manga'] = { 'reader.example': true };
   if (q.get('color') === '1') {
     // The five included looks (src/color.ts BUILT_IN_PROFILES) plus one of the visitor's own.
@@ -91,7 +91,7 @@
 
   window.chrome = {
     runtime: {
-      getManifest: () => ({ version: '1.3.0' }),
+      getManifest: () => ({ version: '1.3.1' }),
       getURL: (p) => p,
       onMessage: { addListener() {} },
       sendMessage: async () => undefined,
