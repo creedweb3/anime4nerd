@@ -1,7 +1,14 @@
 // Unit tests for src/site-access.ts (node --test). Run: npm run test:access
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { accessOrigins, missingAccess } from '../src/site-access';
+import { accessLabel, accessOrigins, missingAccess } from '../src/site-access';
+
+test('accessLabel names the first missing host and counts the rest', () => {
+  assert.equal(accessLabel(['https://tau-video.xyz/*']), 'tau-video.xyz');
+  assert.equal(accessLabel(['https://tau-video.xyz/*', 'https://ads.example/*']), 'tau-video.xyz and 1 more');
+  assert.equal(accessLabel(['https://a.test/*', 'http://b.test/*', 'https://c.test/*']), 'a.test and 2 more');
+  assert.equal(accessLabel([]), '');
+});
 
 test('accessOrigins turns page and frame URLs into one host pattern each', () => {
   assert.deepEqual(

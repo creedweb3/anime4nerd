@@ -67,6 +67,7 @@ const row = await page.evaluate(() => {
   return { text: document.querySelector('#access span').textContent, label: document.querySelector('#access-go').textContent, inside: b.right <= r.right + 0.5 && b.left >= r.left, oneLine: b.height < 30 };
 });
 check('the button says "allow" and sits inside the row', row.label === 'allow' && row.inside && row.oneLine, JSON.stringify(row));
+check('the row names the host without access', row.text.includes('tau-video.xyz') && !row.text.includes('this site'), row.text);
 await shot('access-missing');
 
 // --- allow: the browser is asked, then the video shows and the row goes ------------------------------

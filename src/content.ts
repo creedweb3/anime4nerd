@@ -1160,21 +1160,26 @@ let colorState: ColorState = DEFAULT_COLOR;
  * root, where element.shadowRoot reads null. Content scripts may read closed roots: Firefox through
  * element.openOrClosedShadowRoot, Chromium through chrome.dom.openOrClosedShadowRoot.
  */
+// Built-in elements that may host a shadow root (attachShadow); custom elements (a "-" in the name) may too.
+const SHADOW_HOSTS = new Set(['ARTICLE', 'ASIDE', 'BLOCKQUOTE', 'BODY', 'DIV', 'FOOTER', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'HEADER', 'MAIN', 'NAV', 'P', 'SECTION', 'SPAN']);
+const MAX_SHADOW_DEPTH = 32; // nested shadow roots followed; a page nesting deeper only hides its own video
+
 function shadowOf(el: Element): ShadowRoot | null {
   if (el.shadowRoot) return el.shadowRoot;
   const firefoxRoot = (el as Element & { openOrClosedShadowRoot?: ShadowRoot | null }).openOrClosedShadowRoot;
   if (firefoxRoot !== undefined) return firefoxRoot;
-  if (!(el instanceof HTMLElement)) return null;
+  // Chromium: an API call per element, so only for elements that can host a root at all.
+  if (!(el instanceof HTMLElement) || !(SHADOW_HOSTS.has(el.tagName) || el.tagName.includes('-'))) return null;
   try { return chrome.dom?.openOrClosedShadowRoot?.(el) ?? null; } catch { return null; }
 }
 
-function collectVideos(root: Document | ShadowRoot | Element, out: HTMLVideoElement[]) {
+function collectVideos(root: Document | ShadowRoot | Element, out: HTMLVideoElement[], depth = 0) {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
   let n = walker.currentNode as Element | null;
   while (n) {
     if (n instanceof HTMLVideoElement) out.push(n);
-    const shadow = n instanceof Element ? shadowOf(n) : null;
-    if (shadow) collectVideos(shadow, out);
+    const shadow = depth < MAX_SHADOW_DEPTH && n instanceof Element ? shadowOf(n) : null;
+    if (shadow) collectVideos(shadow, out, depth + 1);
     n = walker.nextNode() as Element | null;
   }
 }

@@ -11,7 +11,7 @@ import type { MangaMeta } from './manga-meta';
 import { BROWSER, reportUrl } from './site-links';
 import { TICKETS_URL, hasTickets } from './tickets';
 import { initColorTab, setColorVideo } from './popup-color';
-import { accessOrigins, missingAccess } from './site-access';
+import { accessLabel, accessOrigins, missingAccess } from './site-access';
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
 const hintEl = $('#hint');
@@ -692,8 +692,10 @@ async function refresh() {
     // No video: a frame the browser gives us no access to may hold it. Say so instead of "No video found yet".
     if (list.length === 0) void checkAccess(); else missingSites = [];
     const blocked = list.length === 0 && !manga && !offered && missingSites.length > 0;
+    if (blocked && accessEl.hidden) paintAccess();
     accessEl.hidden = !blocked;
-    emptyEl.hidden = list.length > 0 || !!manga || !!offered || blocked; // "No video found yet" would contradict the preview
+    // "No video found yet" would contradict the preview, and waits for the first access check.
+    emptyEl.hidden = list.length > 0 || !!manga || !!offered || blocked || !accessChecked;
     const reading = !!manga && list.length === 0;
     setText($('#nowLabel'), reading ? 'reading now' : 'playing now');
     $('#perf').hidden = reader;
@@ -788,17 +790,28 @@ const accessEl = $('#access');
 let tabUrl: string | undefined; // the address-bar URL (absent when the browser withholds it)
 let missingSites: string[] = []; // host patterns of this tab's page and frames the browser withholds
 let checkingAccess = false;
+let accessChecked = false; // the first check is done: until then "No video found yet" waits, so it does not flash
+let accessGen = 0; // bumped on a grant: a check started before it must not bring the old list back
 
 async function checkAccess() {
-  if (checkingAccess || tabId === undefined) return;
+  if (tabId === undefined) { accessChecked = true; return; }
+  if (checkingAccess) return;
   checkingAccess = true;
+  const gen = accessGen;
   try {
     const frames = await chrome.webNavigation.getAllFrames({ tabId }).catch(() => null);
     const origins = accessOrigins([tabUrl, ...(frames ?? []).map((f) => f.url)]);
-    missingSites = await missingAccess(origins, (o) => chrome.permissions.contains({ origins: [o] }));
+    const missing = await missingAccess(origins, (o) => chrome.permissions.contains({ origins: [o] }));
+    if (gen === accessGen) missingSites = missing;
   } finally {
     checkingAccess = false;
+    accessChecked = true;
   }
+}
+
+/** The row names the host it lacks: an ad frame without access must not read as "this site". */
+function paintAccess(refused = false) {
+  setText($('#access-text'), refused ? `Not allowed: ${accessLabel(missingSites)}` : `No access to ${accessLabel(missingSites)}, so a video there can't be found.`);
 }
 
 // The browser's own prompt. Firefox may close the popup while it shows; the background then
@@ -810,10 +823,11 @@ function initAccess() {
     const id = tabId;
     // request() must be the first call in the click, or the browser refuses it as not user-initiated.
     chrome.permissions.request({ origins }).then((granted) => {
-      if (!granted) return;
+      if (!granted) { paintAccess(true); return; }
+      accessGen += 1;
       missingSites = [];
       void injectContent(id).then(refresh);
-    }, () => {});
+    }, () => paintAccess(true)); // the browser rejected the list (a restricted host): say so, not nothing
   });
 }
 

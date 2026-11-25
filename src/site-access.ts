@@ -17,6 +17,13 @@ export function accessOrigins(urls: readonly (string | undefined)[]): string[] {
   return out;
 }
 
+/** The first missing host by name, the rest as a count: "tau-video.xyz and 2 more". */
+export function accessLabel(missing: readonly string[]): string {
+  if (!missing.length) return '';
+  const host = missing[0].replace(/^https?:\/\//, '').replace(/\/\*$/, '');
+  return missing.length > 1 ? `${host} and ${missing.length - 1} more` : host;
+}
+
 /** The patterns `has` does not confirm. A check that throws counts as granted: no false alarm. */
 export async function missingAccess(
   origins: readonly string[],
