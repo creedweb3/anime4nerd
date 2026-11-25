@@ -11,7 +11,7 @@ import { join } from 'node:path';
 
 const build = join(import.meta.dirname, '..', 'site', 'build.mjs');
 const out = join(import.meta.dirname, '..', 'site', 'public');
-const PAGES = { '/': 'index.html', '/privacy': 'privacy.html', '/uninstalled': 'uninstalled.html', '/report': 'report.html', '/tickets': 'tickets.html' };
+const PAGES = { '/': 'index.html', '/privacy': 'privacy.html', '/uninstalled': 'uninstalled.html', '/report': 'report.html', '/tickets': 'tickets.html', '/howitworks': 'howitworks.html' };
 const FORMS = ['/uninstalled', '/report', '/tickets'];
 
 function policies() {

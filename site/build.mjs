@@ -23,7 +23,7 @@ if (!/^[\w-]+$/.test(sitekey)) throw new Error('TURNSTILE_SITEKEY has unexpected
 if (sitekey === TEST_SITEKEY) console.warn('TURNSTILE_SITEKEY not set: using the Turnstile test key');
 
 // Pages and the URL path Cloudflare Pages serves each one at.
-const PAGES = { 'index.html': '/', 'privacy.html': '/privacy', 'uninstalled.html': '/uninstalled', 'report.html': '/report', 'tickets.html': '/tickets' };
+const PAGES = { 'index.html': '/', 'privacy.html': '/privacy', 'uninstalled.html': '/uninstalled', 'report.html': '/report', 'tickets.html': '/tickets', 'howitworks.html': '/howitworks' };
 // What the form pages need beyond the others: Turnstile, and (report, tickets) blob: thumbnails of
 // picked screenshots. Every page loads assets/tickets.js ('self') and may call /api/tickets for
 // the top-bar count (connect-src 'self').

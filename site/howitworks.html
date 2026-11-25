@@ -1,0 +1,279 @@
+<title>How Anime4Nerd Works</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="How Anime4Nerd works, in depth: the Anime4K shader chain in WebGL2, upscale factors, redrawing only what changed, the GPU-load cap, colour grading, manga mode, and the limits.">
+<link rel="icon" href="assets/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+
+<style>
+  /* In the privacy page's language: big headline, readout strip, numbered sections. */
+  .hw-hero { padding-block: clamp(40px, 6vw, 76px) clamp(28px, 4vw, 44px); }
+  .hw-hero h1 { font-size: clamp(2.8rem, 6.4vw, 5.6rem); line-height: .9; letter-spacing: -.055em; text-transform: uppercase; margin: 18px 0 0; font-weight: 800; }
+  .hw-hero h1 span { display: block; }
+  .hw-hero h1 .o { color: transparent; -webkit-text-stroke: 2px var(--ok); }
+  .hw-hero .lede { max-width: 66ch; }
+  .hw-hero .lede strong { color: var(--fg); }
+  .hw-jump { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 26px; }
+  .hw-jump a { text-decoration: none; }
+  .hw-jump a b { color: var(--ok); font-weight: 600; margin-right: 6px; }
+  .hw .readout { margin-bottom: clamp(40px, 6vw, 72px); }
+  .hw .readout b { font-size: 17px; }
+
+  .hw .sec { padding-block: clamp(32px, 5vw, 56px); border-top: 1px solid var(--line); }
+  .hw .sec > .rail h2 { margin-bottom: 0; }
+  .hw .sec > .rail .intro { margin: 14px 0 0; }
+  .hw .panel h3 { font-size: 13px; margin: 0 0 8px; color: var(--fg); }
+  .hw .panel h3 ~ h3 { margin-top: 22px; }
+  .hw .panel p { margin: 0; color: var(--dim); font-size: 13px; line-height: 1.7; }
+  .hw .panel p + p { margin-top: 12px; }
+  .hw .panel strong { color: var(--fg); }
+  .hw .body > .table-wrap { margin-top: 12px; flex: none; }
+
+  /* Label + text rows; the label column lines up down the panel. */
+  .kv { display: grid; gap: 14px; margin: 0; }
+  .kv > div { display: grid; grid-template-columns: 17ch minmax(0, 1fr); gap: 16px; }
+  .kv dt { color: var(--fg); font-weight: 600; font-size: 12px; padding-top: 2px; }
+  .kv dd { margin: 0; color: var(--dim); font-size: 13px; line-height: 1.7; }
+  .hw code { font: 600 11px var(--mono); color: var(--ok); background: rgba(var(--g), .08); border: 1px solid rgba(var(--g), .25); padding: 1px 6px; overflow-wrap: anywhere; }
+  .hw .formula { display: block; margin: 12px 0; padding: 12px 14px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: 12px/1.8 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .hw .panel .more { margin-top: 22px; }
+  @media (max-width: 760px) { .kv > div { grid-template-columns: minmax(0, 1fr); gap: 4px; } }
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="/"><img src="assets/icon.png" alt="" width="24" height="24">anime4nerd</a>
+    <nav class="nav" aria-label="Sections">
+      <a class="chip" href="./#compare">before / after</a>
+      <a class="chip" href="howitworks">how it works</a>
+      <a class="chip" href="./#install">install</a>
+      <a class="chip" href="./#changes">what's new</a>
+      <a class="chip" href="report">report</a>
+    </nav>
+    <a class="btn primary" data-store href="https://chromewebstore.google.com/detail/anime4nerd/kblnmcdmlgeidaclnhjmcffefmkehkpm" rel="noopener">add to chrome</a>
+  </div>
+</header>
+
+<main class="wrap hw" id="how">
+  <section class="hw-hero">
+    <div class="phead"><span>how it works · in depth · v1.3.0</span></div>
+    <h1><span>Under</span><span class="o">the hood.</span></h1>
+    <p class="lede"><strong>Anime4Nerd runs bloc97's Anime4K neural shaders on your GPU, inside the browser, once for every video frame.</strong> Nothing is uploaded and no server is involved: the page's own video is read, sharpened and enlarged on your graphics card, and drawn back over the player. This page explains each step, what the settings change, and where the limits are.</p>
+    <nav class="hw-jump" aria-label="On this page">
+      <a class="chip" href="#loop"><b>01</b>every frame</a>
+      <a class="chip" href="#shaders"><b>02</b>the shaders</a>
+      <a class="chip" href="#scale"><b>03</b>upscale factor</a>
+      <a class="chip" href="#reuse"><b>04</b>only what changed</a>
+      <a class="chip" href="#cap"><b>05</b>gpu-load cap</a>
+      <a class="chip" href="#color"><b>06</b>colour grading</a>
+      <a class="chip" href="#manga"><b>07</b>manga mode</a>
+      <a class="chip" href="#meter"><b>08</b>the numbers</a>
+      <a class="chip" href="#limits"><b>09</b>limits</a>
+    </nav>
+  </section>
+
+  <div class="readout">
+    <div><span>runs on</span><b>your gpu · webgl2</b></div>
+    <div><span>shaders</span><b>anime4k, unchanged</b></div>
+    <div><span>still scenes</span><b>3–5× less gpu</b></div>
+    <div><span>sent over the network</span><b class="ok">0 bytes</b></div>
+  </div>
+
+  <section class="sec doc" id="loop">
+    <div class="rail">
+      <div class="phead"><span>01 · every frame</span></div>
+      <h2>From video to canvas.</h2>
+      <p class="intro">What happens between the player decoding a frame and you seeing the sharper one.</p>
+    </div>
+    <div class="body">
+      <div class="panel">
+        <dl class="kv">
+          <div><dt>Finding videos</dt><dd>the extension runs in every frame of the page, embedded players included, and looks for <code>&lt;video&gt;</code> elements, even inside shadow roots. It lists them in the popup with a name taken from the page (series, episode). Nothing happens to a video until you switch it on.</dd></div>
+          <div><dt>The overlay</dt><dd>a <code>&lt;canvas&gt;</code> is laid exactly over the video, at the video's own stacking level, so the player's controls, menus and subtitles stay on top. Subtitles the browser draws inside the video itself (WebVTT) are redrawn above the picture.</dd></div>
+          <div><dt>One render per frame</dt><dd>on Chrome, Edge and Brave, <code>requestVideoFrameCallback</code> fires once for each decoded frame, and each one is rendered once. Firefox fires it too rarely on 60 fps video, so there the extension renders on the first screen refresh after the frame count changes.</dd></div>
+          <div><dt>The frame on the GPU</dt><dd>the frame is copied into GPU memory, run through every shader pass into 16-bit float textures, and the last one is drawn to the canvas. The video never touches the disk.</dd></div>
+          <div><dt>When it pauses</dt><dd>in picture-in-picture, in the browser's own video fullscreen and in hidden tabs, rendering stops. On resize the chain is rebuilt for the new size. On any GPU error the canvas is removed and the plain video shows.</dd></div>
+          <div><dt>Fullscreen</dt><dd>nothing can be drawn over a bare fullscreen video, so when a page fullscreens an upscaled video, the extension fullscreens the video's parent instead and shows its own on-video menu there.</dd></div>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec doc" id="shaders">
+    <div class="rail">
+      <div class="phead"><span>02 · the shaders</span></div>
+      <h2>Anime4K, as written.</h2>
+      <p class="intro">The shader files are bloc97's, copied unchanged from the open-source project and run the way the mpv player runs them.</p>
+    </div>
+    <div class="body">
+      <div class="panel">
+        <h3>Read like mpv reads them</h3>
+        <p>Anime4K ships as mpv "user shaders": GLSL files whose comments say which texture each pass reads, what size it writes and when it runs. Anime4Nerd parses that format, works out every pass's size for your video, and compiles all the programs in parallel. The first start compiles about 40 large shaders, which takes 5–10 seconds once; after that the browser caches them.</p>
+        <h3>The passes</h3>
+        <p><strong>Clamp highlights</strong> limits bright overshoot so later passes don't ring around edges. <strong>Restore</strong> is a small neural network that repairs blur and compression damage on line art. <strong>Upscale ×2</strong> is a second network that doubles width and height, predicting the new pixels instead of stretching the old ones. Optional <strong>line effects</strong> darken or thin outlines at the end.</p>
+      </div>
+      <div class="table-wrap">
+        <table>
+        <thead><tr><th>Preset</th><th>Shader chain</th><th>Passes</th></tr></thead>
+        <tbody>
+        <tr><td>Mode A</td><td>Clamp → Restore VL → Upscale ×2 VL</td><td>39</td></tr>
+        <tr><td>Mode B</td><td>Clamp → Restore Soft VL → Upscale ×2 VL</td><td>39</td></tr>
+        <tr><td>Mode C</td><td>Clamp → Upscale + Denoise ×2 VL</td><td>22</td></tr>
+        <tr><td>A+A</td><td>Mode A → Restore M</td><td>47</td></tr>
+        <tr><td>B+B</td><td>Mode B → Restore Soft M</td><td>47</td></tr>
+        <tr><td>C+A</td><td>Mode C → Restore M</td><td>30</td></tr>
+        </tbody>
+        </table>
+      </div>
+      <p class="credit">The standard Anime4K mpv mappings. Pass counts at 2×, without line effects or colour passes.</p>
+    </div>
+  </section>
+
+  <section class="sec doc" id="scale">
+    <div class="rail">
+      <div class="phead"><span>03 · upscale factor</span></div>
+      <h2>2× at a time.</h2>
+      <p class="intro">The networks are trained for exactly 2×. Bigger factors chain more doublings.</p>
+    </div>
+    <div class="body">
+      <div class="panel">
+        <dl class="kv">
+          <div><dt>auto (default)</dt><dd>2×, or 4× when the video is shown at more than twice its source size in screen pixels, for example 720p fullscreen on a 1440p or larger screen.</dd></div>
+          <div><dt>2×, 4×, 8×</dt><dd>each doubling past 2× adds one more upscale pass. Above 4× the extra detail is mostly scaled back down by the browser, so 8× pays off only for small sources (480p and below).</dd></div>
+          <div><dt>Honest caps</dt><dd>the renderer uses the largest factor at or below your choice whose output fits the GPU's texture limit, stays at or under 8K (7680×4320) and keeps all its textures under 2 GB. When it caps, the popup says why, for example <code>8× capped: GPU limit</code>.</dd></div>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec doc" id="reuse">
+    <div class="rail">
+      <div class="phead"><span>04 · only what changed</span></div>
+      <h2>Still is cheap.</h2>
+      <p class="intro">New in 1.3.0. The same output, bit for bit, for a fraction of the work on calm scenes.</p>
+    </div>
+    <div class="body">
+      <div class="panel">
+        <p>Anime holds each drawing for several video frames and keeps backgrounds still, and the video codec decodes those areas to exactly the same pixels. Each shader pass only looks at pixels within a fixed distance (its <strong>reach</strong>), so wherever nothing within reach changed, last frame's output is already correct.</p>
+        <p>Each frame is compared with the previous one in 8×8 blocks. Changed blocks are grown by the chain's reach and marked in the GPU's stencil buffer, and every pass then shades only the marked pixels. Pixels near a change are redrawn; a ring one reach further out runs the in-between passes too, because the redrawn pixels read them.</p>
+        <p>When nearly the whole picture changes (a pan, a cut), marking would only cost time, so a quick check spots that and those frames are drawn in full. On still and mostly still scenes this uses <strong>3–5× less GPU time</strong>.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec doc" id="cap">
+    <div class="rail">
+      <div class="phead"><span>05 · gpu-load cap</span></div>
+      <h2>Step down, don't stutter.</h2>
+      <p class="intro">New in 1.3.0. When the GPU can't keep up, a smaller factor beats dropped frames.</p>
+    </div>
+    <div class="body">
+      <div class="panel">
+        <dl class="kv">
+          <div><dt>What it watches</dt><dd>the share of the video's frames that actually get drawn, and the GPU's own frame times. Fewer than 92% drawn means frames are being dropped. The GPU counts as the cause when its usual frame time is close to the frame's time limit, or its slowest frames go over it.</dd></div>
+          <div><dt>Stepping down</dt><dd>a moderate drop must last 6 seconds, a severe one (under 75% drawn) 2 seconds, before the factor steps down to one predicted to use at most 80% of the GPU's time. It never goes below 2×, and the popup shows <code>GPU load</code> while it is capped.</dd></div>
+          <div><dt>No false alarms</dt><dd>the first 8 seconds of a video, and 3 seconds after resuming from pause, don't count: the GPU is still clocking up from idle and the page is still settling. A confirmed cap holds for that video, so it doesn't flip back and forth.</dd></div>
+          <div><dt>If 2× is too much</dt><dd>the cap can't go lower, so on a weak GPU choose a lighter preset (Mode C is the cheapest), or use colour grading on its own (below).</dd></div>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec doc" id="color">
+    <div class="rail">
+      <div class="phead"><span>06 · colour grading</span></div>
+      <h2>Graded at the end.</h2>
+      <p class="intro">New in 1.3.0. Ten controls, five included looks and your own profiles, also on videos you don't upscale.</p>
+    </div>
+    <div class="body">
+      <div class="panel">
+        <h3>The controls</h3>
+        <p>Brightness, contrast, saturation, gamma, hue and grain use <strong>VLC's own units</strong>, so a value you know from VLC's Video Effects means the same here. Vibrance, temperature, tint and deband are added on top.</p>
+        <h3>Where it runs</h3>
+        <p>Colour is applied in the final draw to the canvas. That pass runs in full every frame, so moving a slider takes effect at once without rebuilding anything. The math is VLC's adjust filter on BT.709 YUV:</p>
+        <code class="formula">Y' = (C·(Y − 0.5) + 0.5 + (B − 1)) ^ (1/G)
+U' = S·(U cos h + V sin h)
+V' = S·(V cos h − U sin h)</code>
+        <p>Temperature and tint shift red, green and blue before that. Vibrance boosts dull colours more than ones that are already vivid. Grain adds fresh noise every frame, sized like VLC's. The result is dithered to 8 bits so smooth gradients don't band.</p>
+        <h3>Deband</h3>
+        <p>Deband is mpv's algorithm, run as the very first pass, before Anime4K, as mpv does it. It averages each pixel with random samples around it, but only where they differ by less than the threshold. Banding in flat skies and shadows smooths out; real edges stay.</p>
+        <h3>The included looks</h3>
+        <p>Each takes the colour grade of a published ReShade preset for anime-style games, converted from the shaders' source, plus the deband and grain values recommended in a well-known mpv anime guide. Every look sets all the controls on purpose, not just one or two.</p>
+        <h3>Without upscaling</h3>
+        <p>Turn on colour for videos that aren't upscaled, and only the colour pass runs. That is almost no GPU load, so it suits computers that can't run Anime4K.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec doc" id="manga">
+    <div class="rail">
+      <div class="phead"><span>07 · manga mode · beta</span></div>
+      <h2>Pages, once.</h2>
+      <p class="intro">New in 1.3.0 and still in testing: expect light touch-ups, not miracles.</p>
+    </div>
+    <div class="body">
+      <div class="panel">
+        <dl class="kv">
+          <div><dt>Is this a reader?</dt><dd>the page's images are measured. It needs large portrait pages of one width stacked in a column (or one page filling the screen), plus a chapter number or reader controls such as next chapter or a page list. Galleries and ordinary pages don't qualify, and nothing is upscaled unless this check passes, even on a site you switched on.</dd></div>
+          <div><dt>Each page once</dt><dd>unlike video, every page goes through the Anime4K chain at 2× once, nearest to where you are reading first, and the result replaces the page image. A page is redone only if you change the preset.</dd></div>
+          <div><dt>Grey stays grey</dt><dd>the shaders add a slight colour cast to grey input, so black-and-white pages are kept grey.</dd></div>
+          <div><dt>Compare</dt><dd>press <code>Alt+M</code> to flip back to the original pages. The popup shows a page bar, counts and a page map.</dd></div>
+          <div><dt>Locked images</dt><dd>some readers serve pages the extension isn't allowed to read on the page. It then downloads those same images itself, from the same addresses and without cookies. Local, private and cloud-metadata addresses are refused, on every redirect too. Nothing about you is sent.</dd></div>
+          <div><dt>The mode setting</dt><dd><strong>auto</strong>, <strong>anime</strong> or <strong>manga</strong> decides what the extension works on. The popup suggests a switch when a page holds the other kind.</dd></div>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec doc" id="meter">
+    <div class="rail">
+      <div class="phead"><span>08 · the numbers</span></div>
+      <h2>Measured, not guessed.</h2>
+      <p class="intro">The popup's performance card reads the GPU's own clock, live.</p>
+    </div>
+    <div class="body">
+      <div class="panel">
+        <p>On Chrome, Edge and Brave, every active video shows its GPU time from the GPU's timer queries: milliseconds per frame, load as a share of the video's frame time, rolling average and peak, a bar graph of the last 2 seconds, pass count, GPU memory held and output size. Red bars mean the GPU took longer than one video frame.</p>
+        <p>Firefox has no GPU timer, so there the card shows frame-rate figures instead: the video's fps, the share of frames drawn, frames missed per second, and whether it keeps up. Speed is about the same in both browsers.</p>
+      </div>
+      <div class="table-wrap">
+        <table>
+        <thead><tr><th>Preset</th><th>GPU memory · passes</th><th>GPU per frame</th></tr></thead>
+        <tbody>
+        <tr><td>Mode A</td><td>704 MB · 39 passes</td><td>15.1 ms</td></tr>
+        <tr><td>A+A</td><td>1210 MB · 47 passes</td><td>23.7 ms</td></tr>
+        <tr><td>Mode C</td><td>435 MB · 22 passes</td><td>13.2 ms</td></tr>
+        <tr><td>C+A</td><td>941 MB · 30 passes</td><td>15.8 ms</td></tr>
+        </tbody>
+        </table>
+      </div>
+      <p class="credit">RTX 2060, 1080p source to 4K, Chromium, every frame drawn in full. A 24 fps video allows 41.7 ms per frame, so Mode A uses about 36% of this GPU and A+A about 57%.</p>
+    </div>
+  </section>
+
+  <section class="sec doc" id="limits">
+    <div class="rail">
+      <div class="phead"><span>09 · limits</span></div>
+      <h2>What it can't do.</h2>
+    </div>
+    <div class="body">
+      <div class="panel">
+        <dl class="kv">
+          <div><dt>Locked video</dt><dd>to read a frame on the GPU, the site must allow it (it serves the video with CORS). Many players do. For the others the popup says the source doesn't allow browser upscaling and suggests trying another server or source. DRM-protected video (Netflix, Crunchyroll and the like) can never be read.</dd></div>
+          <div><dt>Your GPU</dt><dd>it all runs on your graphics card. A weak or integrated GPU may not keep up even at 2×; see the load cap above.</dd></div>
+          <div><dt>Browsers</dt><dd>WebGL2 only. Chrome, Edge, Brave and Firefox 140+ on desktop. Safari and phones are untested.</dd></div>
+          <div><dt>Native fullscreen</dt><dd>the fullscreen button of the browser's own built-in video controls bypasses the page, so it shows the plain video without the upscale.</dd></div>
+        </dl>
+        <p class="more">Want the code-level detail? It's all on <a href="https://github.com/creedweb3/anime4nerd" rel="noopener">GitHub</a>. Found something wrong? <a href="report">Report it</a>.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">
+  <span>anime4nerd · v1.3.0 · mit</span>
+  <span><a href="report">report a bug</a> · <a href="privacy">privacy</a> · <a href="./#credits">credits</a> · <a href="https://github.com/creedweb3/anime4nerd" rel="noopener">github</a></span>
+</footer>
+<script src="assets/tickets.js"></script>
